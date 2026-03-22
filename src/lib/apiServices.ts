@@ -62,6 +62,10 @@ export const inventoryApi = {
     api.get<Inventory[]>(`/inventory/branch/${branchId}/date`, {
       params: { date },
     }),
+  byDateRange: (startDate: string, endDate?: string) =>
+    api.get<Inventory[]>('/inventory/date', {
+      params: endDate ? { startDate, endDate } : { startDate },
+    }),
   get: (id: number) => api.get<Inventory>(`/inventory/${id}`),
   create: (data: Partial<Inventory>) => api.post<Inventory>('/inventory', data),
   createBulk: (data: Partial<Inventory>[]) =>
