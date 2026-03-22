@@ -1,5 +1,5 @@
 {
-  "name": "louella-web",
+  "name": "louella-nextJS",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -9,9 +9,19 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/icons-material": "^7.3.9",
+    "@mui/material": "^7.3.9",
+    "@mui/x-data-grid": "^8.28.0",
+    "@mui/x-date-pickers": "^8.27.2",
+    "@tanstack/react-query": "^5.94.5",
+    "axios": "^1.13.6",
+    "dayjs": "^1.11.20",
     "next": "16.2.1",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "zustand": "^5.0.12"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
