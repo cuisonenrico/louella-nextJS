@@ -182,6 +182,22 @@ export interface MaterialInventory {
 }
 
 // ────────────────────────────────────────────────────────────────
+// Production
+// ────────────────────────────────────────────────────────────────
+export interface Production {
+  id: number;
+  branchId: number;
+  productId: number;
+  date: string;
+  yield: number;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  branch?: Branch;
+  product?: Product;
+}
+
+// ────────────────────────────────────────────────────────────────
 // Unit Conversions
 // ────────────────────────────────────────────────────────────────
 export interface UnitConversion {

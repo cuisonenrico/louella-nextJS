@@ -6,6 +6,7 @@ import type {
   Material,
   MaterialInventory,
   Product,
+  Production,
   Recipe,
   RecipeCost,
   SaleRecord,
@@ -157,6 +158,33 @@ export const materialInventoryApi = {
   update: (id: number, data: Partial<MaterialInventory>) =>
     api.patch<MaterialInventory>(`/material-inventory/${id}`, data),
   delete: (id: number) => api.delete(`/material-inventory/${id}`),
+};
+
+// ─── Production ──────────────────────────────────────────────────
+export const productionApi = {
+  list: (page = 1, limit = 50) =>
+    api.get<{ data: Production[]; total: number }>('/production', {
+      params: { page, limit },
+    }),
+  byBranch: (branchId: number, page = 1, limit = 50) =>
+    api.get<{ data: Production[]; total: number }>(`/production/branch/${branchId}`, {
+      params: { page, limit },
+    }),
+  byBranchDate: (branchId: number, date: string) =>
+    api.get<Production[]>(`/production/branch/${branchId}/date`, {
+      params: { date },
+    }),
+  byDateRange: (startDate: string, endDate?: string) =>
+    api.get<Production[]>('/production/date', {
+      params: endDate ? { startDate, endDate } : { startDate },
+    }),
+  get: (id: number) => api.get<Production>(`/production/${id}`),
+  create: (data: Partial<Production>) => api.post<Production>('/production', data),
+  createBulk: (data: Partial<Production>[]) =>
+    api.post<Production[]>('/production/bulk', data),
+  update: (id: number, data: { yield?: number; notes?: string | null }) =>
+    api.patch<Production>(`/production/${id}`, data),
+  delete: (id: number) => api.delete(`/production/${id}`),
 };
 
 // ─── Unit Conversions ────────────────────────────────────────────

@@ -101,7 +101,6 @@ export default function InventoryPage() {
       )
         ? dayjs(filterDateFrom).add(MAX_RANGE_DAYS - 1, 'day').format('YYYY-MM-DD')
         : filterDateTo;
-        console.log('Fetching inventory with params', filterBranch);
       if (!filterBranch) {
         // All branches: single range call to new endpoint
         return inventoryApi

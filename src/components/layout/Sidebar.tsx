@@ -24,6 +24,7 @@ import PointOfSaleIcon from '@mui/icons-material/PointOfSale';
 import WarehouseIcon from '@mui/icons-material/Warehouse';
 import ScienceIcon from '@mui/icons-material/Science';
 import BalanceIcon from '@mui/icons-material/Balance';
+import PrecisionManufacturingIcon from '@mui/icons-material/PrecisionManufacturing';
 import { useAuth } from '@/contexts/AuthContext';
 
 export const DRAWER_WIDTH = 240;
@@ -40,6 +41,11 @@ const navItems = [
     label: 'Material Stock',
     href: '/material-inventory',
     icon: <WarehouseIcon />,
+  },
+  {
+    label: 'Production',
+    href: '/production',
+    icon: <PrecisionManufacturingIcon />,
   },
   {
     label: 'Unit Conversions',
