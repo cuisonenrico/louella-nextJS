@@ -226,16 +226,6 @@ export default function InventoryPage() {
 
   const columns = useMemo<GridColDef[]>(
     () => [
-      ...(filterBranch === ''
-        ? [
-            {
-              field: 'branchId',
-              headerName: 'Branch',
-              width: 140,
-              valueGetter: (value: number) => getBranchName(value),
-            } satisfies GridColDef,
-          ]
-        : []),
       {
         field: 'productId',
         headerName: 'Product',
@@ -352,24 +342,40 @@ export default function InventoryPage() {
 
   const rows = invQuery.data ?? [];
 
-  // In range mode, aggregate rows by (branchId, productId), summing delivery/leftover/reject.
+  // When all branches selected: aggregate by productId across branches.
+  // When specific branch + range: aggregate by productId across dates.
   const displayRows = useMemo(() => {
-    if (!isRange) return rows;
-    const agg = new Map<string, Inventory>();
-    for (const inv of rows) {
-      const key = `${inv.branchId}:${inv.productId}`;
-      const existing = agg.get(key);
-      if (existing) {
-        existing.delivery += inv.delivery;
-        existing.leftover += inv.leftover;
-        existing.reject += inv.reject;
-      } else {
-        // Synthetic id: won't collide with real DB ids (which are positive)
-        agg.set(key, { ...inv, id: -(inv.branchId * 100000 + inv.productId) });
+    if (filterBranch === '') {
+      const agg = new Map<number, Inventory>();
+      for (const inv of rows) {
+        const existing = agg.get(inv.productId);
+        if (existing) {
+          existing.delivery += inv.delivery;
+          existing.leftover += inv.leftover;
+          existing.reject += inv.reject;
+          existing.quantity += inv.quantity;
+        } else {
+          agg.set(inv.productId, { ...inv, id: -inv.productId });
+        }
       }
+      return Array.from(agg.values());
     }
-    return Array.from(agg.values());
-  }, [rows, isRange]);
+    if (isRange) {
+      const agg = new Map<number, Inventory>();
+      for (const inv of rows) {
+        const existing = agg.get(inv.productId);
+        if (existing) {
+          existing.delivery += inv.delivery;
+          existing.leftover += inv.leftover;
+          existing.reject += inv.reject;
+        } else {
+          agg.set(inv.productId, { ...inv, id: -(inv.branchId * 100000 + inv.productId) });
+        }
+      }
+      return Array.from(agg.values());
+    }
+    return rows;
+  }, [rows, isRange, filterBranch]);
 
   const rowsByType = useMemo(() => {
     const productTypeMap = new Map(products.map((p) => [p.id, p.type]));
@@ -715,8 +721,8 @@ export default function InventoryPage() {
                   apiRef={typeApiRefs[type]}
                   rows={typeRows}
                   columns={columns}
-                  processRowUpdate={isRange ? undefined : handleProcessRowUpdate}
-                  isCellEditable={() => !isRange}
+                  processRowUpdate={isRange || filterBranch === '' ? undefined : handleProcessRowUpdate}
+                  isCellEditable={() => !isRange && filterBranch !== ''}
                   onCellKeyDown={(params, event) => {
                     if (event.key !== 'Tab' || isRange || params.cellMode !== 'edit') return;
                     const fieldIdx = EDITABLE_FIELDS.indexOf(params.field);

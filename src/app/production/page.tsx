@@ -147,6 +147,43 @@ export default function ProductionPage() {
     },
   });
 
+  const initAllBranchesMutation = useMutation({
+    mutationFn: async () => {
+      const yesterday = dayjs(filterDate).subtract(1, 'day').format('YYYY-MM-DD');
+      const missingBranches = branches.filter((b) => branchesWithNoInventory.has(b.id));
+      await Promise.all(
+        missingBranches.map(async (b) => {
+          const prevRes = await inventoryApi.byBranchDate(b.id, yesterday);
+          const prevData = (prevRes.data ?? []) as Inventory[];
+          const prevMap = new Map(
+            prevData.map((i) => [i.productId, Math.max(0, i.leftover - i.reject)]),
+          );
+          const payload = products
+            .filter((p) => p.isActive)
+            .map((p) => ({
+              branchId: b.id,
+              productId: p.id,
+              date: filterDate,
+              quantity: prevMap.get(p.id) ?? 0,
+              delivery: 0,
+              leftover: 0,
+              reject: 0,
+            }));
+          return inventoryApi.createBulk(payload);
+        }),
+      );
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['inventory-for-production'] });
+      qc.invalidateQueries({ queryKey: ['inventory'] });
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { message?: string | string[] } } })
+        ?.response?.data?.message;
+      setRowError(Array.isArray(msg) ? msg.join(', ') : (msg ?? 'Failed to initialize inventory.'));
+    },
+  });
+
   // Lookup maps derived from query data
   const productionByProduct = useMemo(
     () => new Map((prodQuery.data ?? []).map((p) => [p.productId, p])),
@@ -528,6 +565,28 @@ export default function ProductionPage() {
                   disabled={initProductionMutation.isPending}
                 >
                   Init Production ({missingProductionCount})
+                </Button>
+              </span>
+            </Tooltip>
+          )}
+          {!invQuery.isLoading && branchesWithNoInventory.size > 0 && (
+            <Tooltip title={`Initialize inventory for ${branchesWithNoInventory.size} branch${branchesWithNoInventory.size !== 1 ? 'es' : ''} with no records on this date`}>
+              <span>
+                <Button
+                  size="small"
+                  variant="contained"
+                  color="secondary"
+                  startIcon={
+                    initAllBranchesMutation.isPending ? (
+                      <CircularProgress size={14} color="inherit" />
+                    ) : (
+                      <LibraryAddIcon />
+                    )
+                  }
+                  onClick={() => initAllBranchesMutation.mutate()}
+                  disabled={initAllBranchesMutation.isPending}
+                >
+                  Init Inventory ({branchesWithNoInventory.size})
                 </Button>
               </span>
             </Tooltip>
