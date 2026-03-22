@@ -15,7 +15,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { DRAWER_WIDTH } from './Sidebar';
 
-export default function Header({ title }: { title?: string }) {
+export default function Header({ title, sidebarWidth = DRAWER_WIDTH }: { title?: string; sidebarWidth?: number }) {
   const { user, logout } = useAuth();
   const router = useRouter();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -33,8 +33,9 @@ export default function Header({ title }: { title?: string }) {
       position="fixed"
       elevation={0}
       sx={{
-        width: `calc(100% - ${DRAWER_WIDTH}px)`,
-        ml: `${DRAWER_WIDTH}px`,
+        width: `calc(100% - ${sidebarWidth}px)`,
+        ml: `${sidebarWidth}px`,
+        transition: 'width 0.2s, margin 0.2s',
         bgcolor: 'background.paper',
         borderBottom: '1px solid',
         borderColor: 'divider',

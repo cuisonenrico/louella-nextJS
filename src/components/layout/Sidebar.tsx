@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   Box,
   Drawer,
+  IconButton,
   List,
   ListItemButton,
   ListItemIcon,
@@ -15,6 +15,8 @@ import {
   Chip,
   Tooltip,
 } from '@mui/material';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import MenuIcon from '@mui/icons-material/Menu';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import StorefrontIcon from '@mui/icons-material/Storefront';
 import InventoryIcon from '@mui/icons-material/Inventory';
@@ -28,6 +30,7 @@ import PrecisionManufacturingIcon from '@mui/icons-material/PrecisionManufacturi
 import { useAuth } from '@/contexts/AuthContext';
 
 export const DRAWER_WIDTH = 240;
+export const COLLAPSED_WIDTH = 64;
 
 const navItems = [
   { label: 'Dashboard', href: '/dashboard', icon: <DashboardIcon /> },
@@ -54,40 +57,63 @@ const navItems = [
   },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({
+  collapsed,
+  onToggle,
+}: {
+  collapsed: boolean;
+  onToggle: () => void;
+}) {
   const pathname = usePathname();
   const router = useRouter();
   const { user } = useAuth();
+  const width = collapsed ? COLLAPSED_WIDTH : DRAWER_WIDTH;
 
   return (
     <Drawer
       variant="permanent"
       sx={{
-        width: DRAWER_WIDTH,
+        width,
         flexShrink: 0,
+        transition: 'width 0.2s',
         '& .MuiDrawer-paper': {
-          width: DRAWER_WIDTH,
+          width,
           boxSizing: 'border-box',
           background: 'linear-gradient(180deg, #c25500 0%, #FA8128 100%)',
           color: '#fff',
           border: 'none',
+          overflowX: 'hidden',
+          transition: 'width 0.2s',
         },
       }}
     >
-      <Toolbar sx={{ px: 2, pt: 2, pb: 1 }}>
-        <Box>
-          <Typography variant="h6" fontWeight={800} color="white" lineHeight={1.1}>
-            🧁 Louella
-          </Typography>
-          <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)' }}>
-            Bakery Management
-          </Typography>
-        </Box>
+      <Toolbar
+        sx={{
+          px: collapsed ? 0 : 2,
+          pt: 2,
+          pb: 1,
+          justifyContent: collapsed ? 'center' : 'space-between',
+          minHeight: 56,
+        }}
+      >
+        {!collapsed && (
+          <Box>
+            <Typography variant="h6" fontWeight={800} color="white" lineHeight={1.1}>
+              Louella
+            </Typography>
+            <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)' }}>
+              Bakery Management
+            </Typography>
+          </Box>
+        )}
+        <IconButton onClick={onToggle} size="small" sx={{ color: '#fff' }}>
+          {collapsed ? <MenuIcon /> : <ChevronLeftIcon />}
+        </IconButton>
       </Toolbar>
 
-      <Divider sx={{ borderColor: 'rgba(255,255,255,0.15)', mx: 2 }} />
+      <Divider sx={{ borderColor: 'rgba(255,255,255,0.15)', mx: collapsed ? 1 : 2 }} />
 
-      {user && (
+      {/* {user && !collapsed && (
         <Box sx={{ px: 2, py: 1.5 }}>
           <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)' }}>
             {user.email}
@@ -105,21 +131,23 @@ export default function Sidebar() {
             />
           </Box>
         </Box>
-      )}
+      )} */}
 
-      <Divider sx={{ borderColor: 'rgba(255,255,255,0.15)', mx: 2, mb: 1 }} />
+      {!collapsed && <Divider sx={{ borderColor: 'rgba(255,255,255,0.15)', mx: 2, mb: 1 }} />}
 
-      <List dense sx={{ px: 1 }}>
+      <List dense sx={{ px: collapsed ? 0.5 : 1, mt: collapsed ? 1 : 0 }}>
         {navItems.map((item) => {
           const active = pathname.startsWith(item.href);
           return (
-            <Tooltip key={item.href} title="" placement="right">
+            <Tooltip key={item.href} title={collapsed ? item.label : ''} placement="right">
               <ListItemButton
                 onClick={() => router.push(item.href)}
                 selected={active}
                 sx={{
                   borderRadius: 2,
                   mb: 0.5,
+                  justifyContent: collapsed ? 'center' : 'flex-start',
+                  px: collapsed ? 1 : 2,
                   color: active ? '#fff' : 'rgba(255,255,255,0.75)',
                   bgcolor: active ? 'rgba(255,255,255,0.18) !important' : 'transparent',
                   '&:hover': { bgcolor: 'rgba(255,255,255,0.12)' },
@@ -128,18 +156,21 @@ export default function Sidebar() {
                 <ListItemIcon
                   sx={{
                     color: active ? '#fff' : 'rgba(255,255,255,0.7)',
-                    minWidth: 36,
+                    minWidth: collapsed ? 0 : 36,
+                    justifyContent: 'center',
                   }}
                 >
                   {item.icon}
                 </ListItemIcon>
-                <ListItemText
-                  primary={item.label}
-                  primaryTypographyProps={{
-                    fontSize: '0.875rem',
-                    fontWeight: active ? 700 : 400,
-                  }}
-                />
+                {!collapsed && (
+                  <ListItemText
+                    primary={item.label}
+                    primaryTypographyProps={{
+                      fontSize: '0.875rem',
+                      fontWeight: active ? 700 : 400,
+                    }}
+                  />
+                )}
               </ListItemButton>
             </Tooltip>
           );
