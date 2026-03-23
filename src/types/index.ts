@@ -3,8 +3,9 @@
 // ────────────────────────────────────────────────────────────────
 export type UserRole = 'USER' | 'VIEWER' | 'INVENTORY' | 'MANAGER' | 'ADMIN';
 export type FileStatus = 'PENDING' | 'UPLOADED' | 'PROCESSING' | 'FAILED';
-export type ProductType = 'BREAD' | 'CAKE' | 'SPECIAL';
+export type ProductType = 'BREAD' | 'CAKE' | 'SPECIAL' | 'MISCELLANEOUS';
 export type JobStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+export type AdjustmentType = 'PULL_IN' | 'PULL_OUT' | 'ANOMALY';
 export type MeasurementUnit =
   | 'KG'
   | 'G'
@@ -66,6 +67,16 @@ export interface Branch {
 // ────────────────────────────────────────────────────────────────
 // Inventory
 // ────────────────────────────────────────────────────────────────
+export interface InventoryAdjustment {
+  id: number;
+  inventoryId: number;
+  type: AdjustmentType;
+  value: number;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Inventory {
   id: number;
   branchId: number;
@@ -81,6 +92,7 @@ export interface Inventory {
   updatedAt: string;
   branch?: Branch;
   product?: Product;
+  adjustments?: InventoryAdjustment[];
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -207,6 +219,27 @@ export interface UnitConversion {
   factor: number;
   createdAt: string;
   updatedAt: string;
+}
+
+// ────────────────────────────────────────────────────────────────
+// Inventory Import
+// ────────────────────────────────────────────────────────────────
+export interface SheetImportResult {
+  sheetName: string;
+  date: string;
+  processed: number;
+  skipped: number;
+  errors: string[];
+}
+
+export interface InventoryImportResult {
+  summary: {
+    totalSheets: number;
+    totalProcessed: number;
+    totalSkipped: number;
+    totalErrors: number;
+  };
+  sheets: SheetImportResult[];
 }
 
 // ────────────────────────────────────────────────────────────────

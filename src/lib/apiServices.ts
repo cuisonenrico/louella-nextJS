@@ -3,6 +3,8 @@ import type {
   AuthResponse,
   Branch,
   Inventory,
+  InventoryAdjustment,
+  InventoryImportResult,
   Material,
   MaterialInventory,
   Product,
@@ -74,6 +76,27 @@ export const inventoryApi = {
   update: (id: number, data: Partial<Inventory>) =>
     api.patch<Inventory>(`/inventory/${id}`, data),
   delete: (id: number) => api.delete(`/inventory/${id}`),
+};
+
+// ─── Inventory Import ────────────────────────────────────────────
+export const inventoryImportApi = {
+  importFile: (file: File, branchId: number) => {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('branchId', String(branchId));
+    return api.post<InventoryImportResult>('/inventory-import/import', form);
+  },
+};
+
+// ─── Inventory Adjustments ───────────────────────────────────────
+export const inventoryAdjustmentsApi = {
+  listByInventory: (inventoryId: number) =>
+    api.get<InventoryAdjustment[]>(`/inventory-adjustments/inventory/${inventoryId}`),
+  create: (data: { inventoryId: number; type: InventoryAdjustment['type']; value: number; notes?: string }) =>
+    api.post<InventoryAdjustment>('/inventory-adjustments', data),
+  update: (id: number, data: { type?: InventoryAdjustment['type']; value?: number; notes?: string }) =>
+    api.patch<InventoryAdjustment>(`/inventory-adjustments/${id}`, data),
+  delete: (id: number) => api.delete(`/inventory-adjustments/${id}`),
 };
 
 // ─── Materials ───────────────────────────────────────────────────

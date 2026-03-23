@@ -39,13 +39,14 @@ import AuthGuard from '@/components/AuthGuard';
 import { productsApi } from '@/lib/apiServices';
 import type { Product, ProductType } from '@/types';
 
-const PRODUCT_TYPES: ProductType[] = ['BREAD', 'CAKE', 'SPECIAL'];
+const PRODUCT_TYPES: ProductType[] = ['BREAD', 'CAKE', 'SPECIAL', 'MISCELLANEOUS'];
 
 function typeColor(type: ProductType) {
-  const map: Record<ProductType, 'warning' | 'secondary' | 'info'> = {
+  const map: Record<ProductType, 'warning' | 'secondary' | 'info' | 'default'> = {
     BREAD: 'warning',
     CAKE: 'secondary',
     SPECIAL: 'info',
+    MISCELLANEOUS: 'default',
   };
   return map[type] ?? 'default';
 }

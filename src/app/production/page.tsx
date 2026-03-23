@@ -32,11 +32,12 @@ import AuthGuard from '@/components/AuthGuard';
 import { branchesApi, inventoryApi, productionApi, productsApi } from '@/lib/apiServices';
 import type { Branch, Inventory, Product, Production, ProductType } from '@/types';
 
-const PRODUCT_TYPE_ORDER: ProductType[] = ['BREAD', 'CAKE', 'SPECIAL'];
+const PRODUCT_TYPE_ORDER: ProductType[] = ['BREAD', 'CAKE', 'SPECIAL', 'MISCELLANEOUS'];
 const TYPE_LABELS: Record<ProductType, string> = {
   BREAD: 'Bread',
   CAKE: 'Cake',
   SPECIAL: 'Special',
+  MISCELLANEOUS: 'Miscellaneous',
 };
 
 const GRID_SX = {
@@ -479,7 +480,7 @@ export default function ProductionPage() {
     if (prodRows.length === 0) return null;
     let totalYield = 0;
     let expectedRevenue = 0;
-    const yieldByType: Record<ProductType, number> = { BREAD: 0, CAKE: 0, SPECIAL: 0 };
+    const yieldByType: Record<ProductType, number> = { BREAD: 0, CAKE: 0, SPECIAL: 0, MISCELLANEOUS: 0 };
     const assignedByBranch = new Map<number, number>(branches.map((b) => [b.id, 0]));
     for (const row of prodRows) {
       totalYield += row.yield;
@@ -501,7 +502,8 @@ export default function ProductionPage() {
   const apiRefBread = useGridApiRef();
   const apiRefCake = useGridApiRef();
   const apiRefSpecial = useGridApiRef();
-  const typeApiRefs = { BREAD: apiRefBread, CAKE: apiRefCake, SPECIAL: apiRefSpecial };
+  const apiRefMiscellaneous = useGridApiRef();
+  const typeApiRefs = { BREAD: apiRefBread, CAKE: apiRefCake, SPECIAL: apiRefSpecial, MISCELLANEOUS: apiRefMiscellaneous };
 
   return (
     <AuthGuard>
@@ -690,6 +692,11 @@ export default function ProductionPage() {
                     {
                       label: 'Special',
                       value: summary.yieldByType.SPECIAL.toLocaleString(),
+                      color: 'text.primary',
+                    },
+                    {
+                      label: 'Misc',
+                      value: summary.yieldByType.MISCELLANEOUS.toLocaleString(),
                       color: 'text.primary',
                     },
                     {
