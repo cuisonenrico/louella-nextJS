@@ -2,17 +2,25 @@ import api from './api';
 import type {
   AuthResponse,
   Branch,
+  ConsumptionSummary,
   Inventory,
   InventoryAdjustment,
   InventoryImportResult,
   Material,
+  MaterialAdjustment,
+  MaterialConsumption,
   MaterialInventory,
+  MaterialPriceHistory,
+  ParsedWorkbook,
   Product,
+  ProductPriceHistory,
   Production,
+  ProductionEfficiencyItem,
   Recipe,
   RecipeCost,
   SaleRecord,
   SaleSummary,
+  Supplier,
   UnitConversion,
   User,
 } from '@/types';
@@ -28,6 +36,19 @@ export const authApi = {
     api.post('/auth/logout', { refreshToken }),
 };
 
+// ─── Suppliers ───────────────────────────────────────────────────
+export const suppliersApi = {
+  list: () => api.get<Supplier[]>('/suppliers'),
+  search: (q: string) =>
+    api.get<Supplier[]>('/suppliers/search', { params: { q } }),
+  get: (id: number) => api.get<Supplier>(`/suppliers/${id}`),
+  create: (data: Partial<Supplier>) =>
+    api.post<Supplier>('/suppliers', data),
+  update: (id: number, data: Partial<Supplier>) =>
+    api.patch<Supplier>(`/suppliers/${id}`, data),
+  delete: (id: number) => api.delete(`/suppliers/${id}`),
+};
+
 // ─── Products ────────────────────────────────────────────────────
 export const productsApi = {
   list: () => api.get<Product[]>('/products'),
@@ -37,6 +58,8 @@ export const productsApi = {
   update: (id: number, data: Partial<Product>) =>
     api.patch<Product>(`/products/${id}`, data),
   delete: (id: number) => api.delete(`/products/${id}`),
+  priceHistory: (id: number) =>
+    api.get<ProductPriceHistory[]>(`/products/${id}/price-history`),
 };
 
 // ─── Branches ────────────────────────────────────────────────────
@@ -80,6 +103,11 @@ export const inventoryApi = {
 
 // ─── Inventory Import ────────────────────────────────────────────
 export const inventoryImportApi = {
+  preview: (file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return api.post<ParsedWorkbook>('/inventory-import/preview', form);
+  },
   importFile: (file: File, branchId: number) => {
     const form = new FormData();
     form.append('file', file);
@@ -109,6 +137,9 @@ export const materialsApi = {
   update: (id: number, data: Partial<Material>) =>
     api.patch<Material>(`/materials/${id}`, data),
   delete: (id: number) => api.delete(`/materials/${id}`),
+  lowStock: () => api.get<(Material & { currentStock: number })[]>('/materials/low-stock'),
+  priceHistory: (id: number) =>
+    api.get<MaterialPriceHistory[]>(`/materials/${id}/price-history`),
 };
 
 // ─── Recipes ─────────────────────────────────────────────────────
@@ -159,21 +190,17 @@ export const salesApi = {
 
 // ─── Material Inventory ──────────────────────────────────────────
 export const materialInventoryApi = {
-  list: (page = 1, limit = 50) =>
+  list: (page = 1, limit = 200) =>
     api.get<{ data: MaterialInventory[]; total: number }>(
       '/material-inventory',
       { params: { page, limit } }
     ),
-  byBranch: (branchId: number, page = 1, limit = 50) =>
-    api.get<{ data: MaterialInventory[]; total: number }>(
-      `/material-inventory/branch/${branchId}`,
-      { params: { page, limit } }
-    ),
-  byBranchDate: (branchId: number, date: string) =>
-    api.get<MaterialInventory[]>(
-      `/material-inventory/branch/${branchId}/date`,
-      { params: { date } }
-    ),
+  byDate: (date: string) =>
+    api.get<MaterialInventory[]>('/material-inventory/by-date', { params: { date } }),
+  listDates: () =>
+    api.get<string[]>('/material-inventory/dates'),
+  initDate: (date: string) =>
+    api.post<{ created: number }>('/material-inventory/init', null, { params: { date } }),
   get: (id: number) =>
     api.get<MaterialInventory>(`/material-inventory/${id}`),
   create: (data: Partial<MaterialInventory>) =>
@@ -181,6 +208,16 @@ export const materialInventoryApi = {
   update: (id: number, data: Partial<MaterialInventory>) =>
     api.patch<MaterialInventory>(`/material-inventory/${id}`, data),
   delete: (id: number) => api.delete(`/material-inventory/${id}`),
+};
+
+export const materialAdjustmentsApi = {
+  list: (materialInventoryId: number) =>
+    api.get<MaterialAdjustment[]>('/material-adjustments', {
+      params: { materialInventoryId },
+    }),
+  create: (data: { materialInventoryId: number; type: string; value: number; notes?: string }) =>
+    api.post<MaterialAdjustment>('/material-adjustments', data),
+  delete: (id: number) => api.delete(`/material-adjustments/${id}`),
 };
 
 // ─── Production ──────────────────────────────────────────────────
@@ -208,6 +245,16 @@ export const productionApi = {
   update: (id: number, data: { yield?: number; notes?: string | null }) =>
     api.patch<Production>(`/production/${id}`, data),
   delete: (id: number) => api.delete(`/production/${id}`),
+  materialConsumption: (id: number) =>
+    api.get<MaterialConsumption>(`/production/${id}/material-consumption`),
+  consumptionSummary: (date: string, branchId?: number) =>
+    api.get<ConsumptionSummary>('/production/material-consumption/summary', {
+      params: branchId ? { date, branchId } : { date },
+    }),
+  efficiency: (startDate: string, endDate: string, branchId?: number) =>
+    api.get<ProductionEfficiencyItem[]>('/production/efficiency', {
+      params: branchId ? { startDate, endDate, branchId } : { startDate, endDate },
+    }),
 };
 
 // ─── Unit Conversions ────────────────────────────────────────────

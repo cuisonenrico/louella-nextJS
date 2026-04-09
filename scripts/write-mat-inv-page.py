@@ -1,4 +1,8 @@
-"use client";
+import os, pathlib
+
+DEST = pathlib.Path(__file__).parent.parent / "src" / "app" / "material-inventory" / "page.tsx"
+
+content = r'''"use client";
 
 import {
   Alert,
@@ -112,7 +116,7 @@ function AdjustmentsDialog({ record, onClose }: AdjDialogProps) {
   return (
     <Dialog open={!!record} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>
-        Adjustments — {record.material?.name ?? `ID ${record.materialId}`}
+        Adjustments &mdash; {record.material?.name ?? `ID ${record.materialId}`}
       </DialogTitle>
       <DialogContent
         sx={{ display: "flex", flexDirection: "column", gap: 2, pt: "12px !important" }}
@@ -480,7 +484,7 @@ export default function MaterialInventoryPage() {
           0,
         renderCell: (params: GridRenderCellParams) => (
           <Typography variant="body2" color="text.secondary">
-            ₱{(params.value as number).toLocaleString()}
+            &#8369;{(params.value as number).toLocaleString()}
           </Typography>
         ),
       },
@@ -549,7 +553,7 @@ export default function MaterialInventoryPage() {
         },
         renderCell: (params: GridRenderCellParams) => (
           <Typography variant="body2" fontWeight={600} color="success.main">
-            ₱{(params.value as number).toLocaleString()}
+            &#8369;{(params.value as number).toLocaleString()}
           </Typography>
         ),
       },
@@ -568,7 +572,7 @@ export default function MaterialInventoryPage() {
         },
         renderCell: (params: GridRenderCellParams) => (
           <Typography variant="body2" fontWeight={600} color="primary.main">
-            ₱{(params.value as number).toLocaleString()}
+            &#8369;{(params.value as number).toLocaleString()}
           </Typography>
         ),
       },
@@ -674,12 +678,12 @@ export default function MaterialInventoryPage() {
             {[
               {
                 label: "CLOSING INVENTORY VALUE",
-                value: `₱${summary.totalClosingCost.toLocaleString()}`,
+                value: `&#8369;${summary.totalClosingCost.toLocaleString()}`,
                 color: "primary.main",
               },
               {
                 label: "TOTAL COST USED",
-                value: `₱${summary.totalCostUsed.toLocaleString()}`,
+                value: `&#8369;${summary.totalCostUsed.toLocaleString()}`,
                 color: "success.main",
               },
             ].map(({ label, value, color }) => (
@@ -770,3 +774,7 @@ export default function MaterialInventoryPage() {
     </AuthGuard>
   );
 }
+'''
+
+DEST.write_text(content, encoding="utf-8")
+print(f"Written {len(content)} chars to {DEST}")

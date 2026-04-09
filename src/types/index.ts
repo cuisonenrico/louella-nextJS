@@ -96,6 +96,22 @@ export interface Inventory {
 }
 
 // ────────────────────────────────────────────────────────────────
+// Suppliers
+// ────────────────────────────────────────────────────────────────
+export interface Supplier {
+  id: number;
+  name: string;
+  contact: string | null;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+}
+
+// ────────────────────────────────────────────────────────────────
 // Materials
 // ────────────────────────────────────────────────────────────────
 export interface Material {
@@ -173,24 +189,33 @@ export interface SaleSummary {
 // ────────────────────────────────────────────────────────────────
 // Material Inventory
 // ────────────────────────────────────────────────────────────────
+export interface MaterialAdjustment {
+  id: number;
+  materialInventoryId: number;
+  type: 'PULL_IN' | 'PULL_OUT' | 'ANOMALY';
+  value: number;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface MaterialInventory {
   id: number;
-  branchId: number;
   materialId: number;
+  date: string;
   supplierId: number | null;
   createdById: number | null;
   batchNumber: string | null;
   expiresAt: string | null;
   quantity: number;
   delivery: number;
-  leftover: number;
-  reject: number;
-  date: string;
+  used: number;
   notes: string | null;
   createdAt: string;
   updatedAt: string;
-  branch?: Branch;
   material?: Material;
+  supplier?: Supplier;
+  adjustments?: MaterialAdjustment[];
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -243,6 +268,95 @@ export interface InventoryImportResult {
 }
 
 // ────────────────────────────────────────────────────────────────
+// Price History
+// ────────────────────────────────────────────────────────────────
+export interface MaterialPriceHistory {
+  id: number;
+  materialId: number;
+  supplierId: number | null;
+  pricePerUnit: number;
+  effectiveAt: string;
+  createdAt: string;
+  supplier?: Supplier;
+}
+
+export interface ProductPriceHistory {
+  id: number;
+  productId: number;
+  price: number;
+  effectiveAt: string;
+  createdAt: string;
+}
+
+// ────────────────────────────────────────────────────────────────
+// Material Consumption (Production → Materials)
+// ────────────────────────────────────────────────────────────────
+export interface MaterialConsumptionItem {
+  materialId: number;
+  materialName: string;
+  materialUnit: string;
+  recipeUnit: string;
+  consumed: number;
+  pricePerUnit: number;
+  totalCost: number;
+}
+
+export interface MaterialConsumption {
+  productionId: number;
+  productName: string;
+  date: string;
+  yield: number;
+  items: MaterialConsumptionItem[];
+  totalMaterialCost: number;
+}
+
+// ────────────────────────────────────────────────────────────────
+// Consumption Summary (Daily batch total)
+// ────────────────────────────────────────────────────────────────
+export interface ConsumptionSummaryItem {
+  materialId: number;
+  materialName: string;
+  unit: string;
+  totalConsumed: number;
+  totalCost: number;
+}
+
+export interface ConsumptionSummary {
+  date: string;
+  items: ConsumptionSummaryItem[];
+  grandTotalCost: number;
+}
+
+// ────────────────────────────────────────────────────────────────
+// Production Efficiency
+// ────────────────────────────────────────────────────────────────
+export interface ProductionEfficiencyItem {
+  productId: number;
+  productName: string;
+  productType: ProductType;
+  totalYield: number;
+  totalDelivered: number;
+  totalLeftover: number;
+  totalReject: number;
+  sold: number;
+  soldRate: number;
+  wasteRate: number;
+}
+
+// ────────────────────────────────────────────────────────────────
+// Inventory Import Preview
+// ────────────────────────────────────────────────────────────────
+export interface ParsedSheet {
+  name: string;
+  rows: Record<string, unknown>[];
+}
+
+export interface ParsedWorkbook {
+  sheetNames: string[];
+  sheets: ParsedSheet[];
+}
+
+// ────────────────────────────────────────────────────────────────
 // Pagination
 // ────────────────────────────────────────────────────────────────
 export interface PaginatedResponse<T> {
@@ -250,4 +364,5 @@ export interface PaginatedResponse<T> {
   total: number;
   page: number;
   limit: number;
+  totalPages: number;
 }

@@ -490,7 +490,7 @@ export default function RecipesPage() {
                     Selling Price
                   </Typography>
                   <Typography variant="body2" fontWeight={700} textAlign="right">
-                    ₱{costRecipe.productPrice.toFixed(2)}
+                    ₱{(costRecipe.productPrice ?? 0).toFixed(2)}
                   </Typography>
                   <Divider sx={{ gridColumn: '1/-1' }} />
                   <Typography variant="body2" fontWeight={700}>

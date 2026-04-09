@@ -27,6 +27,11 @@ import WarehouseIcon from '@mui/icons-material/Warehouse';
 import ScienceIcon from '@mui/icons-material/Science';
 import BalanceIcon from '@mui/icons-material/Balance';
 import PrecisionManufacturingIcon from '@mui/icons-material/PrecisionManufacturing';
+import LocalShippingIcon from '@mui/icons-material/LocalShipping';
+import TuneIcon from '@mui/icons-material/Tune';
+import MonetizationOnIcon from '@mui/icons-material/MonetizationOn';
+import SpeedIcon from '@mui/icons-material/Speed';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
 import { useAuth } from '@/contexts/AuthContext';
 
 export const DRAWER_WIDTH = 240;
@@ -54,6 +59,31 @@ const navItems = [
     label: 'Unit Conversions',
     href: '/unit-conversions',
     icon: <BalanceIcon />,
+  },
+  {
+    label: 'Suppliers',
+    href: '/suppliers',
+    icon: <LocalShippingIcon />,
+  },
+  {
+    label: 'Adjustments',
+    href: '/inventory-adjustments',
+    icon: <TuneIcon />,
+  },
+  {
+    label: 'Import',
+    href: '/inventory-import',
+    icon: <UploadFileIcon />,
+  },
+  {
+    label: 'Production Cost',
+    href: '/production-cost',
+    icon: <MonetizationOnIcon />,
+  },
+  {
+    label: 'Efficiency',
+    href: '/production-efficiency',
+    icon: <SpeedIcon />,
   },
 ];
 

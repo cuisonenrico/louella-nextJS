@@ -17,12 +17,14 @@ import {
   MenuItem,
   Paper,
   Select,
+  Tab,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
+  Tabs,
   TextField,
   Tooltip,
   Typography,
@@ -34,10 +36,11 @@ import SearchIcon from '@mui/icons-material/Search';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import dayjs from 'dayjs';
 import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
 import { materialsApi } from '@/lib/apiServices';
-import type { Material, MeasurementUnit } from '@/types';
+import type { Material, MaterialPriceHistory, MeasurementUnit } from '@/types';
 
 const UNITS: MeasurementUnit[] = [
   'KG', 'G', 'LITER', 'ML', 'PIECE', 'DOZEN', 'BAG', 'SACHET', 'CUP', 'TBSP', 'TSP',
@@ -57,6 +60,37 @@ const defaultForm: MaterialForm = {
   reorderLevel: '0',
 };
 
+function MaterialPriceHistoryTab({ materialId }: { materialId: number }) {
+  const { data: history = [], isLoading } = useQuery<MaterialPriceHistory[]>({
+    queryKey: ['material-price-history', materialId],
+    queryFn: () => materialsApi.priceHistory(materialId).then((r) => r.data),
+  });
+
+  if (isLoading) return <Box display="flex" justifyContent="center" py={4}><CircularProgress size={24} /></Box>;
+  if (history.length === 0) return <Typography color="text.secondary" py={2}>No price changes recorded yet.</Typography>;
+
+  return (
+    <Table size="small">
+      <TableHead>
+        <TableRow>
+          <TableCell>Effective Date</TableCell>
+          <TableCell align="right">Price / Unit</TableCell>
+          <TableCell>Supplier</TableCell>
+        </TableRow>
+      </TableHead>
+      <TableBody>
+        {history.map((h) => (
+          <TableRow key={h.id} hover>
+            <TableCell>{dayjs(h.effectiveAt).format('MMM D, YYYY')}</TableCell>
+            <TableCell align="right">₱{h.pricePerUnit.toFixed(2)}</TableCell>
+            <TableCell>{h.supplier?.name ?? '—'}</TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
+
 export default function MaterialsPage() {
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
@@ -65,6 +99,7 @@ export default function MaterialsPage() {
   const [form, setForm] = useState<MaterialForm>(defaultForm);
   const [deleteTarget, setDeleteTarget] = useState<Material | null>(null);
   const [formError, setFormError] = useState('');
+  const [activeTab, setActiveTab] = useState(0);
 
   const { data: materials = [], isLoading } = useQuery<Material[]>({
     queryKey: ['materials'],
@@ -109,6 +144,7 @@ export default function MaterialsPage() {
     setEditTarget(null);
     setForm(defaultForm);
     setFormError('');
+    setActiveTab(0);
     setDialogOpen(true);
   };
 
@@ -121,6 +157,7 @@ export default function MaterialsPage() {
       reorderLevel: m.reorderLevel.toString(),
     });
     setFormError('');
+    setActiveTab(0);
     setDialogOpen(true);
   };
 
@@ -247,64 +284,79 @@ export default function MaterialsPage() {
         {/* Create / Edit Dialog */}
         <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
           <DialogTitle>{editTarget ? 'Edit Material' : 'New Material'}</DialogTitle>
+          {editTarget && (
+            <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ px: 3, borderBottom: 1, borderColor: 'divider' }}>
+              <Tab label="Details" />
+              <Tab label="Price History" />
+            </Tabs>
+          )}
           <DialogContent sx={{ pt: 2 }}>
-            {formError && (
-              <Alert severity="error" sx={{ mb: 2 }}>
-                {formError}
-              </Alert>
+            {activeTab === 0 && (
+              <>
+                {formError && (
+                  <Alert severity="error" sx={{ mb: 2 }}>
+                    {formError}
+                  </Alert>
+                )}
+                <TextField
+                  label="Name"
+                  fullWidth
+                  required
+                  value={form.name}
+                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                  sx={{ mb: 2 }}
+                  autoFocus
+                />
+                <FormControl fullWidth sx={{ mb: 2 }}>
+                  <InputLabel>Unit</InputLabel>
+                  <Select
+                    value={form.unit}
+                    label="Unit"
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, unit: e.target.value as MeasurementUnit }))
+                    }
+                  >
+                    {UNITS.map((u) => (
+                      <MenuItem key={u} value={u}>
+                        {u}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                <TextField
+                  label="Price per Unit (₱)"
+                  type="number"
+                  fullWidth
+                  value={form.pricePerUnit}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, pricePerUnit: e.target.value }))
+                  }
+                  sx={{ mb: 2 }}
+                  inputProps={{ min: 0, step: 0.01 }}
+                />
+                <TextField
+                  label="Reorder Level"
+                  type="number"
+                  fullWidth
+                  value={form.reorderLevel}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, reorderLevel: e.target.value }))
+                  }
+                  inputProps={{ min: 0, step: 0.01 }}
+                />
+              </>
             )}
-            <TextField
-              label="Name"
-              fullWidth
-              required
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              sx={{ mb: 2 }}
-              autoFocus
-            />
-            <FormControl fullWidth sx={{ mb: 2 }}>
-              <InputLabel>Unit</InputLabel>
-              <Select
-                value={form.unit}
-                label="Unit"
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, unit: e.target.value as MeasurementUnit }))
-                }
-              >
-                {UNITS.map((u) => (
-                  <MenuItem key={u} value={u}>
-                    {u}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <TextField
-              label="Price per Unit (₱)"
-              type="number"
-              fullWidth
-              value={form.pricePerUnit}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, pricePerUnit: e.target.value }))
-              }
-              sx={{ mb: 2 }}
-              inputProps={{ min: 0, step: 0.01 }}
-            />
-            <TextField
-              label="Reorder Level"
-              type="number"
-              fullWidth
-              value={form.reorderLevel}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, reorderLevel: e.target.value }))
-              }
-              inputProps={{ min: 0, step: 0.01 }}
-            />
+            {activeTab === 1 && editTarget && (
+              <MaterialPriceHistoryTab materialId={editTarget.id} />
+            )}
           </DialogContent>
           <DialogActions sx={{ px: 3, pb: 2 }}>
             <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button variant="contained" onClick={handleSave} disabled={saving}>
-              {saving ? <CircularProgress size={18} /> : 'Save'}
-            </Button>
+            {activeTab === 0 && (
+              <Button variant="contained" onClick={handleSave} disabled={saving}>
+                {saving ? <CircularProgress size={18} /> : 'Save'}
+              </Button>
+            )}
           </DialogActions>
         </Dialog>
 

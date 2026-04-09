@@ -15,12 +15,14 @@ import {
   InputLabel,
   MenuItem,
   Select,
+  Tab,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
+  Tabs,
   TextField,
   Tooltip,
   Typography,
@@ -37,7 +39,7 @@ import dayjs from 'dayjs';
 import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
 import { productsApi } from '@/lib/apiServices';
-import type { Product, ProductType } from '@/types';
+import type { Product, ProductPriceHistory, ProductType } from '@/types';
 
 const PRODUCT_TYPES: ProductType[] = ['BREAD', 'CAKE', 'SPECIAL', 'MISCELLANEOUS'];
 
@@ -67,6 +69,35 @@ const defaultForm: ProductFormData = {
   date: dayjs().format('YYYY-MM-DD'),
 };
 
+function ProductPriceHistoryTab({ productId }: { productId: number }) {
+  const { data: history = [], isLoading } = useQuery<ProductPriceHistory[]>({
+    queryKey: ['product-price-history', productId],
+    queryFn: () => productsApi.priceHistory(productId).then((r) => r.data),
+  });
+
+  if (isLoading) return <Box display="flex" justifyContent="center" py={4}><CircularProgress size={24} /></Box>;
+  if (history.length === 0) return <Typography color="text.secondary" py={2}>No price changes recorded yet.</Typography>;
+
+  return (
+    <Table size="small">
+      <TableHead>
+        <TableRow>
+          <TableCell>Effective Date</TableCell>
+          <TableCell align="right">Price</TableCell>
+        </TableRow>
+      </TableHead>
+      <TableBody>
+        {history.map((h) => (
+          <TableRow key={h.id} hover>
+            <TableCell>{dayjs(h.effectiveAt).format('MMM D, YYYY')}</TableCell>
+            <TableCell align="right">₱{h.price.toFixed(2)}</TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
+
 export default function ProductsPage() {
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
@@ -75,6 +106,7 @@ export default function ProductsPage() {
   const [form, setForm] = useState<ProductFormData>(defaultForm);
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
   const [formError, setFormError] = useState('');
+  const [activeTab, setActiveTab] = useState(0);
 
   const { data: products = [], isLoading } = useQuery<Product[]>({
     queryKey: ['products'],
@@ -119,6 +151,7 @@ export default function ProductsPage() {
     setEditTarget(null);
     setForm(defaultForm);
     setFormError('');
+    setActiveTab(0);
     setDialogOpen(true);
   };
 
@@ -132,6 +165,7 @@ export default function ProductsPage() {
       date: p.date ? dayjs(p.date).format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'),
     });
     setFormError('');
+    setActiveTab(0);
     setDialogOpen(true);
   };
 
@@ -265,74 +299,89 @@ export default function ProductsPage() {
         {/* Create / Edit Dialog */}
         <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
           <DialogTitle>{editTarget ? 'Edit Product' : 'New Product'}</DialogTitle>
+          {editTarget && (
+            <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ px: 3, borderBottom: 1, borderColor: 'divider' }}>
+              <Tab label="Details" />
+              <Tab label="Price History" />
+            </Tabs>
+          )}
           <DialogContent sx={{ pt: 2 }}>
-            {formError && (
-              <Alert severity="error" sx={{ mb: 2 }}>
-                {formError}
-              </Alert>
+            {activeTab === 0 && (
+              <>
+                {formError && (
+                  <Alert severity="error" sx={{ mb: 2 }}>
+                    {formError}
+                  </Alert>
+                )}
+                <TextField
+                  label="Name"
+                  fullWidth
+                  required
+                  value={form.name}
+                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                  sx={{ mb: 2 }}
+                  autoFocus
+                />
+                <FormControl fullWidth sx={{ mb: 2 }}>
+                  <InputLabel>Type</InputLabel>
+                  <Select
+                    value={form.type}
+                    label="Type"
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, type: e.target.value as ProductType }))
+                    }
+                  >
+                    {PRODUCT_TYPES.map((t) => (
+                      <MenuItem key={t} value={t}>
+                        {t}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                <TextField
+                  label="Price (₱)"
+                  type="number"
+                  fullWidth
+                  value={form.price}
+                  onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
+                  sx={{ mb: 2 }}
+                  inputProps={{ min: 0, step: 0.01 }}
+                />
+                <TextField
+                  label="Launch Date"
+                  type="date"
+                  fullWidth
+                  value={form.date}
+                  onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
+                  InputLabelProps={{ shrink: true }}
+                  sx={{ mb: 2 }}
+                />
+                <FormControl fullWidth>
+                  <InputLabel>Status</InputLabel>
+                  <Select
+                    value={form.isActive ? 'active' : 'inactive'}
+                    label="Status"
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, isActive: e.target.value === 'active' }))
+                    }
+                  >
+                    <MenuItem value="active">Active</MenuItem>
+                    <MenuItem value="inactive">Inactive</MenuItem>
+                  </Select>
+                </FormControl>
+              </>
             )}
-            <TextField
-              label="Name"
-              fullWidth
-              required
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              sx={{ mb: 2 }}
-              autoFocus
-            />
-            <FormControl fullWidth sx={{ mb: 2 }}>
-              <InputLabel>Type</InputLabel>
-              <Select
-                value={form.type}
-                label="Type"
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, type: e.target.value as ProductType }))
-                }
-              >
-                {PRODUCT_TYPES.map((t) => (
-                  <MenuItem key={t} value={t}>
-                    {t}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <TextField
-              label="Price (₱)"
-              type="number"
-              fullWidth
-              value={form.price}
-              onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
-              sx={{ mb: 2 }}
-              inputProps={{ min: 0, step: 0.01 }}
-            />
-            <TextField
-              label="Launch Date"
-              type="date"
-              fullWidth
-              value={form.date}
-              onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
-              InputLabelProps={{ shrink: true }}
-              sx={{ mb: 2 }}
-            />
-            <FormControl fullWidth>
-              <InputLabel>Status</InputLabel>
-              <Select
-                value={form.isActive ? 'active' : 'inactive'}
-                label="Status"
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, isActive: e.target.value === 'active' }))
-                }
-              >
-                <MenuItem value="active">Active</MenuItem>
-                <MenuItem value="inactive">Inactive</MenuItem>
-              </Select>
-            </FormControl>
+            {activeTab === 1 && editTarget && (
+              <ProductPriceHistoryTab productId={editTarget.id} />
+            )}
           </DialogContent>
           <DialogActions sx={{ px: 3, pb: 2 }}>
             <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button variant="contained" onClick={handleSave} disabled={saving}>
-              {saving ? <CircularProgress size={18} /> : 'Save'}
-            </Button>
+            {activeTab === 0 && (
+              <Button variant="contained" onClick={handleSave} disabled={saving}>
+                {saving ? <CircularProgress size={18} /> : 'Save'}
+              </Button>
+            )}
           </DialogActions>
         </Dialog>
 

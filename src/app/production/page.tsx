@@ -8,9 +8,16 @@ import {
   Box,
   Button,
   CircularProgress,
+  Drawer,
+  Divider,
   IconButton,
   Paper,
   Snackbar,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
   TextField,
   Tooltip,
   Typography,
@@ -24,13 +31,14 @@ import PostAddIcon from '@mui/icons-material/PostAdd';
 import SaveIcon from '@mui/icons-material/Save';
 import TodayIcon from '@mui/icons-material/Today';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import CalculateIcon from '@mui/icons-material/Calculate';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import dayjs from 'dayjs';
 import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
 import { branchesApi, inventoryApi, productionApi, productsApi } from '@/lib/apiServices';
-import type { Branch, Inventory, Product, Production, ProductType } from '@/types';
+import type { Branch, Inventory, MaterialConsumption, Product, Production, ProductType } from '@/types';
 
 const PRODUCT_TYPE_ORDER: ProductType[] = ['BREAD', 'CAKE', 'SPECIAL', 'MISCELLANEOUS'];
 const TYPE_LABELS: Record<ProductType, string> = {
@@ -82,6 +90,7 @@ export default function ProductionPage() {
   const [pendingInventory, setPendingInventory] = useState<Map<number, { delivery: number }>>(
     new Map(),
   );
+  const [consumptionId, setConsumptionId] = useState<number | null>(null);
 
   useEffect(() => {
     setPendingProduction(new Map());
@@ -108,6 +117,12 @@ export default function ProductionPage() {
     queryKey: ['inventory-for-production', filterDate],
     queryFn: () =>
       inventoryApi.byDateRange(filterDate).then((r) => r.data as Inventory[]),
+  });
+
+  const consumptionQuery = useQuery<MaterialConsumption>({
+    queryKey: ['production-consumption', consumptionId],
+    queryFn: () => productionApi.materialConsumption(consumptionId!).then((r) => r.data),
+    enabled: consumptionId != null,
   });
 
   // Branch IDs that have zero inventory records for the current date
@@ -467,6 +482,33 @@ export default function ProductionPage() {
             <Typography variant="body2" fontWeight={600} color="text.primary">
               ₱{sales.toLocaleString()}
             </Typography>
+          );
+        },
+      } satisfies GridColDef,
+      {
+        field: 'materialCost',
+        headerName: 'Mat. Cost',
+        width: 100,
+        editable: false,
+        headerAlign: 'center',
+        align: 'center',
+        sortable: false,
+        renderCell: (params: GridRenderCellParams) => {
+          const row = params.row as ProdRow;
+          if (row._productionId == null) return null;
+          return (
+            <Tooltip title="View material consumption">
+              <IconButton
+                size="small"
+                color="primary"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setConsumptionId(row._productionId as number);
+                }}
+              >
+                <CalculateIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
           );
         },
       } satisfies GridColDef,
@@ -870,6 +912,74 @@ export default function ProductionPage() {
             {rowError}
           </Alert>
         </Snackbar>
+
+        {/* Material Consumption Drawer */}
+        <Drawer
+          anchor="right"
+          open={consumptionId != null}
+          onClose={() => setConsumptionId(null)}
+          PaperProps={{ sx: { width: 440, p: 0 } }}
+        >
+          <Box display="flex" alignItems="center" justifyContent="space-between" px={2} py={1.5} borderBottom={1} borderColor="divider">
+            <Box>
+              <Typography variant="h6" fontWeight={700}>Material Consumption</Typography>
+              {consumptionQuery.data && (
+                <Typography variant="caption" color="text.secondary">
+                  {consumptionQuery.data.productName} — {dayjs(consumptionQuery.data.date).format('MMM D, YYYY')} — {consumptionQuery.data.yield} pcs
+                </Typography>
+              )}
+            </Box>
+            <IconButton onClick={() => setConsumptionId(null)}><CloseIcon /></IconButton>
+          </Box>
+
+          <Box px={2} py={2} overflow="auto">
+            {consumptionQuery.isLoading ? (
+              <Box display="flex" justifyContent="center" py={6}><CircularProgress /></Box>
+            ) : consumptionQuery.error ? (
+              <Alert severity="error">Failed to load consumption data.</Alert>
+            ) : !consumptionQuery.data || consumptionQuery.data.items.length === 0 ? (
+              <Alert severity="info" sx={{ mt: 1 }}>
+                No recipe configured for this product. Set up a recipe to see material consumption.
+              </Alert>
+            ) : (
+              <>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Material</TableCell>
+                      <TableCell align="right">Used</TableCell>
+                      <TableCell align="right">Unit Cost</TableCell>
+                      <TableCell align="right">Total</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {consumptionQuery.data.items.map((item) => (
+                      <TableRow key={item.materialId} hover>
+                        <TableCell sx={{ fontWeight: 500 }}>{item.materialName}</TableCell>
+                        <TableCell align="right">
+                          {item.consumed} {item.materialUnit}
+                        </TableCell>
+                        <TableCell align="right">₱{item.pricePerUnit.toFixed(2)}</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 600 }}>
+                          ₱{item.totalCost.toFixed(2)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <Divider sx={{ my: 2 }} />
+                <Box display="flex" justifyContent="space-between" alignItems="center" px={0.5}>
+                  <Typography variant="body2" fontWeight={700} color="text.secondary">
+                    TOTAL MATERIAL COST
+                  </Typography>
+                  <Typography variant="h6" fontWeight={800} color="primary.main">
+                    ₱{consumptionQuery.data.totalMaterialCost.toFixed(2)}
+                  </Typography>
+                </Box>
+              </>
+            )}
+          </Box>
+        </Drawer>
       </AppLayout>
     </AuthGuard>
   );
