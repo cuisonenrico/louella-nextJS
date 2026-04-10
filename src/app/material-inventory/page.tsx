@@ -28,7 +28,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import TuneIcon from "@mui/icons-material/Tune";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import AppLayout from "@/components/layout/AppLayout";
 import AuthGuard from "@/components/AuthGuard";
 import {
@@ -243,7 +243,7 @@ function StockCardDialog({
   });
   const [err, setErr] = useState("");
 
-  useMemo(() => {
+  useEffect(() => {
     if (!open) return;
     if (editRecord) {
       setForm({

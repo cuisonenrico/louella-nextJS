@@ -73,8 +73,14 @@ export interface InventoryAdjustment {
   type: AdjustmentType;
   value: number;
   notes: string | null;
+  linkedAdjustmentId: number | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface TransferResult {
+  pullOut: InventoryAdjustment;
+  pullIn: InventoryAdjustment;
 }
 
 export interface Inventory {

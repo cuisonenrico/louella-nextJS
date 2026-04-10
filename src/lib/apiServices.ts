@@ -21,6 +21,7 @@ import type {
   SaleRecord,
   SaleSummary,
   Supplier,
+  TransferResult,
   UnitConversion,
   User,
 } from '@/types';
@@ -88,6 +89,10 @@ export const inventoryApi = {
     api.get<Inventory[]>(`/inventory/branch/${branchId}/date`, {
       params: { date },
     }),
+  byBranchDateRange: (branchId: number, startDate: string, endDate?: string) =>
+    api.get<Inventory[]>(`/inventory/branch/${branchId}/date-range`, {
+      params: endDate ? { startDate, endDate } : { startDate },
+    }),
   byDateRange: (startDate: string, endDate?: string) =>
     api.get<Inventory[]>('/inventory/date', {
       params: endDate ? { startDate, endDate } : { startDate },
@@ -122,6 +127,8 @@ export const inventoryAdjustmentsApi = {
     api.get<InventoryAdjustment[]>(`/inventory-adjustments/inventory/${inventoryId}`),
   create: (data: { inventoryId: number; type: InventoryAdjustment['type']; value: number; notes?: string }) =>
     api.post<InventoryAdjustment>('/inventory-adjustments', data),
+  transfer: (data: { fromInventoryId: number; toInventoryId: number; value: number; notes?: string }) =>
+    api.post<TransferResult>('/inventory-adjustments/transfer', data),
   update: (id: number, data: { type?: InventoryAdjustment['type']; value?: number; notes?: string }) =>
     api.patch<InventoryAdjustment>(`/inventory-adjustments/${id}`, data),
   delete: (id: number) => api.delete(`/inventory-adjustments/${id}`),
