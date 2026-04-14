@@ -3,9 +3,14 @@ import type {
   AuthResponse,
   Branch,
   ConsumptionSummary,
+  DashboardSummary,
   Inventory,
   InventoryAdjustment,
+  InventoryDashboardData,
+  InventoryGapsResult,
   InventoryImportResult,
+  InventorySummaryData,
+  InventoryUpdateResult,
   Material,
   MaterialAdjustment,
   MaterialConsumption,
@@ -102,8 +107,22 @@ export const inventoryApi = {
   createBulk: (data: Partial<Inventory>[]) =>
     api.post<Inventory[]>('/inventory/bulk', data),
   update: (id: number, data: Partial<Inventory>) =>
-    api.patch<Inventory>(`/inventory/${id}`, data),
+    api.patch<InventoryUpdateResult>(`/inventory/${id}`, data),
   delete: (id: number) => api.delete(`/inventory/${id}`),
+  summary: (startDate?: string, endDate?: string, branchId?: string) =>
+    api.get<InventorySummaryData>('/inventory/summary', {
+      params: { startDate, endDate, branchId },
+    }),
+  dashboard: (startDate?: string, endDate?: string, branchId?: string) =>
+    api.get<InventoryDashboardData>('/inventory/dashboard', {
+      params: { startDate, endDate, branchId },
+    }),
+  gaps: (startDate: string, endDate: string, branchId?: number) =>
+    api.get<InventoryGapsResult>('/inventory/gaps', {
+      params: { startDate, endDate, ...(branchId ? { branchId } : {}) },
+    }),
+  recascade: (branchId: number, productId: number, fromDate: string) =>
+    api.post<{ updated: number }>('/inventory/recascade', { branchId, productId, fromDate }),
 };
 
 // ─── Inventory Import ────────────────────────────────────────────
@@ -214,6 +233,16 @@ export const materialInventoryApi = {
     api.post<MaterialInventory>('/material-inventory', data),
   update: (id: number, data: Partial<MaterialInventory>) =>
     api.patch<MaterialInventory>(`/material-inventory/${id}`, data),
+  gaps: (startDate: string, endDate: string) =>
+    api.get<{ missing: import('@/types').MaterialGapEntry[]; total: number }>('/material-inventory/gaps', {
+      params: { startDate, endDate },
+    }),
+  initRange: (startDate: string, endDate?: string) =>
+    api.post<{ totalCreated: number; datesProcessed: number }>(
+      '/material-inventory/init-range',
+      null,
+      { params: { startDate, endDate } },
+    ),
   delete: (id: number) => api.delete(`/material-inventory/${id}`),
 };
 
@@ -275,4 +304,42 @@ export const unitConversionsApi = {
   delete: (id: number) => api.delete(`/unit-conversions/${id}`),
   convert: (quantity: number, fromUnit: string, toUnit: string) =>
     api.post('/unit-conversions/convert', { quantity, fromUnit, toUnit }),
+};
+
+// ─── Dashboard ───────────────────────────────────────────────────
+export const dashboardApi = {
+  summary: (date?: string) =>
+    api.get<DashboardSummary>('/dashboard/summary', { params: date ? { date } : undefined }),
+};
+
+// ─── Jobs ────────────────────────────────────────────────────────
+export const jobsApi = {
+  autofill: (targetDate?: string) =>
+    api.post<{ inventoryCreated: number; productionCreated: number; date: string }>(
+      '/jobs/autofill',
+      targetDate ? { targetDate } : {},
+    ),
+  autofillRange: (startDate: string, endDate?: string) =>
+    api.post<{ totalInventoryCreated: number; totalProductionCreated: number; datesProcessed: number }>(
+      '/jobs/autofill-range',
+      { startDate, ...(endDate ? { endDate } : {}) },
+    ),
+  autofillMaterialStock: (targetDate?: string) =>
+    api.post<{ created: number; date: string }>(
+      '/jobs/autofill-material-stock',
+      targetDate ? { targetDate } : {},
+    ),
+  autofillMaterialStockRange: (startDate: string, endDate?: string) =>
+    api.post<{ totalCreated: number; datesProcessed: number }>(
+      '/jobs/autofill-material-stock-range',
+      { startDate, ...(endDate ? { endDate } : {}) },
+    ),
+};
+
+// ─── Notifications ────────────────────────────────────────────────
+export const notificationsApi = {
+  registerToken: (token: string, platform?: string) =>
+    api.post<{ message: string }>('/notifications/register', { token, platform }),
+  removeToken: (token: string) =>
+    api.delete(`/notifications/token/${encodeURIComponent(token)}`),
 };

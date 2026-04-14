@@ -10,8 +10,7 @@ import {
   Typography,
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import type { ProductType } from '@/types';
-import type { InventorySummaryData } from '../hooks/useInventorySummary';
+import type { InventorySummaryData, ProductType } from '@/types';
 import dayjs from 'dayjs';
 
 interface InventorySummaryPanelProps {

@@ -25,45 +25,8 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import PrecisionManufacturingIcon from '@mui/icons-material/PrecisionManufacturing';
 import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
-import { branchesApi, materialsApi, productsApi, productionApi, recipesApi } from '@/lib/apiServices';
-import type { Branch, Material, Product, Production, Recipe } from '@/types';
-
-
-// function StatCard({ title, value, icon, color, subtitle }: StatCardProps) {
-//   return (
-//     <Card>
-//       <CardContent>
-//         <Box display="flex" alignItems="center" justifyContent="space-between">
-//           <Box>
-//             <Typography variant="body2" color="text.secondary" gutterBottom>
-//               {title}
-//             </Typography>
-//             <Typography variant="h4" fontWeight={800}>
-//               {value}
-//             </Typography>
-//             {subtitle && (
-//               <Typography variant="caption" color="text.secondary">
-//                 {subtitle}
-//               </Typography>
-//             )}
-//           </Box>
-//           <Box
-//             sx={{
-//               bgcolor: `${color}18`,
-//               color,
-//               borderRadius: 3,
-//               p: 1.5,
-//               display: 'flex',
-//               alignItems: 'center',
-//             }}
-//           >
-//             {icon}
-//           </Box>
-//         </Box>
-//       </CardContent>
-//     </Card>
-//   );
-// }
+import { dashboardApi } from '@/lib/apiServices';
+import type { DashboardSummary } from '@/types';
 
 const TYPE_LABELS: Record<string, string> = {
   BREAD: 'Bread',
@@ -75,51 +38,10 @@ const TYPE_LABELS: Record<string, string> = {
 export default function DashboardPage() {
   const today = dayjs().format('YYYY-MM-DD');
 
-  const { data: products, isLoading: loadingProducts } = useQuery<Product[]>({
-    queryKey: ['products'],
-    queryFn: () => productsApi.list().then((r) => r.data),
+  const { data, isLoading, isError } = useQuery<DashboardSummary>({
+    queryKey: ['dashboard-summary', today],
+    queryFn: () => dashboardApi.summary(today).then((r) => r.data),
   });
-
-  const { data: branches, isLoading: loadingBranches } = useQuery<Branch[]>({
-    queryKey: ['branches'],
-    queryFn: () => branchesApi.list().then((r) => r.data),
-  });
-
-  const { data: materials, isLoading: loadingMaterials } = useQuery<Material[]>({
-    queryKey: ['materials'],
-    queryFn: () => materialsApi.list().then((r) => r.data),
-  });
-
-  const { data: recipes, isLoading: loadingRecipes } = useQuery<Recipe[]>({
-    queryKey: ['recipes'],
-    queryFn: () => recipesApi.list().then((r) => r.data),
-  });
-
-  const { data: lowStockItems = [], isLoading: loadingLowStock } = useQuery<
-    (Material & { currentStock: number })[]
-  >({
-    queryKey: ['materials-low-stock'],
-    queryFn: () => materialsApi.lowStock().then((r) => r.data),
-  });
-
-  const { data: todayProduction = [], isLoading: loadingProduction } = useQuery<Production[]>({
-    queryKey: ['production-today', today],
-    queryFn: () =>
-      productionApi.byDateRange(today, today).then((r) => r.data),
-  });
-
-  const statsLoading = loadingProducts || loadingBranches || loadingMaterials || loadingRecipes;
-
-  const activeProducts = products?.filter((p) => p.isActive).length ?? 0;
-  const activeBranches = branches?.filter((b) => b.isActive).length ?? 0;
-
-  // Aggregate today's yield by product type
-  const yieldByType: Record<string, number> = {};
-  for (const rec of todayProduction) {
-    const type = (rec.product as Product | undefined)?.type ?? 'UNKNOWN';
-    yieldByType[type] = (yieldByType[type] ?? 0) + rec.yield;
-  }
-  const totalYieldToday = Object.values(yieldByType).reduce((s, v) => s + v, 0);
 
   return (
     <AuthGuard>
@@ -133,10 +55,12 @@ export default function DashboardPage() {
           </Typography>
         </Box>
 
-        {statsLoading ? (
+        {isLoading ? (
           <Box display="flex" justifyContent="center" mt={8}>
             <CircularProgress />
           </Box>
+        ) : isError || !data ? (
+          <Alert severity="error">Failed to load dashboard data.</Alert>
         ) : (
           <>
             {/* ── Stat Cards ── */}
@@ -144,25 +68,25 @@ export default function DashboardPage() {
               <Grid size={{ xs: 12, sm: 6, md: 3 }}>
                 <StatCard
                   title="Total Products"
-                  value={products?.length ?? 0}
+                  value={data.stats.products.total}
                   icon={<CategoryIcon />}
                   color="#6B3FA0"
-                  subtitle={`${activeProducts} active`}
+                  subtitle={`${data.stats.products.active} active`}
                 />
               </Grid>
               <Grid size={{ xs: 12, sm: 6, md: 3 }}>
                 <StatCard
                   title="Branches"
-                  value={branches?.length ?? 0}
+                  value={data.stats.branches.total}
                   icon={<StorefrontIcon />}
                   color="#F4A261"
-                  subtitle={`${activeBranches} active`}
+                  subtitle={`${data.stats.branches.active} active`}
                 />
               </Grid>
               <Grid size={{ xs: 12, sm: 6, md: 3 }}>
                 <StatCard
                   title="Materials"
-                  value={materials?.length ?? 0}
+                  value={data.stats.materials.total}
                   icon={<ScienceIcon />}
                   color="#2e7d32"
                   subtitle="in inventory"
@@ -171,7 +95,7 @@ export default function DashboardPage() {
               <Grid size={{ xs: 12, sm: 6, md: 3 }}>
                 <StatCard
                   title="Recipes"
-                  value={recipes?.length ?? 0}
+                  value={data.stats.recipes.total}
                   icon={<MenuBookIcon />}
                   color="#d32f2f"
                   subtitle="configured"
@@ -185,30 +109,20 @@ export default function DashboardPage() {
               <Grid size={{ xs: 12, md: 6 }}>
                 <Card
                   sx={{
-                    border: lowStockItems.length > 0 ? '1.5px solid' : undefined,
+                    border: data.lowStock.length > 0 ? '1.5px solid' : undefined,
                     borderColor: 'error.main',
                   }}
                 >
                   <CardContent>
                     <Box display="flex" alignItems="center" gap={1} mb={2}>
-                      <WarningAmberIcon color={lowStockItems.length > 0 ? 'error' : 'disabled'} />
-                      <Typography variant="h6">
-                        Low Stock Alerts
-                      </Typography>
-                      {lowStockItems.length > 0 && (
-                        <Chip
-                          label={lowStockItems.length}
-                          color="error"
-                          size="small"
-                        />
+                      <WarningAmberIcon color={data.lowStock.length > 0 ? 'error' : 'disabled'} />
+                      <Typography variant="h6">Low Stock Alerts</Typography>
+                      {data.lowStock.length > 0 && (
+                        <Chip label={data.lowStock.length} color="error" size="small" />
                       )}
                     </Box>
 
-                    {loadingLowStock ? (
-                      <Box display="flex" justifyContent="center" py={2}>
-                        <CircularProgress size={24} />
-                      </Box>
-                    ) : lowStockItems.length === 0 ? (
+                    {data.lowStock.length === 0 ? (
                       <Alert severity="success" sx={{ mt: 1 }}>
                         All materials are above their reorder levels.
                       </Alert>
@@ -223,7 +137,7 @@ export default function DashboardPage() {
                           </TableRow>
                         </TableHead>
                         <TableBody>
-                          {lowStockItems.map((m) => (
+                          {data.lowStock.map((m) => (
                             <TableRow key={m.id} hover>
                               <TableCell sx={{ fontWeight: 500 }}>{m.name}</TableCell>
                               <TableCell align="right" sx={{ color: 'error.main', fontWeight: 700 }}>
@@ -246,55 +160,47 @@ export default function DashboardPage() {
                   <CardContent>
                     <Box display="flex" alignItems="center" gap={1} mb={2}>
                       <PrecisionManufacturingIcon color="primary" />
-                      <Typography variant="h6">
-                        Today&apos;s Production
-                      </Typography>
+                      <Typography variant="h6">Today&apos;s Production</Typography>
                       <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
                         {today}
                       </Typography>
                     </Box>
 
-                    {loadingProduction ? (
-                      <Box display="flex" justifyContent="center" py={2}>
-                        <CircularProgress size={24} />
-                      </Box>
-                    ) : totalYieldToday === 0 ? (
+                    {data.production.totalYield === 0 ? (
                       <Alert severity="info">
                         No production records found for today.
                       </Alert>
                     ) : (
-                      <>
-                        <Table size="small">
-                          <TableHead>
-                            <TableRow>
-                              <TableCell>Type</TableCell>
-                              <TableCell align="right">Total Yield</TableCell>
-                            </TableRow>
-                          </TableHead>
-                          <TableBody>
-                            {Object.entries(yieldByType).map(([type, total]) => (
-                              <TableRow key={type} hover>
-                                <TableCell>
-                                  <Chip
-                                    label={TYPE_LABELS[type] ?? type}
-                                    size="small"
-                                    variant="outlined"
-                                  />
-                                </TableCell>
-                                <TableCell align="right" sx={{ fontWeight: 600 }}>
-                                  {total.toLocaleString()} pcs
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                            <TableRow>
-                              <TableCell sx={{ fontWeight: 700 }}>Total</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: 700 }}>
-                                {totalYieldToday.toLocaleString()} pcs
+                      <Table size="small">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Type</TableCell>
+                            <TableCell align="right">Total Yield</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {data.production.byType.map(({ type, totalYield }) => (
+                            <TableRow key={type} hover>
+                              <TableCell>
+                                <Chip
+                                  label={TYPE_LABELS[type] ?? type}
+                                  size="small"
+                                  variant="outlined"
+                                />
+                              </TableCell>
+                              <TableCell align="right" sx={{ fontWeight: 600 }}>
+                                {totalYield.toLocaleString()} pcs
                               </TableCell>
                             </TableRow>
-                          </TableBody>
-                        </Table>
-                      </>
+                          ))}
+                          <TableRow>
+                            <TableCell sx={{ fontWeight: 700 }}>Total</TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 700 }}>
+                              {data.production.totalYield.toLocaleString()} pcs
+                            </TableCell>
+                          </TableRow>
+                        </TableBody>
+                      </Table>
                     )}
                   </CardContent>
                 </Card>
@@ -309,7 +215,7 @@ export default function DashboardPage() {
                     <Typography variant="h6" mb={2}>
                       Products
                     </Typography>
-                    {products?.slice(0, 8).map((p) => (
+                    {data.products.map((p) => (
                       <Box
                         key={p.id}
                         display="flex"
@@ -352,7 +258,7 @@ export default function DashboardPage() {
                     <Typography variant="h6" mb={2}>
                       Branches
                     </Typography>
-                    {branches?.map((b) => (
+                    {data.branches.map((b) => (
                       <Box
                         key={b.id}
                         display="flex"
@@ -388,7 +294,6 @@ export default function DashboardPage() {
     </AuthGuard>
   );
 }
-
 
 interface StatCardProps {
   title: string;

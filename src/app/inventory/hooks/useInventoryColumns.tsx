@@ -171,7 +171,7 @@ export function useInventoryColumns({
         valueGetter: (_value: unknown, row: Inventory) => {
           const adjSum = (row.adjustments ?? []).reduce((acc, a) => acc + a.value, 0);
           const sold = row.quantity + row.delivery + adjSum - row.leftover;
-          const price = productById.get(row.productId)?.price ?? 0;
+          const price = row.effectivePrice ?? productById.get(row.productId)?.price ?? 0;
           return sold * price;
         },
         renderCell: (params: GridRenderCellParams) => {

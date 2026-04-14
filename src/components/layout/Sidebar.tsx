@@ -32,6 +32,7 @@ import TuneIcon from '@mui/icons-material/Tune';
 import MonetizationOnIcon from '@mui/icons-material/MonetizationOn';
 import SpeedIcon from '@mui/icons-material/Speed';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
+import EventBusyIcon from '@mui/icons-material/EventBusy';
 import { useAuth } from '@/contexts/AuthContext';
 
 export const DRAWER_WIDTH = 240;
@@ -42,6 +43,7 @@ const navItems = [
   { label: 'Products', href: '/products', icon: <CategoryIcon /> },
   { label: 'Branches', href: '/branches', icon: <StorefrontIcon /> },
   { label: 'Inventory', href: '/inventory', icon: <InventoryIcon /> },
+  { label: 'Gap Audit', href: '/inventory/gaps', icon: <EventBusyIcon /> },
   { label: 'Materials', href: '/materials', icon: <ScienceIcon /> },
   { label: 'Recipes', href: '/recipes', icon: <MenuBookIcon /> },
   { label: 'Sales', href: '/sales', icon: <PointOfSaleIcon /> },
@@ -49,6 +51,11 @@ const navItems = [
     label: 'Material Stock',
     href: '/material-inventory',
     icon: <WarehouseIcon />,
+  },
+  {
+    label: 'Stock Gap Audit',
+    href: '/material-inventory/gaps',
+    icon: <EventBusyIcon />,
   },
   {
     label: 'Production',
@@ -167,7 +174,7 @@ export default function Sidebar({
 
       <List dense sx={{ px: collapsed ? 0.5 : 1, mt: collapsed ? 1 : 0 }}>
         {navItems.map((item) => {
-          const active = pathname.startsWith(item.href);
+          const active = pathname === item.href || pathname.startsWith(item.href + '/');
           return (
             <Tooltip key={item.href} title={collapsed ? item.label : ''} placement="right">
               <ListItemButton

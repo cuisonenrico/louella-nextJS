@@ -12,12 +12,26 @@ export default function AppLayout({
   children: React.ReactNode;
   title?: string;
 }) {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('sidebar-collapsed') === 'true';
+    }
+    return false;
+  });
+
+  const handleToggle = () => {
+    setCollapsed((v) => {
+      const next = !v;
+      localStorage.setItem('sidebar-collapsed', String(next));
+      return next;
+    });
+  };
+
   const sidebarWidth = collapsed ? COLLAPSED_WIDTH : DRAWER_WIDTH;
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-      <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((v) => !v)} />
+      <Sidebar collapsed={collapsed} onToggle={handleToggle} />
       <Header title={title} sidebarWidth={sidebarWidth} />
       <Box
         component="main"

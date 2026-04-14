@@ -18,6 +18,7 @@ import TodayIcon from '@mui/icons-material/Today';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import DateRangeIcon from '@mui/icons-material/DateRange';
 import EventIcon from '@mui/icons-material/Event';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import type { Branch } from '@/types';
 
 interface InventoryFilterBarProps {
@@ -29,6 +30,7 @@ interface InventoryFilterBarProps {
   today: string;
   uninitializedCount: number;
   isBulkCreatePending: boolean;
+  isReinitializePending: boolean;
   onDateModeChange: (mode: 'date' | 'range') => void;
   onDraftFromChange: (v: string) => void;
   onDraftToChange: (v: string) => void;
@@ -37,6 +39,7 @@ interface InventoryFilterBarProps {
   onBranchChange: (branchId: string) => void;
   onImportOpen: () => void;
   onBulkCreate: () => void;
+  onReinitialize: () => void;
 }
 
 export default function InventoryFilterBar({
@@ -48,6 +51,7 @@ export default function InventoryFilterBar({
   today,
   uninitializedCount,
   isBulkCreatePending,
+  isReinitializePending,
   onDateModeChange,
   onDraftFromChange,
   onDraftToChange,
@@ -56,6 +60,7 @@ export default function InventoryFilterBar({
   onBranchChange,
   onImportOpen,
   onBulkCreate,
+  onReinitialize,
 }: InventoryFilterBarProps) {
   const isRange = draftFrom !== draftTo;
 
@@ -206,6 +211,25 @@ export default function InventoryFilterBar({
         >
           Import XLSX
         </Button>
+
+        {!isRange && filterBranch !== '' && (
+          <Tooltip title="Reset all entries for this day using yesterday's leftover as opening quantity. Zeroes delivery, leftover, and reject.">
+            <span>
+              <Button
+                size="small"
+                variant="outlined"
+                color="warning"
+                startIcon={
+                  isReinitializePending ? <CircularProgress size={16} /> : <RestartAltIcon />
+                }
+                onClick={onReinitialize}
+                disabled={isReinitializePending}
+              >
+                Reinitialize
+              </Button>
+            </span>
+          </Tooltip>
+        )}
 
         {!isRange && uninitializedCount > 0 && (
           <Tooltip
