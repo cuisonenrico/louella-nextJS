@@ -1,94 +1,34 @@
 'use client';
 
-import {
-  Alert,
-  Box,
-  Button,
-  Chip,
-  CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  FormControl,
-  IconButton,
-  InputAdornment,
-  InputLabel,
-  MenuItem,
-  Paper,
-  Select,
-  Tab,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Tabs,
-  TextField,
-  Tooltip,
-  Typography,
-} from '@mui/material';
-import AddIcon from '@mui/icons-material/Add';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
-import SearchIcon from '@mui/icons-material/Search';
-import WarningAmberIcon from '@mui/icons-material/WarningAmber';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import dayjs from 'dayjs';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Plus, Pencil, Trash2, Loader2, Search } from 'lucide-react';
 import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
-import { materialsApi } from '@/lib/apiServices';
+import { materialsApi, suppliersApi } from '@/lib/apiServices';
 import type { Material, MaterialPriceHistory, MeasurementUnit } from '@/types';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Label } from '@/components/ui/label';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import dayjs from 'dayjs';
 
-const UNITS: MeasurementUnit[] = [
-  'KG', 'G', 'LITER', 'ML', 'PIECE', 'DOZEN', 'BAG', 'SACHET', 'CUP', 'TBSP', 'TSP',
-];
+const UNITS: MeasurementUnit[] = ['KG', 'G', 'LITER', 'ML', 'PIECE', 'DOZEN', 'BAG', 'SACHET', 'CUP', 'TBSP', 'TSP'];
 
-interface MaterialForm {
-  name: string;
-  unit: MeasurementUnit;
-  pricePerUnit: string;
-  reorderLevel: string;
-}
+interface MaterialForm { name: string; unit: MeasurementUnit; pricePerUnit: string; reorderLevel: string; }
+const defaultForm: MaterialForm = { name: '', unit: 'KG', pricePerUnit: '', reorderLevel: '0' };
 
-const defaultForm: MaterialForm = {
-  name: '',
-  unit: 'KG',
-  pricePerUnit: '0',
-  reorderLevel: '0',
-};
-
-function MaterialPriceHistoryTab({ materialId }: { materialId: number }) {
-  const { data: history = [], isLoading } = useQuery<MaterialPriceHistory[]>({
-    queryKey: ['material-price-history', materialId],
-    queryFn: () => materialsApi.priceHistory(materialId).then((r) => r.data),
-  });
-
-  if (isLoading) return <Box display="flex" justifyContent="center" py={4}><CircularProgress size={24} /></Box>;
-  if (history.length === 0) return <Typography color="text.secondary" py={2}>No price changes recorded yet.</Typography>;
-
-  return (
-    <Table size="small">
-      <TableHead>
-        <TableRow>
-          <TableCell>Effective Date</TableCell>
-          <TableCell align="right">Price / Unit</TableCell>
-          <TableCell>Supplier</TableCell>
-        </TableRow>
-      </TableHead>
-      <TableBody>
-        {history.map((h) => (
-          <TableRow key={h.id} hover>
-            <TableCell>{dayjs(h.effectiveAt).format('MMM D, YYYY')}</TableCell>
-            <TableCell align="right">₱{h.pricePerUnit.toFixed(2)}</TableCell>
-            <TableCell>{h.supplier?.name ?? '—'}</TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  );
+function extractError(err: unknown): string {
+  const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
+  return Array.isArray(msg) ? msg.join(', ') : (msg ?? 'An error occurred');
 }
 
 export default function MaterialsPage() {
@@ -99,293 +39,147 @@ export default function MaterialsPage() {
   const [form, setForm] = useState<MaterialForm>(defaultForm);
   const [deleteTarget, setDeleteTarget] = useState<Material | null>(null);
   const [formError, setFormError] = useState('');
-  const [activeTab, setActiveTab] = useState(0);
 
-  const { data: materials = [], isLoading } = useQuery<Material[]>({
-    queryKey: ['materials'],
-    queryFn: () => materialsApi.list().then((r) => r.data),
+  const { data: materials = [], isLoading } = useQuery({ queryKey: ['materials'], queryFn: () => materialsApi.list().then((r) => r.data) });
+  const { data: priceHistory = [] } = useQuery({
+    queryKey: ['materialPriceHistory', editTarget?.id],
+    queryFn: () => materialsApi.priceHistory(editTarget!.id).then((r) => r.data),
+    enabled: !!editTarget,
   });
 
-  const createMutation = useMutation({
+  const createMut = useMutation({
     mutationFn: (data: Partial<Material>) => materialsApi.create(data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['materials'] });
-      setDialogOpen(false);
-    },
-    onError: (err: unknown) => {
-      const msg =
-        (err as { response?: { data?: { message?: string | string[] } } })?.response
-          ?.data?.message;
-      setFormError(Array.isArray(msg) ? msg.join(', ') : (msg ?? 'Failed to save.'));
-    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['materials'] }); setDialogOpen(false); },
+    onError: (err) => setFormError(extractError(err)),
   });
-
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Partial<Material> }) =>
-      materialsApi.update(id, data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['materials'] });
-      setDialogOpen(false);
-    },
-    onError: (err: unknown) => {
-      const msg =
-        (err as { response?: { data?: { message?: string | string[] } } })?.response
-          ?.data?.message;
-      setFormError(Array.isArray(msg) ? msg.join(', ') : (msg ?? 'Failed to save.'));
-    },
+  const updateMut = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<Material> }) => materialsApi.update(id, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['materials'] }); setDialogOpen(false); },
+    onError: (err) => setFormError(extractError(err)),
   });
-
-  const deleteMutation = useMutation({
+  const deleteMut = useMutation({
     mutationFn: (id: number) => materialsApi.delete(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['materials'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['materials'] }); setDeleteTarget(null); },
   });
 
-  const openCreate = () => {
-    setEditTarget(null);
-    setForm(defaultForm);
-    setFormError('');
-    setActiveTab(0);
-    setDialogOpen(true);
-  };
-
+  const openCreate = () => { setEditTarget(null); setForm(defaultForm); setFormError(''); setDialogOpen(true); };
   const openEdit = (m: Material) => {
     setEditTarget(m);
-    setForm({
-      name: m.name,
-      unit: m.unit,
-      pricePerUnit: m.pricePerUnit.toString(),
-      reorderLevel: m.reorderLevel.toString(),
-    });
-    setFormError('');
-    setActiveTab(0);
-    setDialogOpen(true);
+    setForm({ name: m.name, unit: m.unit, pricePerUnit: String(m.pricePerUnit), reorderLevel: String(m.reorderLevel) });
+    setFormError(''); setDialogOpen(true);
   };
 
   const handleSave = () => {
     setFormError('');
-    if (!form.name.trim()) {
-      setFormError('Material name is required.');
-      return;
-    }
-    const payload: Partial<Material> = {
-      name: form.name.trim(),
-      unit: form.unit,
-      pricePerUnit: parseFloat(form.pricePerUnit) || 0,
-      reorderLevel: parseFloat(form.reorderLevel) || 0,
-    };
-    if (editTarget) {
-      updateMutation.mutate({ id: editTarget.id, data: payload });
-    } else {
-      createMutation.mutate(payload);
-    }
+    if (!form.name.trim()) { setFormError('Name is required'); return; }
+    const price = parseFloat(form.pricePerUnit);
+    if (isNaN(price) || price < 0) { setFormError('Valid price is required'); return; }
+    const payload: Partial<Material> = { name: form.name.trim(), unit: form.unit, pricePerUnit: price, reorderLevel: parseFloat(form.reorderLevel) || 0 };
+    editTarget ? updateMut.mutate({ id: editTarget.id, data: payload }) : createMut.mutate(payload);
   };
 
-  const filtered = materials.filter((m) =>
-    m.name.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const saving = createMutation.isPending || updateMutation.isPending;
+  const filtered = materials.filter((m: Material) => m.name.toLowerCase().includes(search.toLowerCase()));
+  const saving = createMut.isPending || updateMut.isPending;
 
   return (
     <AuthGuard>
       <AppLayout title="Materials">
-        <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-          <TextField
-            size="small"
-            placeholder="Search materials…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon fontSize="small" />
-                </InputAdornment>
-              ),
-            }}
-            sx={{ width: 260 }}
-          />
-          <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
-            Add Material
-          </Button>
-        </Box>
+        <div className="flex justify-between items-center mb-4">
+          <div className="relative w-64">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input placeholder="Search materials…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+          </div>
+          <Button onClick={openCreate}><Plus className="mr-2 h-4 w-4" />Add Material</Button>
+        </div>
 
-        <Paper>
-          <TableContainer>
-            <Table size="medium">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Name</TableCell>
-                  <TableCell>Unit</TableCell>
-                  <TableCell align="right">Price / Unit</TableCell>
-                  <TableCell align="right">Reorder Level</TableCell>
-                  <TableCell align="right">Actions</TableCell>
+        <Card>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Unit</TableHead>
+                <TableHead className="text-right">Price / Unit</TableHead>
+                <TableHead className="text-right">Reorder Level</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                <TableRow><TableCell colSpan={5} className="text-center py-8"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></TableCell></TableRow>
+              ) : filtered.length === 0 ? (
+                <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No materials found.</TableCell></TableRow>
+              ) : filtered.map((m: Material) => (
+                <TableRow key={m.id}>
+                  <TableCell className="font-semibold">{m.name}</TableCell>
+                  <TableCell><Badge variant="secondary">{m.unit}</Badge></TableCell>
+                  <TableCell className="text-right">₱{Number(m.pricePerUnit).toFixed(2)}</TableCell>
+                  <TableCell className="text-right">{m.reorderLevel}</TableCell>
+                  <TableCell className="text-right">
+                    <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(m)}><Pencil className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>Edit</TooltipContent></Tooltip>
+                    <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setDeleteTarget(m)}><Trash2 className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>Delete</TooltipContent></Tooltip>
+                  </TableCell>
                 </TableRow>
-              </TableHead>
-              <TableBody>
-                {isLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
-                      <CircularProgress />
-                    </TableCell>
-                  </TableRow>
-                ) : filtered.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
-                      <Typography color="text.secondary">No materials found.</Typography>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filtered.map((m) => (
-                    <TableRow key={m.id} hover>
-                      <TableCell>
-                        <Typography fontWeight={600}>{m.name}</Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Chip label={m.unit} size="small" variant="outlined" />
-                      </TableCell>
-                      <TableCell align="right">₱{m.pricePerUnit.toFixed(2)}</TableCell>
-                      <TableCell align="right">
-                        <Box display="flex" alignItems="center" justifyContent="flex-end" gap={0.5}>
-                          {m.reorderLevel > 0 && (
-                            <Tooltip title="Has reorder level set">
-                              <WarningAmberIcon
-                                fontSize="small"
-                                sx={{ color: 'warning.main', opacity: 0.7 }}
-                              />
-                            </Tooltip>
-                          )}
-                          {m.reorderLevel} {m.unit}
-                        </Box>
-                      </TableCell>
-                      <TableCell align="right">
-                        <Tooltip title="Edit">
-                          <IconButton size="small" onClick={() => openEdit(m)}>
-                            <EditIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Delete">
-                          <IconButton
-                            size="small"
-                            color="error"
-                            onClick={() => setDeleteTarget(m)}
-                          >
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Paper>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
 
         {/* Create / Edit Dialog */}
-        <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
-          <DialogTitle>{editTarget ? 'Edit Material' : 'New Material'}</DialogTitle>
-          {editTarget && (
-            <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ px: 3, borderBottom: 1, borderColor: 'divider' }}>
-              <Tab label="Details" />
-              <Tab label="Price History" />
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader><DialogTitle>{editTarget ? 'Edit Material' : 'New Material'}</DialogTitle></DialogHeader>
+            <Tabs defaultValue="details">
+              <TabsList className="mb-4">{editTarget && <TabsTrigger value="history">Price History</TabsTrigger>}<TabsTrigger value="details">Details</TabsTrigger></TabsList>
+              <TabsContent value="details">
+                <div className="space-y-4">
+                  {formError && <Alert variant="destructive"><AlertDescription>{formError}</AlertDescription></Alert>}
+                  <div className="space-y-2"><Label>Name</Label><Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} autoFocus /></div>
+                  <div className="space-y-2">
+                    <Label>Unit</Label>
+                    <Select value={form.unit} onValueChange={(v) => setForm((f) => ({ ...f, unit: v as MeasurementUnit }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>{UNITS.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2"><Label>Price per Unit (₱)</Label><Input type="number" step="0.01" value={form.pricePerUnit} onChange={(e) => setForm((f) => ({ ...f, pricePerUnit: e.target.value }))} /></div>
+                  <div className="space-y-2"><Label>Reorder Level</Label><Input type="number" value={form.reorderLevel} onChange={(e) => setForm((f) => ({ ...f, reorderLevel: e.target.value }))} /></div>
+                </div>
+              </TabsContent>
+              {editTarget && (
+                <TabsContent value="history">
+                  {priceHistory.length === 0 ? (
+                    <p className="text-muted-foreground text-sm py-4">No price history yet.</p>
+                  ) : (
+                    <Table>
+                      <TableHeader><TableRow><TableHead>Date</TableHead><TableHead className="text-right">Price</TableHead></TableRow></TableHeader>
+                      <TableBody>
+                        {priceHistory.map((h: MaterialPriceHistory) => (
+                          <TableRow key={h.id}><TableCell>{dayjs(h.effectiveAt).format('MMM D, YYYY')}</TableCell><TableCell className="text-right">₱{Number(h.pricePerUnit).toFixed(2)}</TableCell></TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </TabsContent>
+              )}
             </Tabs>
-          )}
-          <DialogContent sx={{ pt: 2 }}>
-            {activeTab === 0 && (
-              <>
-                {formError && (
-                  <Alert severity="error" sx={{ mb: 2 }}>
-                    {formError}
-                  </Alert>
-                )}
-                <TextField
-                  label="Name"
-                  fullWidth
-                  required
-                  value={form.name}
-                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                  sx={{ mb: 2 }}
-                  autoFocus
-                />
-                <FormControl fullWidth sx={{ mb: 2 }}>
-                  <InputLabel>Unit</InputLabel>
-                  <Select
-                    value={form.unit}
-                    label="Unit"
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, unit: e.target.value as MeasurementUnit }))
-                    }
-                  >
-                    {UNITS.map((u) => (
-                      <MenuItem key={u} value={u}>
-                        {u}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                <TextField
-                  label="Price per Unit (₱)"
-                  type="number"
-                  fullWidth
-                  value={form.pricePerUnit}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, pricePerUnit: e.target.value }))
-                  }
-                  sx={{ mb: 2 }}
-                  inputProps={{ min: 0, step: 0.01 }}
-                />
-                <TextField
-                  label="Reorder Level"
-                  type="number"
-                  fullWidth
-                  value={form.reorderLevel}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, reorderLevel: e.target.value }))
-                  }
-                  inputProps={{ min: 0, step: 0.01 }}
-                />
-              </>
-            )}
-            {activeTab === 1 && editTarget && (
-              <MaterialPriceHistoryTab materialId={editTarget.id} />
-            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+              <Button onClick={handleSave} disabled={saving}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}</Button>
+            </DialogFooter>
           </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 2 }}>
-            <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
-            {activeTab === 0 && (
-              <Button variant="contained" onClick={handleSave} disabled={saving}>
-                {saving ? <CircularProgress size={18} /> : 'Save'}
-              </Button>
-            )}
-          </DialogActions>
         </Dialog>
 
-        {/* Delete Confirm */}
-        <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} maxWidth="xs" fullWidth>
-          <DialogTitle>Delete Material</DialogTitle>
-          <DialogContent>
-            <Typography>
-              Delete <strong>{deleteTarget?.name}</strong>?
-            </Typography>
-          </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 2 }}>
-            <Button onClick={() => setDeleteTarget(null)}>Cancel</Button>
-            <Button
-              variant="contained"
-              color="error"
-              disabled={deleteMutation.isPending}
-              onClick={() => {
-                if (deleteTarget) {
-                  deleteMutation.mutate(deleteTarget.id, {
-                    onSuccess: () => setDeleteTarget(null),
-                  });
-                }
-              }}
-            >
-              {deleteMutation.isPending ? <CircularProgress size={18} /> : 'Delete'}
-            </Button>
-          </DialogActions>
-        </Dialog>
+        <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader><AlertDialogTitle>Delete Material</AlertDialogTitle><AlertDialogDescription>Are you sure you want to delete <strong>{deleteTarget?.name}</strong>?</AlertDialogDescription></AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" disabled={deleteMut.isPending} onClick={() => { if (deleteTarget) deleteMut.mutate(deleteTarget.id); }}>
+                {deleteMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Delete'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </AppLayout>
     </AuthGuard>
   );

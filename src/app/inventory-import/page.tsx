@@ -1,307 +1,195 @@
 'use client';
 
-import {
-  Alert,
-  Box,
-  Button,
-  Chip,
-  CircularProgress,
-  FormControl,
-  InputLabel,
-  MenuItem,
-  Paper,
-  Select,
-  Step,
-  StepLabel,
-  Stepper,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  Typography,
-} from '@mui/material';
-import UploadFileIcon from '@mui/icons-material/UploadFile';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import { useMutation, useQuery } from '@tanstack/react-query';
-import { useRef, useState } from 'react';
+import { useState, useRef } from 'react';
+import { useMutation } from '@tanstack/react-query';
+import { Loader2, Upload, FileSpreadsheet, CheckCircle, AlertTriangle } from 'lucide-react';
 import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
-import { branchesApi, inventoryImportApi } from '@/lib/apiServices';
-import type { Branch, InventoryImportResult, ParsedWorkbook } from '@/types';
+import { inventoryImportApi, branchesApi } from '@/lib/apiServices';
+import { useQuery } from '@tanstack/react-query';
+import type { Branch, ParsedWorkbook, InventoryImportResult } from '@/types';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Label } from '@/components/ui/label';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-const STEPS = ['Upload & Preview', 'Confirm & Import'];
+type Step = 'upload' | 'preview' | 'branch' | 'result';
+
+function extractError(err: unknown): string {
+  const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
+  return Array.isArray(msg) ? msg.join(', ') : (msg ?? 'An error occurred');
+}
 
 export default function InventoryImportPage() {
-  const [step, setStep] = useState(0);
-  const [file, setFile] = useState<File | null>(null);
-  const [branchId, setBranchId] = useState('');
-  const [preview, setPreview] = useState<ParsedWorkbook | null>(null);
-  const [importResult, setImportResult] = useState<InventoryImportResult | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [step, setStep] = useState<Step>('upload');
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<ParsedWorkbook | null>(null);
+  const [branchId, setBranchId] = useState('');
+  const [result, setResult] = useState<InventoryImportResult | null>(null);
+  const [error, setError] = useState('');
 
-  const { data: branches = [] } = useQuery<Branch[]>({
-    queryKey: ['branches'],
-    queryFn: () => branchesApi.list().then((r) => r.data),
+  const { data: branches = [] } = useQuery({ queryKey: ['branches'], queryFn: () => branchesApi.list().then((r) => r.data) });
+
+  const previewMut = useMutation({
+    mutationFn: (f: File) => inventoryImportApi.preview(f),
+    onSuccess: (res) => { setPreview(res.data); setStep('preview'); setError(''); },
+    onError: (err) => setError(extractError(err)),
   });
 
-  const previewMutation = useMutation({
-    mutationFn: (f: File) => inventoryImportApi.preview(f).then((r) => r.data),
-    onSuccess: (data) => {
-      setPreview(data);
-      setStep(1);
-    },
+  const importMut = useMutation({
+    mutationFn: ({ f, bid }: { f: File; bid: number }) => inventoryImportApi.importFile(f, bid),
+    onSuccess: (res) => { setResult(res.data); setStep('result'); setError(''); },
+    onError: (err) => setError(extractError(err)),
   });
 
-  const importMutation = useMutation({
-    mutationFn: () =>
-      inventoryImportApi.importFile(file!, parseInt(branchId)).then((r) => r.data),
-    onSuccess: (data) => {
-      setImportResult(data);
-    },
-  });
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0] ?? null;
-    setFile(f);
-    setPreview(null);
-    setImportResult(null);
-    setStep(0);
-  };
-
-  const handlePreview = () => {
-    if (!file) return;
-    previewMutation.mutate(file);
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setFile(f); setError('');
+    previewMut.mutate(f);
   };
 
   const handleImport = () => {
     if (!file || !branchId) return;
-    importMutation.mutate();
+    importMut.mutate({ f: file, bid: parseInt(branchId) });
   };
 
-  const handleReset = () => {
-    setFile(null);
-    setPreview(null);
-    setImportResult(null);
-    setStep(0);
-    setBranchId('');
+  const reset = () => {
+    setStep('upload'); setFile(null); setPreview(null); setBranchId(''); setResult(null); setError('');
     if (fileRef.current) fileRef.current.value = '';
   };
 
   return (
     <AuthGuard>
       <AppLayout title="Inventory Import">
-        <Stepper activeStep={step} sx={{ mb: 4, maxWidth: 480 }}>
-          {STEPS.map((label) => (
-            <Step key={label}>
-              <StepLabel>{label}</StepLabel>
-            </Step>
+        {/* Step indicator */}
+        <div className="flex items-center gap-2 mb-6 text-sm">
+          {(['upload', 'preview', 'branch', 'result'] as Step[]).map((s, i) => (
+            <div key={s} className="flex items-center gap-2">
+              {i > 0 && <span className="text-muted-foreground">→</span>}
+              <Badge variant={step === s ? 'default' : 'outline'} className="capitalize">{s}</Badge>
+            </div>
           ))}
-        </Stepper>
+        </div>
 
-        {/* Step 0 — Upload */}
-        {step === 0 && (
-          <Box display="flex" flexDirection="column" gap={3} maxWidth={480}>
-            <Paper
-              variant="outlined"
-              sx={{
-                p: 4,
-                borderRadius: 2,
-                borderStyle: 'dashed',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: 2,
-                cursor: 'pointer',
-                bgcolor: file ? 'success.50' : undefined,
-                borderColor: file ? 'success.main' : 'divider',
-              }}
-              onClick={() => fileRef.current?.click()}
-            >
-              <UploadFileIcon sx={{ fontSize: 48, color: file ? 'success.main' : 'text.disabled' }} />
-              {file ? (
-                <>
-                  <Typography fontWeight={700} color="success.main">
-                    {file.name}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {(file.size / 1024).toFixed(1)} KB · Click to change
-                  </Typography>
-                </>
-              ) : (
-                <>
-                  <Typography fontWeight={600}>Click to select an Excel file</Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    Supports .xlsx and .xls
-                  </Typography>
-                </>
-              )}
-              <input
-                ref={fileRef}
-                type="file"
-                accept=".xlsx,.xls"
-                hidden
-                onChange={handleFileChange}
-              />
-            </Paper>
+        {error && <Alert variant="destructive" className="mb-4"><AlertDescription>{error}</AlertDescription></Alert>}
 
-            {previewMutation.isError && (
-              <Alert severity="error">Failed to parse file. Check the format.</Alert>
-            )}
-
-            <Button
-              variant="contained"
-              size="large"
-              disabled={!file || previewMutation.isPending}
-              onClick={handlePreview}
-              startIcon={
-                previewMutation.isPending ? (
-                  <CircularProgress size={18} color="inherit" />
-                ) : (
-                  <UploadFileIcon />
-                )
-              }
-            >
-              {previewMutation.isPending ? 'Parsing…' : 'Preview'}
-            </Button>
-          </Box>
-        )}
-
-        {/* Step 1 — Preview + Confirm */}
-        {step === 1 && preview && !importResult && (
-          <Box display="flex" flexDirection="column" gap={3}>
-            <Alert severity="info" sx={{ maxWidth: 600 }}>
-              Found <strong>{preview.sheets.length} sheet(s)</strong> with{' '}
-              <strong>
-                {preview.sheets.reduce((s, sh) => s + sh.rows.length, 0)} data rows
-              </strong>{' '}
-              in <strong>{file?.name}</strong>.
-            </Alert>
-
-            {/* Sheet summary table */}
-            <Paper variant="outlined" sx={{ maxWidth: 600, borderRadius: 2 }}>
-              <Table size="small">
-                <TableHead>
-                  <TableRow sx={{ '& th': { fontWeight: 700, bgcolor: 'grey.100' } }}>
-                    <TableCell>Sheet</TableCell>
-                    <TableCell align="right">Rows</TableCell>
-                    <TableCell>Sample Columns</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {preview.sheets.map((sh) => (
-                    <TableRow key={sh.name} sx={{ '&:last-child td': { border: 0 } }}>
-                      <TableCell sx={{ fontWeight: 500 }}>{sh.name}</TableCell>
-                      <TableCell align="right">
-                        <Chip label={sh.rows.length} size="small" color="primary" />
-                      </TableCell>
-                      <TableCell sx={{ color: 'text.secondary', fontSize: '0.75rem' }}>
-                        {sh.rows[0]
-                          ? Object.keys(sh.rows[0]).slice(0, 4).join(', ')
-                          : '—'}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </Paper>
-
-            {/* Branch selector for import */}
-            <Box display="flex" gap={2} alignItems="center" maxWidth={480}>
-              <FormControl size="small" sx={{ minWidth: 240 }}>
-                <InputLabel>Target Branch</InputLabel>
-                <Select
-                  value={branchId}
-                  label="Target Branch"
-                  onChange={(e) => setBranchId(e.target.value)}
-                >
-                  <MenuItem value="" disabled>Select branch</MenuItem>
-                  {branches.map((b: Branch) => (
-                    <MenuItem key={b.id} value={b.id.toString()}>
-                      {b.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Box>
-
-            {importMutation.isError && (
-              <Alert severity="error" sx={{ maxWidth: 600 }}>
-                Import failed. Please check the file format and try again.
-              </Alert>
-            )}
-
-            <Box display="flex" gap={2}>
-              <Button variant="outlined" onClick={handleReset}>
-                Start Over
-              </Button>
-              <Button
-                variant="contained"
-                color="success"
-                disabled={!branchId || importMutation.isPending}
-                onClick={handleImport}
-                startIcon={
-                  importMutation.isPending ? (
-                    <CircularProgress size={18} color="inherit" />
-                  ) : (
-                    <CheckCircleIcon />
-                  )
-                }
+        {/* Step 1: Upload */}
+        {step === 'upload' && (
+          <Card className="max-w-md">
+            <CardHeader><CardTitle className="text-base">Upload Excel File</CardTitle></CardHeader>
+            <CardContent>
+              <div
+                className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:border-primary transition-colors"
+                onClick={() => fileRef.current?.click()}
               >
-                {importMutation.isPending ? 'Importing…' : 'Confirm Import'}
-              </Button>
-            </Box>
-          </Box>
+                {previewMut.isPending ? (
+                  <Loader2 className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
+                ) : (
+                  <>
+                    <FileSpreadsheet className="h-10 w-10 mx-auto text-muted-foreground mb-2" />
+                    <p className="text-sm text-muted-foreground">Click to select an .xlsx file</p>
+                  </>
+                )}
+              </div>
+              <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFileSelect} />
+            </CardContent>
+          </Card>
         )}
 
-        {/* Import result */}
-        {importResult && (
-          <Box display="flex" flexDirection="column" gap={3} maxWidth={560}>
-            <Alert severity="success" icon={<CheckCircleIcon />}>
-              Import complete!{' '}
-              <strong>{importResult.summary.totalProcessed}</strong> records processed across{' '}
-              <strong>{importResult.summary.totalSheets}</strong> sheet(s).
-            </Alert>
+        {/* Step 2: Preview */}
+        {step === 'preview' && preview && (
+          <div className="space-y-4">
+            <Card>
+              <CardHeader><CardTitle className="text-base">Preview: {file?.name}</CardTitle></CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground mb-4">{preview.sheetNames.length} sheet(s): {preview.sheetNames.join(', ')}</p>
+                {preview.sheets.map((sheet) => (
+                  <div key={sheet.name} className="mb-4">
+                    <h4 className="font-semibold text-sm mb-2">{sheet.name} ({sheet.rows.length} rows)</h4>
+                    {sheet.rows.length > 0 && (
+                      <div className="overflow-x-auto max-h-64">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>{Object.keys(sheet.rows[0]).map((key) => <TableHead key={key}>{key}</TableHead>)}</TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {sheet.rows.slice(0, 5).map((row, i) => (
+                              <TableRow key={i}>{Object.values(row).map((val, j) => <TableCell key={j}>{String(val ?? '')}</TableCell>)}</TableRow>
+                            ))}
+                            {sheet.rows.length > 5 && <TableRow><TableCell colSpan={Object.keys(sheet.rows[0]).length} className="text-center text-muted-foreground">…and {sheet.rows.length - 5} more rows</TableCell></TableRow>}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={reset}>Back</Button>
+              <Button onClick={() => setStep('branch')}>Continue</Button>
+            </div>
+          </div>
+        )}
 
-            <Paper variant="outlined" sx={{ borderRadius: 2 }}>
-              <Table size="small">
-                <TableHead>
-                  <TableRow sx={{ '& th': { fontWeight: 700, bgcolor: 'grey.100' } }}>
-                    <TableCell>Sheet</TableCell>
-                    <TableCell>Date</TableCell>
-                    <TableCell align="right">Processed</TableCell>
-                    <TableCell align="right">Skipped</TableCell>
-                    <TableCell align="right">Errors</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {importResult.sheets.map((sh) => (
-                    <TableRow key={sh.sheetName} sx={{ '&:last-child td': { border: 0 } }}>
-                      <TableCell>{sh.sheetName}</TableCell>
-                      <TableCell>{sh.date}</TableCell>
-                      <TableCell align="right">
-                        <Chip label={sh.processed} size="small" color="success" />
-                      </TableCell>
-                      <TableCell align="right">
-                        <Chip label={sh.skipped} size="small" color="default" />
-                      </TableCell>
-                      <TableCell align="right">
-                        <Chip
-                          label={sh.errors.length}
-                          size="small"
-                          color={sh.errors.length > 0 ? 'error' : 'default'}
-                        />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </Paper>
+        {/* Step 3: Branch selection */}
+        {step === 'branch' && (
+          <Card className="max-w-md">
+            <CardHeader><CardTitle className="text-base">Select Branch</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label>Branch</Label>
+                <Select value={branchId} onValueChange={setBranchId}>
+                  <SelectTrigger><SelectValue placeholder="Select branch" /></SelectTrigger>
+                  <SelectContent>{branches.map((b: Branch) => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setStep('preview')}>Back</Button>
+                <Button onClick={handleImport} disabled={!branchId || importMut.isPending}>
+                  {importMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}Import
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
-            <Button variant="outlined" onClick={handleReset}>
-              Import Another File
-            </Button>
-          </Box>
+        {/* Step 4: Result */}
+        {step === 'result' && result && (
+          <div className="space-y-4">
+            <Card>
+              <CardHeader><CardTitle className="text-base flex items-center gap-2"><CheckCircle className="h-5 w-5 text-primary" />Import Complete</CardTitle></CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+                  <div className="text-center"><p className="text-2xl font-bold">{result.summary.totalSheets}</p><p className="text-xs text-muted-foreground">Sheets</p></div>
+                  <div className="text-center"><p className="text-2xl font-bold text-primary">{result.summary.totalProcessed}</p><p className="text-xs text-muted-foreground">Processed</p></div>
+                  <div className="text-center"><p className="text-2xl font-bold">{result.summary.totalSkipped}</p><p className="text-xs text-muted-foreground">Skipped</p></div>
+                  <div className="text-center"><p className="text-2xl font-bold text-destructive">{result.summary.totalErrors}</p><p className="text-xs text-muted-foreground">Errors</p></div>
+                </div>
+                {result.sheets.map((sheet) => (
+                  <div key={sheet.sheetName} className="border rounded-lg p-3 mb-2">
+                    <div className="flex justify-between items-center">
+                      <span className="font-medium">{sheet.sheetName}</span>
+                      <span className="text-sm text-muted-foreground">{sheet.date} · {sheet.processed} processed</span>
+                    </div>
+                    {sheet.errors.length > 0 && (
+                      <ul className="mt-2 space-y-1">
+                        {sheet.errors.map((e, i) => (
+                          <li key={i} className="text-xs text-destructive flex items-start gap-1"><AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />{e}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+            <Button onClick={reset}>Import Another</Button>
+          </div>
         )}
       </AppLayout>
     </AuthGuard>

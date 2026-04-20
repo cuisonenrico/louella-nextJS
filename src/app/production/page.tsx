@@ -1,52 +1,29 @@
-﻿'use client';
+'use client';
 
-import { Alert, Box, CircularProgress, Snackbar, Typography } from '@mui/material';
-import { DataGrid, useGridApiRef } from '@mui/x-data-grid';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Loader2, Calculator } from 'lucide-react';
 import dayjs from 'dayjs';
 import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
 import { branchesApi, inventoryApi, productionApi, productsApi } from '@/lib/apiServices';
 import type { Branch, Inventory, Product, Production, ProductType } from '@/types';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import MaterialConsumptionDrawer from './components/MaterialConsumptionDrawer';
 import ProductionDateToolbar from './components/ProductionDateToolbar';
 import ProductionPendingBar from './components/ProductionPendingBar';
 import ProductionSummaryAccordion from './components/ProductionSummaryAccordion';
 import { useProductionRowUpdate, type ProdRow } from './hooks/useProductionRowUpdate';
 import { useProductionMutations } from './hooks/useProductionMutations';
-import { useProductionColumns } from './hooks/useProductionColumns';
 import { useProductionSummary } from './hooks/useProductionSummary';
-import { makeTabNavHandler } from '@/lib/makeTabNavHandler';
 
 const PRODUCT_TYPE_ORDER: ProductType[] = ['BREAD', 'CAKE', 'SPECIAL', 'MISCELLANEOUS'];
-const TYPE_LABELS: Record<ProductType, string> = {
-  BREAD: 'Bread',
-  CAKE: 'Cake',
-  SPECIAL: 'Special',
-  MISCELLANEOUS: 'Miscellaneous',
-};
-
-const GRID_SX = {
-  border: 1,
-  borderColor: 'divider',
-  borderRadius: 1,
-  '& .MuiDataGrid-columnHeader': { bgcolor: 'grey.100', fontWeight: 700 },
-  '& .MuiDataGrid-cell--editable': {
-    cursor: 'cell',
-    '&:hover': { bgcolor: 'action.hover' },
-  },
-  '& .MuiDataGrid-cell--editing': {
-    bgcolor: 'primary.50 !important',
-    outline: '2px solid',
-    outlineColor: 'primary.main',
-    outlineOffset: '-2px',
-  },
-  '& .row--dirty': {
-    bgcolor: 'rgba(255, 167, 38, 0.10)',
-    '&:hover': { bgcolor: 'rgba(255, 167, 38, 0.18) !important' },
-  },
-} as const;
+const TYPE_LABELS: Record<ProductType, string> = { BREAD: 'Bread', CAKE: 'Cake', SPECIAL: 'Special', MISCELLANEOUS: 'Miscellaneous' };
 
 export default function ProductionPage() {
   const qc = useQueryClient();
@@ -54,16 +31,8 @@ export default function ProductionPage() {
   const [rowError, setRowError] = useState('');
   const [consumptionId, setConsumptionId] = useState<number | null>(null);
 
-  const { data: branches = [] } = useQuery<Branch[]>({
-    queryKey: ['branches'],
-    queryFn: () => branchesApi.list().then((r) => r.data),
-  });
-
-  const { data: products = [] } = useQuery<Product[]>({
-    queryKey: ['products'],
-    queryFn: () => productsApi.list().then((r) => r.data),
-  });
-
+  const { data: branches = [] } = useQuery<Branch[]>({ queryKey: ['branches'], queryFn: () => branchesApi.list().then((r) => r.data) });
+  const { data: products = [] } = useQuery<Product[]>({ queryKey: ['products'], queryFn: () => productsApi.list().then((r) => r.data) });
   const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
 
   const prodQuery = useQuery({
@@ -81,24 +50,15 @@ export default function ProductionPage() {
     return new Set(branches.filter((b) => !branchIdsWithRecords.has(b.id)).map((b) => b.id));
   }, [invQuery.data, branches]);
 
-  const { pendingProduction, pendingInventory, handleProcessRowUpdate, resetPending } =
-    useProductionRowUpdate(branches);
+  const { pendingProduction, pendingInventory, handleFieldChange, resetPending } = useProductionRowUpdate(branches);
 
-  const { initBranchMutation, initAllBranchesMutation, initProductionMutation, savePendingMutation } =
-    useProductionMutations({
-      filterDate,
-      products,
-      branches,
-      branchesWithNoInventory,
-      prodQueryData: prodQuery.data,
-      onError: setRowError,
-    });
+  const { initBranchMutation, initAllBranchesMutation, initProductionMutation, savePendingMutation } = useProductionMutations({
+    filterDate, products, branches, branchesWithNoInventory, prodQueryData: prodQuery.data, onError: setRowError,
+  });
 
-  useEffect(() => {
-    resetPending();
-  }, [filterDate, resetPending]);
+  useEffect(() => { resetPending(); }, [filterDate, resetPending]);
 
-  // Lookup maps derived from query data
+  // Lookup maps
   const productionByProduct = useMemo(
     () => new Map((prodQuery.data ?? []).map((p) => [p.productId, p])),
     [prodQuery.data],
@@ -106,23 +66,15 @@ export default function ProductionPage() {
 
   const inventoryByProductBranch = useMemo(() => {
     const m = new Map<string, Inventory>();
-    for (const inv of invQuery.data ?? []) {
-      m.set(`${inv.productId}:${inv.branchId}`, inv);
-    }
+    for (const inv of invQuery.data ?? []) m.set(`${inv.productId}:${inv.branchId}`, inv);
     return m;
   }, [invQuery.data]);
 
-  // One row per active product; branch delivery values read from inventory records
+  // One row per active product
   const allRows = useMemo<ProdRow[]>(() => {
     return products.filter((p) => p.isActive).map((p) => {
       const prodRec = productionByProduct.get(p.id);
-      const row: ProdRow = {
-        id: p.id,
-        productId: p.id,
-        type: p.type,
-        _productionId: prodRec?.id ?? null,
-        yield: prodRec?.yield ?? 0,
-      };
+      const row: ProdRow = { id: p.id, productId: p.id, type: p.type, _productionId: prodRec?.id ?? null, yield: prodRec?.yield ?? 0 };
       for (const b of branches) {
         const inv = inventoryByProductBranch.get(`${p.id}:${b.id}`);
         row[`branch_${b.id}`] = inv?.delivery ?? 0;
@@ -138,25 +90,11 @@ export default function ProductionPage() {
     return map;
   }, [allRows]);
 
-  // Dynamic editable fields: yield + one per branch
-  const editableFields = useMemo(
-    () => ['yield', ...branches.map((b) => `branch_${b.id}`)],
-    [branches],
-  );
-
   const discardPending = useCallback(() => {
     resetPending();
     qc.invalidateQueries({ queryKey: ['production'] });
     qc.invalidateQueries({ queryKey: ['inventory-for-production'] });
   }, [resetPending, qc]);
-
-  const columns = useProductionColumns({
-    branches,
-    productById,
-    branchesWithNoInventory,
-    initBranchMutation,
-    setConsumptionId: (id) => setConsumptionId(id),
-  });
 
   const summary = useProductionSummary(allRows, branches, productById);
 
@@ -167,127 +105,182 @@ export default function ProductionPage() {
     (p) => p.isActive && !(prodQuery.data ?? []).some((pr) => pr.productId === p.id),
   ).length;
 
-  const apiRefBread = useGridApiRef();
-  const apiRefCake = useGridApiRef();
-  const apiRefSpecial = useGridApiRef();
-  const apiRefMiscellaneous = useGridApiRef();
-  const typeApiRefs = { BREAD: apiRefBread, CAKE: apiRefCake, SPECIAL: apiRefSpecial, MISCELLANEOUS: apiRefMiscellaneous };
+  // Get effective value considering pending changes
+  const getEffectiveValue = (row: ProdRow, field: string): number => {
+    if (field === 'yield') {
+      const prodId = row._productionId;
+      if (prodId != null && pendingProduction.has(prodId)) return pendingProduction.get(prodId)!.yield;
+      return row.yield;
+    }
+    if (field.startsWith('branch_')) {
+      const branchSuffix = field.slice('branch_'.length);
+      const invId = row[`_inv_${branchSuffix}`] as number | null;
+      if (invId != null && pendingInventory.has(invId)) return pendingInventory.get(invId)!.delivery;
+      return (row[field] as number) ?? 0;
+    }
+    return (row[field] as number) ?? 0;
+  };
+
+  const isRowDirty = (row: ProdRow): boolean => {
+    if (row._productionId != null && pendingProduction.has(row._productionId)) return true;
+    return branches.some((b) => {
+      const invId = row[`_inv_${b.id}`] as number | null;
+      return invId != null && pendingInventory.has(invId);
+    });
+  };
 
   return (
     <AuthGuard>
       <AppLayout title="Production">
-        <ProductionDateToolbar
-          filterDate={filterDate}
-          today={today}
-          missingProductionCount={missingProductionCount}
-          missingInventoryBranchCount={branchesWithNoInventory.size}
-          isProdLoading={prodQuery.isLoading}
-          isInvLoading={invQuery.isLoading}
-          isInitProdPending={initProductionMutation.isPending}
-          isInitAllInvPending={initAllBranchesMutation.isPending}
-          onDateChange={setFilterDate}
-          onInitProduction={() => initProductionMutation.mutate()}
-          onInitAllInventory={() => initAllBranchesMutation.mutate()}
-        />
+        <TooltipProvider>
+          <ProductionDateToolbar
+            filterDate={filterDate}
+            today={today}
+            missingProductionCount={missingProductionCount}
+            missingInventoryBranchCount={branchesWithNoInventory.size}
+            isProdLoading={prodQuery.isLoading}
+            isInvLoading={invQuery.isLoading}
+            isInitProdPending={initProductionMutation.isPending}
+            isInitAllInvPending={initAllBranchesMutation.isPending}
+            onDateChange={setFilterDate}
+            onInitProduction={() => initProductionMutation.mutate()}
+            onInitAllInventory={() => initAllBranchesMutation.mutate()}
+          />
 
-        <ProductionPendingBar
-          totalPending={totalPending}
-          isSaving={savePendingMutation.isPending}
-          onDiscard={discardPending}
-          onSave={() =>
-            savePendingMutation.mutate(
-              { production: pendingProduction, inventory: pendingInventory },
-              { onSuccess: resetPending },
-            )
-          }
-        />
+          <ProductionPendingBar
+            totalPending={totalPending}
+            isSaving={savePendingMutation.isPending}
+            onDiscard={discardPending}
+            onSave={() => savePendingMutation.mutate({ production: pendingProduction, inventory: pendingInventory }, { onSuccess: resetPending })}
+          />
 
-        <ProductionSummaryAccordion summary={summary} branches={branches} />
+          <ProductionSummaryAccordion summary={summary} branches={branches} />
 
-        {/* Per-type grids */}
-        {isLoading ? (
-          <Box display="flex" justifyContent="center" py={6}>
-            <CircularProgress />
-          </Box>
-        ) : allRows.length === 0 ? (
-          <Typography color="text.secondary" textAlign="center" py={6}>
-            No active products found.
-          </Typography>
-        ) : (
-          PRODUCT_TYPE_ORDER.map((type) => {
-            const typeRows = rowsByType.get(type) ?? [];
-            if (typeRows.length === 0) return null;
-            return (
-              <Box key={type} mb={3}>
-                <Typography
-                  variant="subtitle1"
-                  fontWeight={700}
-                  sx={{
-                    mb: 0.75,
-                    pb: 0.5,
-                    borderBottom: 2,
-                    borderColor: 'divider',
-                    textTransform: 'uppercase',
-                    letterSpacing: 1,
-                    color: 'text.secondary',
-                  }}
-                >
-                  {TYPE_LABELS[type]}
-                </Typography>
-                <DataGrid
-                  apiRef={typeApiRefs[type]}
-                  rows={typeRows}
-                  columns={columns}
-                  processRowUpdate={handleProcessRowUpdate}
-                  isCellEditable={(params) => {
-                    const row = params.row as ProdRow;
-                    if (params.field === 'yield') return row._productionId != null;
-                    if (params.field.startsWith('branch_')) {
-                      const suffix = params.field.slice('branch_'.length);
-                      return (row[`_inv_${suffix}`] as number | null) != null;
-                    }
-                    return false;
-                  }}
-                  onCellKeyDown={makeTabNavHandler(editableFields, typeApiRefs[type])}
-                  onProcessRowUpdateError={(err) =>
-                    setRowError(err instanceof Error ? err.message : String(err))
-                  }
-                  getRowClassName={(params) => {
-                    const row = params.row as ProdRow;
-                    const hasProd =
-                      row._productionId != null && pendingProduction.has(row._productionId);
-                    const hasInv = branches.some((b) => {
-                      const invId = row[`_inv_${b.id}`] as number | null;
-                      return invId != null && pendingInventory.has(invId);
-                    });
-                    return hasProd || hasInv ? 'row--dirty' : '';
-                  }}
-                  autoHeight
-                  disableRowSelectionOnClick
-                  hideFooter
-                  density="compact"
-                  sx={GRID_SX}
-                />
-              </Box>
-            );
-          })
-        )}
+          {/* Per-type grids */}
+          {isLoading ? (
+            <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
+          ) : allRows.length === 0 ? (
+            <p className="text-center text-muted-foreground py-12">No active products found.</p>
+          ) : (
+            PRODUCT_TYPE_ORDER.map((type) => {
+              const typeRows = rowsByType.get(type) ?? [];
+              if (typeRows.length === 0) return null;
 
-        <Snackbar
-          open={!!rowError}
-          autoHideDuration={4000}
-          onClose={() => setRowError('')}
-          anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-        >
-          <Alert severity="error" onClose={() => setRowError('')} sx={{ width: '100%' }}>
-            {rowError}
-          </Alert>
-        </Snackbar>
+              return (
+                <div key={type} className="mb-4">
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground border-b-2 pb-1 mb-2">
+                    {TYPE_LABELS[type]}
+                  </h3>
+                  <Card className="shadow-none overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/50">
+                          <TableHead className="w-[130px]">Product</TableHead>
+                          <TableHead className="text-center w-[90px]">Yield</TableHead>
+                          {branches.map((b) => (
+                            <TableHead key={b.id} className="text-center w-[100px]">
+                              <div className="flex items-center justify-center gap-1">
+                                <span className="truncate">{b.name}</span>
+                                {branchesWithNoInventory.has(b.id) && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-5 w-5 p-0"
+                                        onClick={(e) => { e.stopPropagation(); initBranchMutation.mutate(b.id); }}
+                                        disabled={initBranchMutation.isPending && initBranchMutation.variables === b.id}
+                                      >
+                                        {initBranchMutation.isPending && initBranchMutation.variables === b.id
+                                          ? <Loader2 className="h-3 w-3 animate-spin" />
+                                          : <span className="text-xs text-primary font-bold">+</span>}
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Initialize {b.name} inventory</TooltipContent>
+                                  </Tooltip>
+                                )}
+                              </div>
+                            </TableHead>
+                          ))}
+                          <TableHead className="text-right w-[100px]">Exp. Sales</TableHead>
+                          <TableHead className="text-center w-[80px]">Mat. Cost</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {typeRows.map((row) => {
+                          const dirty = isRowDirty(row);
+                          const yieldVal = getEffectiveValue(row, 'yield');
+                          const totalAssigned = branches.reduce((sum, b) => sum + getEffectiveValue(row, `branch_${b.id}`), 0);
+                          const price = productById.get(row.productId)?.price ?? 0;
+                          const expSales = totalAssigned * price;
 
-        <MaterialConsumptionDrawer
-          consumptionId={consumptionId}
-          onClose={() => setConsumptionId(null)}
-        />
+                          return (
+                            <TableRow key={row.id} className={dirty ? 'bg-amber-50/50' : ''}>
+                              <TableCell className="font-medium">{productById.get(row.productId)?.name ?? `Product #${row.productId}`}</TableCell>
+                              <TableCell className="text-center">
+                                {row._productionId != null ? (
+                                  <span className={`font-semibold ${dirty ? 'text-amber-700' : ''}`}>{yieldVal}</span>
+                                ) : (
+                                  <span className="text-muted-foreground">—</span>
+                                )}
+                              </TableCell>
+                              {branches.map((b) => {
+                                const hasRecord = (row[`_inv_${b.id}`] as number | null) != null;
+                                const val = getEffectiveValue(row, `branch_${b.id}`);
+                                return (
+                                  <TableCell key={b.id} className="text-center">
+                                    {hasRecord ? (
+                                      <Input
+                                        type="number"
+                                        className="w-[70px] h-7 text-center mx-auto"
+                                        value={String(val)}
+                                        onChange={(e) => handleFieldChange(row, `branch_${b.id}`, parseInt(e.target.value) || 0)}
+                                        min={0}
+                                      />
+                                    ) : (
+                                      <span className="text-muted-foreground">—</span>
+                                    )}
+                                  </TableCell>
+                                );
+                              })}
+                              <TableCell className="text-right font-semibold">₱{expSales.toLocaleString()}</TableCell>
+                              <TableCell className="text-center">
+                                {row._productionId != null && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setConsumptionId(row._productionId!)}>
+                                        <Calculator className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>View material consumption</TooltipContent>
+                                  </Tooltip>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </Card>
+                </div>
+              );
+            })
+          )}
+
+          {/* Error snackbar */}
+          {rowError && (
+            <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50">
+              <Alert variant="destructive" className="shadow-lg">
+                <AlertDescription className="flex items-center gap-2">
+                  {rowError}
+                  <Button variant="ghost" size="sm" onClick={() => setRowError('')}>×</Button>
+                </AlertDescription>
+              </Alert>
+            </div>
+          )}
+
+          <MaterialConsumptionDrawer consumptionId={consumptionId} onClose={() => setConsumptionId(null)} />
+        </TooltipProvider>
       </AppLayout>
     </AuthGuard>
   );

@@ -3,96 +3,36 @@
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import {
-  Box,
-  Drawer,
-  IconButton,
-  List,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-  Toolbar,
-  Typography,
-  Divider,
-  Chip,
-  Tooltip,
-} from '@mui/material';
-import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
-import MenuIcon from '@mui/icons-material/Menu';
-import DashboardIcon from '@mui/icons-material/Dashboard';
-import StorefrontIcon from '@mui/icons-material/Storefront';
-import InventoryIcon from '@mui/icons-material/Inventory';
-import CategoryIcon from '@mui/icons-material/Category';
-import MenuBookIcon from '@mui/icons-material/MenuBook';
-import PointOfSaleIcon from '@mui/icons-material/PointOfSale';
-import WarehouseIcon from '@mui/icons-material/Warehouse';
-import ScienceIcon from '@mui/icons-material/Science';
-import BalanceIcon from '@mui/icons-material/Balance';
-import PrecisionManufacturingIcon from '@mui/icons-material/PrecisionManufacturing';
-import LocalShippingIcon from '@mui/icons-material/LocalShipping';
-import TuneIcon from '@mui/icons-material/Tune';
-import MonetizationOnIcon from '@mui/icons-material/MonetizationOn';
-import SpeedIcon from '@mui/icons-material/Speed';
-import UploadFileIcon from '@mui/icons-material/UploadFile';
-import EventBusyIcon from '@mui/icons-material/EventBusy';
-import { useAuth } from '@/contexts/AuthContext';
+  LayoutDashboard, Store, Package, Layers, BookOpen, DollarSign,
+  Warehouse, FlaskConical, Scale, Factory, Truck, SlidersHorizontal,
+  Receipt, Gauge, Upload, CalendarOff, ChevronLeft, Menu,
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Separator } from '@/components/ui/separator';
+import { Button } from '@/components/ui/button';
 
 export const DRAWER_WIDTH = 240;
 export const COLLAPSED_WIDTH = 64;
 
 const navItems = [
-  { label: 'Dashboard', href: '/dashboard', icon: <DashboardIcon /> },
-  { label: 'Products', href: '/products', icon: <CategoryIcon /> },
-  { label: 'Branches', href: '/branches', icon: <StorefrontIcon /> },
-  { label: 'Inventory', href: '/inventory', icon: <InventoryIcon /> },
-  { label: 'Gap Audit', href: '/inventory/gaps', icon: <EventBusyIcon /> },
-  { label: 'Materials', href: '/materials', icon: <ScienceIcon /> },
-  { label: 'Recipes', href: '/recipes', icon: <MenuBookIcon /> },
-  { label: 'Sales', href: '/sales', icon: <PointOfSaleIcon /> },
-  {
-    label: 'Material Stock',
-    href: '/material-inventory',
-    icon: <WarehouseIcon />,
-  },
-  {
-    label: 'Stock Gap Audit',
-    href: '/material-inventory/gaps',
-    icon: <EventBusyIcon />,
-  },
-  {
-    label: 'Production',
-    href: '/production',
-    icon: <PrecisionManufacturingIcon />,
-  },
-  {
-    label: 'Unit Conversions',
-    href: '/unit-conversions',
-    icon: <BalanceIcon />,
-  },
-  {
-    label: 'Suppliers',
-    href: '/suppliers',
-    icon: <LocalShippingIcon />,
-  },
-  {
-    label: 'Adjustments',
-    href: '/inventory-adjustments',
-    icon: <TuneIcon />,
-  },
-  {
-    label: 'Import',
-    href: '/inventory-import',
-    icon: <UploadFileIcon />,
-  },
-  {
-    label: 'Production Cost',
-    href: '/production-cost',
-    icon: <MonetizationOnIcon />,
-  },
-  {
-    label: 'Efficiency',
-    href: '/production-efficiency',
-    icon: <SpeedIcon />,
-  },
+  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { label: 'Products', href: '/products', icon: Layers },
+  { label: 'Branches', href: '/branches', icon: Store },
+  { label: 'Inventory', href: '/inventory', icon: Package },
+  { label: 'Gap Audit', href: '/inventory/gaps', icon: CalendarOff },
+  { label: 'Materials', href: '/materials', icon: FlaskConical },
+  { label: 'Recipes', href: '/recipes', icon: BookOpen },
+  { label: 'Sales', href: '/sales', icon: DollarSign },
+  { label: 'Material Stock', href: '/material-inventory', icon: Warehouse },
+  { label: 'Stock Gap Audit', href: '/material-inventory/gaps', icon: CalendarOff },
+  { label: 'Production', href: '/production', icon: Factory },
+  { label: 'Unit Conversions', href: '/unit-conversions', icon: Scale },
+  { label: 'Suppliers', href: '/suppliers', icon: Truck },
+  { label: 'Adjustments', href: '/inventory-adjustments', icon: SlidersHorizontal },
+  { label: 'Import', href: '/inventory-import', icon: Upload },
+  { label: 'Production Cost', href: '/production-cost', icon: Receipt },
+  { label: 'Efficiency', href: '/production-efficiency', icon: Gauge },
 ];
 
 export default function Sidebar({
@@ -104,137 +44,81 @@ export default function Sidebar({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user } = useAuth();
   const width = collapsed ? COLLAPSED_WIDTH : DRAWER_WIDTH;
 
   return (
-    <Drawer
-      variant="permanent"
-      sx={{
+    <aside
+      className="fixed inset-y-0 left-0 z-40 flex flex-col overflow-hidden border-r-0 text-white transition-all duration-200"
+      style={{
         width,
-        flexShrink: 0,
-        transition: 'width 0.2s',
-        '& .MuiDrawer-paper': {
-          width,
-          boxSizing: 'border-box',
-          background: 'linear-gradient(180deg, #c25500 0%, #FA8128 100%)',
-          color: '#fff',
-          border: 'none',
-          overflowX: 'hidden',
-          transition: 'width 0.2s',
-        },
+        background: 'linear-gradient(180deg, #c25500 0%, #FA8128 100%)',
       }}
     >
-      <Toolbar
-        sx={{
-          px: collapsed ? 0 : 2,
-          pt: 2,
-          pb: 1,
-          justifyContent: collapsed ? 'center' : 'space-between',
-          minHeight: 56,
-        }}
+      {/* Header */}
+      <div
+        className={cn(
+          'flex items-center pt-4 pb-2 min-h-[56px]',
+          collapsed ? 'justify-center px-0' : 'justify-between px-4'
+        )}
       >
         {collapsed ? (
-          <Box sx={{ bgcolor: 'white', borderRadius: 1.5, p: 0.5, display: 'flex' }}>
-            <Image
-              src="/favicon.png"
-              alt="Louella"
-              width={28}
-              height={28}
-              style={{ objectFit: 'contain' }}
-            />
-          </Box>
+          <div className="bg-white rounded-md p-0.5 flex">
+            <Image src="/favicon.png" alt="Louella" width={28} height={28} style={{ objectFit: 'contain' }} />
+          </div>
         ) : (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Box sx={{ bgcolor: 'white', borderRadius: 1.5, p: 0.5, display: 'flex' }}>
-              <Image
-                src="/favicon.png"
-                alt="Louella"
-                width={32}
-                height={32}
-                style={{ objectFit: 'contain' }}
-              />
-            </Box>
-            <Box>
-              <Typography variant="h6" fontWeight={800} color="white" lineHeight={1.1}>
-                Louella
-              </Typography>
-              <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)' }}>
-                Bakery Management
-              </Typography>
-            </Box>
-          </Box>
+          <div className="flex items-center gap-2">
+            <div className="bg-white rounded-md p-0.5 flex">
+              <Image src="/favicon.png" alt="Louella" width={32} height={32} style={{ objectFit: 'contain' }} />
+            </div>
+            <div>
+              <h1 className="text-lg font-extrabold leading-tight text-white">Louella</h1>
+              <span className="text-xs text-white/70">Bakery Management</span>
+            </div>
+          </div>
         )}
-        <IconButton onClick={onToggle} size="small" sx={{ color: '#fff' }}>
-          {collapsed ? <MenuIcon /> : <ChevronLeftIcon />}
-        </IconButton>
-      </Toolbar>
+        <Button variant="ghost" size="icon" onClick={onToggle} className="text-white hover:bg-white/10 h-8 w-8">
+          {collapsed ? <Menu className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+        </Button>
+      </div>
 
-      <Divider sx={{ borderColor: 'rgba(255,255,255,0.15)', mx: collapsed ? 1 : 2 }} />
+      <Separator className="bg-white/15 mx-2" />
 
-      {/* {user && !collapsed && (
-        <Box sx={{ px: 2, py: 1.5 }}>
-          <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)' }}>
-            {user.email}
-          </Typography>
-          <Box mt={0.5}>
-            <Chip
-              label={user.role}
-              size="small"
-              sx={{
-                bgcolor: 'rgba(255,255,255,0.2)',
-                color: '#fff',
-                fontSize: '0.65rem',
-                height: 18,
-              }}
-            />
-          </Box>
-        </Box>
-      )} */}
-
-      {!collapsed && <Divider sx={{ borderColor: 'rgba(255,255,255,0.15)', mx: 2, mb: 1 }} />}
-
-      <List dense sx={{ px: collapsed ? 0.5 : 1, mt: collapsed ? 1 : 0 }}>
-        {navItems.map((item) => {
-          const active = pathname === item.href || pathname.startsWith(item.href + '/');
-          return (
-            <Tooltip key={item.href} title={collapsed ? item.label : ''} placement="right">
-              <ListItemButton
-                onClick={() => router.push(item.href)}
-                selected={active}
-                sx={{
-                  borderRadius: 2,
-                  mb: 0.5,
-                  justifyContent: collapsed ? 'center' : 'flex-start',
-                  px: collapsed ? 1 : 2,
-                  color: active ? '#fff' : 'rgba(255,255,255,0.75)',
-                  bgcolor: active ? 'rgba(255,255,255,0.18) !important' : 'transparent',
-                  '&:hover': { bgcolor: 'rgba(255,255,255,0.12)' },
-                }}
-              >
-                <ListItemIcon
-                  sx={{
-                    color: active ? '#fff' : 'rgba(255,255,255,0.7)',
-                    minWidth: collapsed ? 0 : 36,
-                    justifyContent: 'center',
-                  }}
+      {/* Nav Items */}
+      <nav className={cn('flex-1 overflow-y-auto', collapsed ? 'px-1 mt-2' : 'px-2 mt-1')}>
+        <ul className="space-y-0.5">
+          {navItems.map((item) => {
+            const active = pathname === item.href || pathname.startsWith(item.href + '/');
+            const Icon = item.icon;
+            const btn = (
+              <li key={item.href}>
+                <button
+                  onClick={() => router.push(item.href)}
+                  className={cn(
+                    'flex w-full items-center rounded-lg text-sm transition-colors',
+                    collapsed ? 'justify-center px-2 py-2' : 'px-3 py-2 gap-3',
+                    active
+                      ? 'bg-white/20 text-white font-bold'
+                      : 'text-white/75 hover:bg-white/10 hover:text-white'
+                  )}
                 >
-                  {item.icon}
-                </ListItemIcon>
-                {!collapsed && (
-                  <ListItemText
-                    primary={item.label}
-                    primaryTypographyProps={{
-                      fontSize: '0.875rem',
-                      fontWeight: active ? 700 : 400,
-                    }}
-                  />
-                )}
-              </ListItemButton>
-            </Tooltip>
-          );
-        })}
-      </List>
-    </Drawer>
+                  <Icon className={cn('h-[18px] w-[18px] shrink-0', active ? 'text-white' : 'text-white/70')} />
+                  {!collapsed && <span>{item.label}</span>}
+                </button>
+              </li>
+            );
+
+            if (collapsed) {
+              return (
+                <Tooltip key={item.href} delayDuration={0}>
+                  <TooltipTrigger asChild>{btn}</TooltipTrigger>
+                  <TooltipContent side="right">{item.label}</TooltipContent>
+                </Tooltip>
+              );
+            }
+            return btn;
+          })}
+        </ul>
+      </nav>
+    </aside>
   );
 }

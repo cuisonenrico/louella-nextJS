@@ -1,369 +1,205 @@
 'use client';
 
-import {
-  Alert,
-  Box,
-  Button,
-  CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  FormControl,
-  IconButton,
-  InputLabel,
-  MenuItem,
-  Paper,
-  Select,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  TextField,
-  Tooltip,
-  Typography,
-} from '@mui/material';
-import AddIcon from '@mui/icons-material/Add';
-import DeleteIcon from '@mui/icons-material/Delete';
-import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Plus, Pencil, Trash2, Loader2, ArrowRightLeft } from 'lucide-react';
 import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
 import { unitConversionsApi } from '@/lib/apiServices';
-import type { MeasurementUnit, UnitConversion } from '@/types';
+import type { UnitConversion, MeasurementUnit } from '@/types';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Label } from '@/components/ui/label';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-const UNITS: MeasurementUnit[] = [
-  'KG', 'G', 'LITER', 'ML', 'PIECE', 'DOZEN', 'BAG', 'SACHET', 'CUP', 'TBSP', 'TSP',
-];
+const UNITS: MeasurementUnit[] = ['KG', 'G', 'LITER', 'ML', 'PIECE', 'DOZEN', 'BAG', 'SACHET', 'CUP', 'TBSP', 'TSP'];
+
+interface ConvForm { fromUnit: MeasurementUnit; toUnit: MeasurementUnit; factor: string; }
+const defaultForm: ConvForm = { fromUnit: 'KG', toUnit: 'G', factor: '' };
+
+function extractError(err: unknown): string {
+  const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
+  return Array.isArray(msg) ? msg.join(', ') : (msg ?? 'An error occurred');
+}
 
 export default function UnitConversionsPage() {
   const qc = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [form, setForm] = useState({
-    fromUnit: 'KG' as MeasurementUnit,
-    toUnit: 'G' as MeasurementUnit,
-    factor: '1000',
-  });
-  const [formError, setFormError] = useState('');
+  const [editTarget, setEditTarget] = useState<UnitConversion | null>(null);
+  const [form, setForm] = useState<ConvForm>(defaultForm);
   const [deleteTarget, setDeleteTarget] = useState<UnitConversion | null>(null);
-  // Convert tool
-  const [convertForm, setConvertForm] = useState({
-    quantity: '1',
-    fromUnit: 'KG' as MeasurementUnit,
-    toUnit: 'G' as MeasurementUnit,
-  });
-  const [convertResult, setConvertResult] = useState<number | null>(null);
-  const [convertError, setConvertError] = useState('');
+  const [formError, setFormError] = useState('');
 
-  const { data: conversions = [], isLoading } = useQuery<UnitConversion[]>({
-    queryKey: ['unit-conversions'],
-    queryFn: () => unitConversionsApi.list().then((r) => r.data),
-  });
+  // Conversion tool state
+  const [convQty, setConvQty] = useState('1');
+  const [convFrom, setConvFrom] = useState<MeasurementUnit>('KG');
+  const [convTo, setConvTo] = useState<MeasurementUnit>('G');
+  const [convResult, setConvResult] = useState<string | null>(null);
+  const [convError, setConvError] = useState('');
 
-  const createMutation = useMutation({
+  const { data: conversions = [], isLoading } = useQuery({ queryKey: ['unit-conversions'], queryFn: () => unitConversionsApi.list().then((r) => r.data) });
+
+  const createMut = useMutation({
     mutationFn: (data: Partial<UnitConversion>) => unitConversionsApi.create(data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['unit-conversions'] });
-      setDialogOpen(false);
-    },
-    onError: (err: unknown) => {
-      const msg =
-        (err as { response?: { data?: { message?: string | string[] } } })?.response
-          ?.data?.message;
-      setFormError(Array.isArray(msg) ? msg.join(', ') : (msg ?? 'Failed to save.'));
-    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['unit-conversions'] }); setDialogOpen(false); },
+    onError: (err) => setFormError(extractError(err)),
+  });
+  const updateMut = useMutation({
+    mutationFn: ({ id, factor }: { id: number; factor: number }) => unitConversionsApi.update(id, factor),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['unit-conversions'] }); setDialogOpen(false); },
+    onError: (err) => setFormError(extractError(err)),
+  });
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => unitConversionsApi.delete(id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['unit-conversions'] }); setDeleteTarget(null); },
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: number) => unitConversionsApi.delete(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['unit-conversions'] }),
-  });
+  const openCreate = () => { setEditTarget(null); setForm(defaultForm); setFormError(''); setDialogOpen(true); };
+  const openEdit = (c: UnitConversion) => {
+    setEditTarget(c);
+    setForm({ fromUnit: c.fromUnit, toUnit: c.toUnit, factor: String(c.factor) });
+    setFormError(''); setDialogOpen(true);
+  };
 
   const handleSave = () => {
     setFormError('');
-    if (form.fromUnit === form.toUnit) {
-      setFormError('From and To units must be different.');
-      return;
+    const factor = parseFloat(form.factor);
+    if (isNaN(factor) || factor <= 0) { setFormError('Factor must be a positive number'); return; }
+    if (editTarget) {
+      updateMut.mutate({ id: editTarget.id, factor });
+    } else {
+      if (form.fromUnit === form.toUnit) { setFormError('Units must be different'); return; }
+      createMut.mutate({ fromUnit: form.fromUnit, toUnit: form.toUnit, factor });
     }
-    createMutation.mutate({
-      fromUnit: form.fromUnit,
-      toUnit: form.toUnit,
-      factor: parseFloat(form.factor),
-    });
   };
 
   const handleConvert = async () => {
-    setConvertError('');
-    setConvertResult(null);
+    setConvError(''); setConvResult(null);
+    const qty = parseFloat(convQty);
+    if (isNaN(qty)) { setConvError('Enter a valid quantity'); return; }
     try {
-      const { data } = await unitConversionsApi.convert(
-        parseFloat(convertForm.quantity),
-        convertForm.fromUnit,
-        convertForm.toUnit
-      );
-      setConvertResult((data as { result: number }).result);
-    } catch (e: unknown) {
-      const msg =
-        (e as { response?: { data?: { message?: string } } })?.response?.data
-          ?.message ?? 'Conversion not available.';
-      setConvertError(msg);
-    }
+      const res = await unitConversionsApi.convert(qty, convFrom, convTo);
+      setConvResult(String(res.data));
+    } catch (err) { setConvError(extractError(err)); }
   };
+
+  const saving = createMut.isPending || updateMut.isPending;
 
   return (
     <AuthGuard>
       <AppLayout title="Unit Conversions">
-        <Box display="flex" gap={3} flexWrap="wrap" mb={4}>
-          {/* Converter tool */}
-          <Paper sx={{ p: 3, flex: '1 1 320px' }}>
-            <Typography variant="h6" fontWeight={700} mb={2}>
-              Convert Units
-            </Typography>
-            <Box display="flex" gap={1} alignItems="center" mb={1}>
-              <TextField
-                label="Quantity"
-                type="number"
-                size="small"
-                value={convertForm.quantity}
-                onChange={(e) =>
-                  setConvertForm((f) => ({ ...f, quantity: e.target.value }))
-                }
-                sx={{ flex: 1 }}
-                inputProps={{ min: 0, step: 0.01 }}
-              />
-              <FormControl size="small" sx={{ flex: 1 }}>
-                <InputLabel>From</InputLabel>
-                <Select
-                  value={convertForm.fromUnit}
-                  label="From"
-                  onChange={(e) =>
-                    setConvertForm((f) => ({
-                      ...f,
-                      fromUnit: e.target.value as MeasurementUnit,
-                    }))
-                  }
-                >
-                  {UNITS.map((u) => (
-                    <MenuItem key={u} value={u}>
-                      {u}
-                    </MenuItem>
-                  ))}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Conversion Tool */}
+          <Card className="lg:col-span-1">
+            <CardHeader><CardTitle className="text-base">Conversion Tool</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <div className="space-y-1"><Label>Quantity</Label><Input type="number" value={convQty} onChange={(e) => setConvQty(e.target.value)} /></div>
+              <div className="space-y-1">
+                <Label>From</Label>
+                <Select value={convFrom} onValueChange={(v) => setConvFrom(v as MeasurementUnit)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{UNITS.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
                 </Select>
-              </FormControl>
-              <SwapHorizIcon color="action" />
-              <FormControl size="small" sx={{ flex: 1 }}>
-                <InputLabel>To</InputLabel>
-                <Select
-                  value={convertForm.toUnit}
-                  label="To"
-                  onChange={(e) =>
-                    setConvertForm((f) => ({
-                      ...f,
-                      toUnit: e.target.value as MeasurementUnit,
-                    }))
-                  }
-                >
-                  {UNITS.map((u) => (
-                    <MenuItem key={u} value={u}>
-                      {u}
-                    </MenuItem>
-                  ))}
+              </div>
+              <div className="space-y-1">
+                <Label>To</Label>
+                <Select value={convTo} onValueChange={(v) => setConvTo(v as MeasurementUnit)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{UNITS.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
                 </Select>
-              </FormControl>
-            </Box>
-            <Button variant="outlined" onClick={handleConvert} sx={{ mb: 1 }}>
-              Convert
-            </Button>
-            {convertError && (
-              <Alert severity="warning" sx={{ mt: 1 }}>
-                {convertError}
-              </Alert>
-            )}
-            {convertResult !== null && !convertError && (
-              <Typography variant="h6" mt={1} color="primary.main" fontWeight={700}>
-                {convertForm.quantity} {convertForm.fromUnit} ={' '}
-                <strong>{convertResult}</strong> {convertForm.toUnit}
-              </Typography>
-            )}
-          </Paper>
-        </Box>
+              </div>
+              <Button onClick={handleConvert} className="w-full"><ArrowRightLeft className="mr-2 h-4 w-4" />Convert</Button>
+              {convResult && <p className="text-center font-semibold text-lg">{convQty} {convFrom} = {convResult} {convTo}</p>}
+              {convError && <Alert variant="destructive"><AlertDescription>{convError}</AlertDescription></Alert>}
+            </CardContent>
+          </Card>
 
-        <Box display="flex" justifyContent="flex-end" mb={2}>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => {
-              setForm({ fromUnit: 'KG', toUnit: 'G', factor: '1000' });
-              setFormError('');
-              setDialogOpen(true);
-            }}
-          >
-            Add Conversion
-          </Button>
-        </Box>
-
-        <Paper>
-          <TableContainer>
-            <Table size="medium">
-              <TableHead>
+          {/* Table */}
+          <Card className="lg:col-span-2">
+            <div className="flex justify-between items-center p-4 pb-0">
+              <h3 className="font-semibold">Defined Conversions</h3>
+              <Button size="sm" onClick={openCreate}><Plus className="mr-2 h-4 w-4" />Add</Button>
+            </div>
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell>From</TableCell>
-                  <TableCell>To</TableCell>
-                  <TableCell align="right">Factor</TableCell>
-                  <TableCell align="right">Actions</TableCell>
+                  <TableHead>From</TableHead>
+                  <TableHead>To</TableHead>
+                  <TableHead className="text-right">Factor</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
-              </TableHead>
+              </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={4} align="center" sx={{ py: 6 }}>
-                      <CircularProgress />
-                    </TableCell>
-                  </TableRow>
+                  <TableRow><TableCell colSpan={4} className="text-center py-8"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></TableCell></TableRow>
                 ) : conversions.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={4} align="center" sx={{ py: 6 }}>
-                      <Typography color="text.secondary">
-                        No unit conversions defined.
-                      </Typography>
+                  <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No conversions defined.</TableCell></TableRow>
+                ) : conversions.map((c: UnitConversion) => (
+                  <TableRow key={c.id}>
+                    <TableCell><Badge variant="outline">{c.fromUnit}</Badge></TableCell>
+                    <TableCell><Badge variant="outline">{c.toUnit}</Badge></TableCell>
+                    <TableCell className="text-right font-mono">{c.factor}</TableCell>
+                    <TableCell className="text-right">
+                      <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(c)}><Pencil className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>Edit</TooltipContent></Tooltip>
+                      <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setDeleteTarget(c)}><Trash2 className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>Delete</TooltipContent></Tooltip>
                     </TableCell>
                   </TableRow>
-                ) : (
-                  conversions.map((conv) => (
-                    <TableRow key={conv.id} hover>
-                      <TableCell>
-                        <Typography fontWeight={600}>{conv.fromUnit}</Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography fontWeight={600}>{conv.toUnit}</Typography>
-                      </TableCell>
-                      <TableCell align="right">× {conv.factor}</TableCell>
-                      <TableCell align="right">
-                        <Tooltip title="Delete">
-                          <IconButton
-                            size="small"
-                            color="error"
-                            onClick={() => setDeleteTarget(conv)}
-                          >
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
+                ))}
               </TableBody>
             </Table>
-          </TableContainer>
-        </Paper>
+          </Card>
+        </div>
 
-        {/* Create Dialog */}
-        <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="xs" fullWidth>
-          <DialogTitle>Add Unit Conversion</DialogTitle>
-          <DialogContent sx={{ pt: 2 }}>
-            {formError && (
-              <Alert severity="error" sx={{ mb: 2 }}>
-                {formError}
-              </Alert>
-            )}
-            <FormControl fullWidth sx={{ mb: 2 }}>
-              <InputLabel>From Unit</InputLabel>
-              <Select
-                value={form.fromUnit}
-                label="From Unit"
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    fromUnit: e.target.value as MeasurementUnit,
-                  }))
-                }
-              >
-                {UNITS.map((u) => (
-                  <MenuItem key={u} value={u}>
-                    {u}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <FormControl fullWidth sx={{ mb: 2 }}>
-              <InputLabel>To Unit</InputLabel>
-              <Select
-                value={form.toUnit}
-                label="To Unit"
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    toUnit: e.target.value as MeasurementUnit,
-                  }))
-                }
-              >
-                {UNITS.map((u) => (
-                  <MenuItem key={u} value={u}>
-                    {u}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <TextField
-              label="Factor (multiply From to get To)"
-              type="number"
-              fullWidth
-              value={form.factor}
-              onChange={(e) => setForm((f) => ({ ...f, factor: e.target.value }))}
-              inputProps={{ min: 0.000001, step: 'any' }}
-              helperText="e.g. KG→G = 1000, G→KG = 0.001"
-            />
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogContent className="sm:max-w-sm">
+            <DialogHeader><DialogTitle>{editTarget ? 'Edit Conversion' : 'New Conversion'}</DialogTitle></DialogHeader>
+            <div className="space-y-4 py-2">
+              {formError && <Alert variant="destructive"><AlertDescription>{formError}</AlertDescription></Alert>}
+              {!editTarget && (
+                <>
+                  <div className="space-y-2">
+                    <Label>From Unit</Label>
+                    <Select value={form.fromUnit} onValueChange={(v) => setForm((f) => ({ ...f, fromUnit: v as MeasurementUnit }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>{UNITS.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>To Unit</Label>
+                    <Select value={form.toUnit} onValueChange={(v) => setForm((f) => ({ ...f, toUnit: v as MeasurementUnit }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>{UNITS.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                </>
+              )}
+              <div className="space-y-2"><Label>Factor</Label><Input type="number" step="any" value={form.factor} onChange={(e) => setForm((f) => ({ ...f, factor: e.target.value }))} autoFocus /></div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+              <Button onClick={handleSave} disabled={saving}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}</Button>
+            </DialogFooter>
           </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 2 }}>
-            <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button
-              variant="contained"
-              onClick={handleSave}
-              disabled={createMutation.isPending}
-            >
-              {createMutation.isPending ? <CircularProgress size={18} /> : 'Add'}
-            </Button>
-          </DialogActions>
         </Dialog>
 
-        {/* Delete Confirm */}
-        <Dialog
-          open={!!deleteTarget}
-          onClose={() => setDeleteTarget(null)}
-          maxWidth="xs"
-          fullWidth
-        >
-          <DialogTitle>Delete Conversion</DialogTitle>
-          <DialogContent>
-            <Typography>
-              Delete conversion{' '}
-              <strong>
-                {deleteTarget?.fromUnit} → {deleteTarget?.toUnit}
-              </strong>
-              ? (Inverse pair will also be deleted.)
-            </Typography>
-          </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 2 }}>
-            <Button onClick={() => setDeleteTarget(null)}>Cancel</Button>
-            <Button
-              variant="contained"
-              color="error"
-              disabled={deleteMutation.isPending}
-              onClick={() => {
-                if (deleteTarget) {
-                  deleteMutation.mutate(deleteTarget.id, {
-                    onSuccess: () => setDeleteTarget(null),
-                  });
-                }
-              }}
-            >
-              {deleteMutation.isPending ? <CircularProgress size={18} /> : 'Delete'}
-            </Button>
-          </DialogActions>
-        </Dialog>
+        <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader><AlertDialogTitle>Delete Conversion</AlertDialogTitle><AlertDialogDescription>Delete <strong>{deleteTarget?.fromUnit} → {deleteTarget?.toUnit}</strong>?</AlertDialogDescription></AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" disabled={deleteMut.isPending} onClick={() => { if (deleteTarget) deleteMut.mutate(deleteTarget.id); }}>
+                {deleteMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Delete'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </AppLayout>
     </AuthGuard>
   );

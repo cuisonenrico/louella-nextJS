@@ -1,57 +1,27 @@
 'use client';
 
-import {
-  Alert,
-  Box,
-  Button,
-  Chip,
-  CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  FormControl,
-  IconButton,
-  InputLabel,
-  MenuItem,
-  Select,
-  Tab,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Tabs,
-  TextField,
-  Tooltip,
-  Typography,
-  Paper,
-  InputAdornment,
-} from '@mui/material';
-import AddIcon from '@mui/icons-material/Add';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
-import SearchIcon from '@mui/icons-material/Search';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import dayjs from 'dayjs';
+import { Plus, Pencil, Trash2, Search, Loader2 } from 'lucide-react';
 import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
 import { productsApi } from '@/lib/apiServices';
 import type { Product, ProductPriceHistory, ProductType } from '@/types';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Label } from '@/components/ui/label';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 const PRODUCT_TYPES: ProductType[] = ['BREAD', 'CAKE', 'SPECIAL', 'MISCELLANEOUS'];
-
-function typeColor(type: ProductType) {
-  const map: Record<ProductType, 'warning' | 'secondary' | 'info' | 'default'> = {
-    BREAD: 'warning',
-    CAKE: 'secondary',
-    SPECIAL: 'info',
-    MISCELLANEOUS: 'default',
-  };
-  return map[type] ?? 'default';
-}
 
 interface ProductFormData {
   name: string;
@@ -75,22 +45,22 @@ function ProductPriceHistoryTab({ productId }: { productId: number }) {
     queryFn: () => productsApi.priceHistory(productId).then((r) => r.data),
   });
 
-  if (isLoading) return <Box display="flex" justifyContent="center" py={4}><CircularProgress size={24} /></Box>;
-  if (history.length === 0) return <Typography color="text.secondary" py={2}>No price changes recorded yet.</Typography>;
+  if (isLoading) return <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin" /></div>;
+  if (history.length === 0) return <p className="text-muted-foreground py-2">No price changes recorded yet.</p>;
 
   return (
-    <Table size="small">
-      <TableHead>
+    <Table>
+      <TableHeader>
         <TableRow>
-          <TableCell>Effective Date</TableCell>
-          <TableCell align="right">Price</TableCell>
+          <TableHead>Effective Date</TableHead>
+          <TableHead className="text-right">Price</TableHead>
         </TableRow>
-      </TableHead>
+      </TableHeader>
       <TableBody>
         {history.map((h) => (
-          <TableRow key={h.id} hover>
+          <TableRow key={h.id}>
             <TableCell>{dayjs(h.effectiveAt).format('MMM D, YYYY')}</TableCell>
-            <TableCell align="right">₱{h.price.toFixed(2)}</TableCell>
+            <TableCell className="text-right">₱{h.price.toFixed(2)}</TableCell>
           </TableRow>
         ))}
       </TableBody>
@@ -106,7 +76,7 @@ export default function ProductsPage() {
   const [form, setForm] = useState<ProductFormData>(defaultForm);
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
   const [formError, setFormError] = useState('');
-  const [activeTab, setActiveTab] = useState(0);
+  const [activeTab, setActiveTab] = useState('details');
 
   const { data: products = [], isLoading } = useQuery<Product[]>({
     queryKey: ['products'],
@@ -115,29 +85,18 @@ export default function ProductsPage() {
 
   const createMutation = useMutation({
     mutationFn: (data: Partial<Product>) => productsApi.create(data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['products'] });
-      setDialogOpen(false);
-    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['products'] }); setDialogOpen(false); },
     onError: (err: unknown) => {
-      const msg =
-        (err as { response?: { data?: { message?: string | string[] } } })?.response
-          ?.data?.message;
+      const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
       setFormError(Array.isArray(msg) ? msg.join(', ') : (msg ?? 'Failed to save.'));
     },
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Partial<Product> }) =>
-      productsApi.update(id, data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['products'] });
-      setDialogOpen(false);
-    },
+    mutationFn: ({ id, data }: { id: number; data: Partial<Product> }) => productsApi.update(id, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['products'] }); setDialogOpen(false); },
     onError: (err: unknown) => {
-      const msg =
-        (err as { response?: { data?: { message?: string | string[] } } })?.response
-          ?.data?.message;
+      const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
       setFormError(Array.isArray(msg) ? msg.join(', ') : (msg ?? 'Failed to save.'));
     },
   });
@@ -151,7 +110,7 @@ export default function ProductsPage() {
     setEditTarget(null);
     setForm(defaultForm);
     setFormError('');
-    setActiveTab(0);
+    setActiveTab('details');
     setDialogOpen(true);
   };
 
@@ -165,16 +124,13 @@ export default function ProductsPage() {
       date: p.date ? dayjs(p.date).format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'),
     });
     setFormError('');
-    setActiveTab(0);
+    setActiveTab('details');
     setDialogOpen(true);
   };
 
   const handleSave = () => {
     setFormError('');
-    if (!form.name.trim()) {
-      setFormError('Product name is required.');
-      return;
-    }
+    if (!form.name.trim()) { setFormError('Product name is required.'); return; }
     const payload: Partial<Product> = {
       name: form.name.trim(),
       type: form.type,
@@ -189,235 +145,150 @@ export default function ProductsPage() {
     }
   };
 
-  const filtered = products.filter((p) =>
-    p.name.toLowerCase().includes(search.toLowerCase())
-  );
-
+  const filtered = products.filter((p) => p.name.toLowerCase().includes(search.toLowerCase()));
   const saving = createMutation.isPending || updateMutation.isPending;
 
   return (
     <AuthGuard>
       <AppLayout title="Products">
-        <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-          <TextField
-            size="small"
-            placeholder="Search products…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon fontSize="small" />
-                </InputAdornment>
-              ),
-            }}
-            sx={{ width: 260 }}
-          />
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={openCreate}
-          >
-            Add Product
-          </Button>
-        </Box>
+        <div className="flex justify-between items-center mb-4">
+          <div className="relative w-64">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input placeholder="Search products…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+          </div>
+          <Button onClick={openCreate}><Plus className="mr-2 h-4 w-4" />Add Product</Button>
+        </div>
 
-        <Paper>
-          <TableContainer>
-            <Table size="medium">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Name</TableCell>
-                  <TableCell>Type</TableCell>
-                  <TableCell align="right">Price</TableCell>
-                  <TableCell>Launch Date</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell align="right">Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {isLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
-                      <CircularProgress />
+        <Card>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead className="text-right">Price</TableHead>
+                <TableHead>Launch Date</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                <TableRow><TableCell colSpan={6} className="text-center py-8"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></TableCell></TableRow>
+              ) : filtered.length === 0 ? (
+                <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No products found.</TableCell></TableRow>
+              ) : (
+                filtered.map((p) => (
+                  <TableRow key={p.id}>
+                    <TableCell className="font-semibold">{p.name}</TableCell>
+                    <TableCell><Badge variant="outline">{p.type}</Badge></TableCell>
+                    <TableCell className="text-right">₱{p.price.toFixed(2)}</TableCell>
+                    <TableCell>{p.date ? dayjs(p.date).format('MMM D, YYYY') : '—'}</TableCell>
+                    <TableCell><Badge variant={p.isActive ? 'default' : 'secondary'}>{p.isActive ? 'Active' : 'Inactive'}</Badge></TableCell>
+                    <TableCell className="text-right">
+                      <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(p)}><Pencil className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>Edit</TooltipContent></Tooltip>
+                      <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setDeleteTarget(p)}><Trash2 className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>Delete</TooltipContent></Tooltip>
                     </TableCell>
                   </TableRow>
-                ) : filtered.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
-                      <Typography color="text.secondary">No products found.</Typography>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filtered.map((p) => (
-                    <TableRow key={p.id} hover>
-                      <TableCell>
-                        <Typography fontWeight={600}>{p.name}</Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={p.type}
-                          color={typeColor(p.type)}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell align="right">₱{p.price.toFixed(2)}</TableCell>
-                      <TableCell>
-                        {p.date ? dayjs(p.date).format('MMM D, YYYY') : '—'}
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={p.isActive ? 'Active' : 'Inactive'}
-                          color={p.isActive ? 'success' : 'default'}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell align="right">
-                        <Tooltip title="Edit">
-                          <IconButton size="small" onClick={() => openEdit(p)}>
-                            <EditIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Delete">
-                          <IconButton
-                            size="small"
-                            color="error"
-                            onClick={() => setDeleteTarget(p)}
-                          >
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Paper>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </Card>
 
         {/* Create / Edit Dialog */}
-        <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
-          <DialogTitle>{editTarget ? 'Edit Product' : 'New Product'}</DialogTitle>
-          {editTarget && (
-            <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ px: 3, borderBottom: 1, borderColor: 'divider' }}>
-              <Tab label="Details" />
-              <Tab label="Price History" />
-            </Tabs>
-          )}
-          <DialogContent sx={{ pt: 2 }}>
-            {activeTab === 0 && (
-              <>
-                {formError && (
-                  <Alert severity="error" sx={{ mb: 2 }}>
-                    {formError}
-                  </Alert>
-                )}
-                <TextField
-                  label="Name"
-                  fullWidth
-                  required
-                  value={form.name}
-                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                  sx={{ mb: 2 }}
-                  autoFocus
-                />
-                <FormControl fullWidth sx={{ mb: 2 }}>
-                  <InputLabel>Type</InputLabel>
-                  <Select
-                    value={form.type}
-                    label="Type"
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, type: e.target.value as ProductType }))
-                    }
-                  >
-                    {PRODUCT_TYPES.map((t) => (
-                      <MenuItem key={t} value={t}>
-                        {t}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                <TextField
-                  label="Price (₱)"
-                  type="number"
-                  fullWidth
-                  value={form.price}
-                  onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
-                  sx={{ mb: 2 }}
-                  inputProps={{ min: 0, step: 0.01 }}
-                />
-                <TextField
-                  label="Launch Date"
-                  type="date"
-                  fullWidth
-                  value={form.date}
-                  onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
-                  InputLabelProps={{ shrink: true }}
-                  sx={{ mb: 2 }}
-                />
-                <FormControl fullWidth>
-                  <InputLabel>Status</InputLabel>
-                  <Select
-                    value={form.isActive ? 'active' : 'inactive'}
-                    label="Status"
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, isActive: e.target.value === 'active' }))
-                    }
-                  >
-                    <MenuItem value="active">Active</MenuItem>
-                    <MenuItem value="inactive">Inactive</MenuItem>
-                  </Select>
-                </FormControl>
-              </>
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>{editTarget ? 'Edit Product' : 'New Product'}</DialogTitle>
+            </DialogHeader>
+            {editTarget ? (
+              <Tabs value={activeTab} onValueChange={setActiveTab}>
+                <TabsList className="w-full">
+                  <TabsTrigger value="details" className="flex-1">Details</TabsTrigger>
+                  <TabsTrigger value="history" className="flex-1">Price History</TabsTrigger>
+                </TabsList>
+                <TabsContent value="details">
+                  <ProductForm form={form} setForm={setForm} formError={formError} />
+                </TabsContent>
+                <TabsContent value="history">
+                  <ProductPriceHistoryTab productId={editTarget.id} />
+                </TabsContent>
+              </Tabs>
+            ) : (
+              <ProductForm form={form} setForm={setForm} formError={formError} />
             )}
-            {activeTab === 1 && editTarget && (
-              <ProductPriceHistoryTab productId={editTarget.id} />
-            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+              {activeTab === 'details' && (
+                <Button onClick={handleSave} disabled={saving}>
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
+                </Button>
+              )}
+            </DialogFooter>
           </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 2 }}>
-            <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
-            {activeTab === 0 && (
-              <Button variant="contained" onClick={handleSave} disabled={saving}>
-                {saving ? <CircularProgress size={18} /> : 'Save'}
-              </Button>
-            )}
-          </DialogActions>
         </Dialog>
 
-        {/* Delete Confirm Dialog */}
-        <Dialog
-          open={!!deleteTarget}
-          onClose={() => setDeleteTarget(null)}
-          maxWidth="xs"
-          fullWidth
-        >
-          <DialogTitle>Delete Product</DialogTitle>
-          <DialogContent>
-            <Typography>
-              Are you sure you want to delete{' '}
-              <strong>{deleteTarget?.name}</strong>?
-            </Typography>
-          </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 2 }}>
-            <Button onClick={() => setDeleteTarget(null)}>Cancel</Button>
-            <Button
-              variant="contained"
-              color="error"
-              disabled={deleteMutation.isPending}
-              onClick={() => {
-                if (deleteTarget) {
-                  deleteMutation.mutate(deleteTarget.id, {
-                    onSuccess: () => setDeleteTarget(null),
-                  });
-                }
-              }}
-            >
-              {deleteMutation.isPending ? <CircularProgress size={18} /> : 'Delete'}
-            </Button>
-          </DialogActions>
-        </Dialog>
+        {/* Delete Confirm */}
+        <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Product</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete <strong>{deleteTarget?.name}</strong>?
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={deleteMutation.isPending}
+                onClick={() => {
+                  if (deleteTarget) deleteMutation.mutate(deleteTarget.id, { onSuccess: () => setDeleteTarget(null) });
+                }}
+              >
+                {deleteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Delete'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </AppLayout>
     </AuthGuard>
+  );
+}
+
+function ProductForm({ form, setForm, formError }: { form: ProductFormData; setForm: React.Dispatch<React.SetStateAction<ProductFormData>>; formError: string }) {
+  return (
+    <div className="space-y-4 py-2">
+      {formError && <Alert variant="destructive"><AlertDescription>{formError}</AlertDescription></Alert>}
+      <div className="space-y-2">
+        <Label>Name</Label>
+        <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} autoFocus />
+      </div>
+      <div className="space-y-2">
+        <Label>Type</Label>
+        <Select value={form.type} onValueChange={(v) => setForm((f) => ({ ...f, type: v as ProductType }))}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>{PRODUCT_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-2">
+        <Label>Price (₱)</Label>
+        <Input type="number" min={0} step={0.01} value={form.price} onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))} />
+      </div>
+      <div className="space-y-2">
+        <Label>Launch Date</Label>
+        <Input type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} />
+      </div>
+      <div className="space-y-2">
+        <Label>Status</Label>
+        <Select value={form.isActive ? 'active' : 'inactive'} onValueChange={(v) => setForm((f) => ({ ...f, isActive: v === 'active' }))}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="active">Active</SelectItem>
+            <SelectItem value="inactive">Inactive</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
   );
 }

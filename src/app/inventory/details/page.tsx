@@ -1,218 +1,135 @@
-﻿'use client';
+'use client';
 
-import {
-  Alert,
-  Box,
-  Button,
-  CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Snackbar,
-  Typography,
-} from '@mui/material';
-import RestartAltIcon from '@mui/icons-material/RestartAlt';
-import { DataGrid, useGridApiRef } from '@mui/x-data-grid';
-import CloseIcon from '@mui/icons-material/Close';
-import SaveIcon from '@mui/icons-material/Save';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Loader2, Save, X, AlertTriangle, Settings2 } from 'lucide-react';
 import dayjs from 'dayjs';
 import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
 import { branchesApi, inventoryApi, productsApi } from '@/lib/apiServices';
-import type { Branch, Inventory, InventoryUpdateResult, InventorySummaryData, Product, ProductType } from '@/types';
-import InventoryImportDialog from '../components/InventoryImportDialog';
-import InventoryAdjustmentsDialog from '../components/InventoryAdjustmentsDialog';
+import type { Branch, Inventory, InventorySummaryData, Product, ProductType } from '@/types';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import InventoryFilterBar from '../components/InventoryFilterBar';
 import InventorySummaryPanel from '../components/InventorySummaryPanel';
-import { useInventoryColumns } from '../hooks/useInventoryColumns';
+import InventoryAdjustmentsDialog from '../components/InventoryAdjustmentsDialog';
 import { useInventoryDisplayRows } from '../hooks/useInventoryDisplayRows';
-import { makeTabNavHandler } from '@/lib/makeTabNavHandler';
+import { getAdjSum, getRevenue, getSold, getTotalStock } from '../hooks/useInventoryColumns';
 
 const PRODUCT_TYPE_ORDER: ProductType[] = ['BREAD', 'CAKE', 'SPECIAL', 'MISCELLANEOUS'];
-const TYPE_LABELS: Record<ProductType, string> = {
-  BREAD: 'Bread',
-  CAKE: 'Cake',
-  SPECIAL: 'Special',
-  MISCELLANEOUS: 'Miscellaneous',
-};
+const TYPE_LABELS: Record<ProductType, string> = { BREAD: 'Bread', CAKE: 'Cake', SPECIAL: 'Special', MISCELLANEOUS: 'Miscellaneous' };
 
-const GRID_SX = {
-  border: 1,
-  borderColor: 'divider',
-  borderRadius: 1,
-  '& .MuiDataGrid-columnHeader': { bgcolor: 'grey.100', fontWeight: 700 },
-  '& .MuiDataGrid-cell--editable': {
-    cursor: 'cell',
-    '&:hover': { bgcolor: 'action.hover' },
-  },
-  '& .MuiDataGrid-cell--editing': {
-    bgcolor: 'primary.50 !important',
-    outline: '2px solid',
-    outlineColor: 'primary.main',
-    outlineOffset: '-2px',
-  },
-  '& .row--dirty': {
-    bgcolor: 'rgba(255, 167, 38, 0.10)',
-    '&:hover': { bgcolor: 'rgba(255, 167, 38, 0.18) !important' },
-  },
-  '& .row--autogen': {
-    bgcolor: '#fff8e1',
-    '&:hover': { bgcolor: '#fff3e0 !important' },
-  },
-} as const;
+function extractError(err: unknown): string {
+  const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
+  return Array.isArray(msg) ? msg.join(', ') : (msg ?? 'An error occurred');
+}
 
-const EDITABLE_FIELDS = ['delivery', 'leftover', 'reject'];
-
-export default function InventoryPage() {
+export default function InventoryDetailsPage() {
   const qc = useQueryClient();
-  const [filterBranch, setFilterBranch] = useState('');
-
-  // Draft state drives the date inputs; committed state drives the query.
-  // This prevents firing a (potentially large) range query on every keystroke
-  // while the user is mid-edit on the From field.
   const today = dayjs().format('YYYY-MM-DD');
+
+  // Filter state
+  const [dateMode, setDateMode] = useState<'date' | 'range'>('date');
   const [draftFrom, setDraftFrom] = useState(today);
   const [draftTo, setDraftTo] = useState(today);
   const [filterDateFrom, setFilterDateFrom] = useState(today);
   const [filterDateTo, setFilterDateTo] = useState(today);
+  const [filterBranch, setFilterBranch] = useState('');
 
-  // Commit both draft dates to query state at once.
+  const isRange = filterDateFrom !== filterDateTo;
+
+  // Pending edits
+  const [pendingUpdates, setPendingUpdates] = useState<Map<number, Partial<Inventory>>>(new Map());
+  const [cascadeWarning, setCascadeWarning] = useState<{ branchId: number; productId: number; fromDate: string } | null>(null);
+  const [adjRow, setAdjRow] = useState<Inventory | null>(null);
+  const [snackError, setSnackError] = useState('');
+
+  // Queries
+  const { data: branches = [] } = useQuery<Branch[]>({ queryKey: ['branches'], queryFn: () => branchesApi.list().then((r) => r.data) });
+  const { data: products = [] } = useQuery<Product[]>({ queryKey: ['products'], queryFn: () => productsApi.list().then((r) => r.data) });
+  const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
+
+  const invQuery = useQuery<Inventory[]>({
+    queryKey: ['inventory', filterDateFrom, filterDateTo, filterBranch],
+    queryFn: () => {
+      if (filterBranch) {
+        return filterDateFrom === filterDateTo
+          ? inventoryApi.byBranchDate(parseInt(filterBranch), filterDateFrom).then((r) => r.data)
+          : inventoryApi.byBranchDateRange(parseInt(filterBranch), filterDateFrom, filterDateTo).then((r) => r.data);
+      }
+      return inventoryApi.byDateRange(filterDateFrom, filterDateTo).then((r) => r.data);
+    },
+  });
+
+  const summaryQuery = useQuery<InventorySummaryData>({
+    queryKey: ['inventory-summary', filterDateFrom, filterDateTo, filterBranch],
+    queryFn: () => inventoryApi.summary(filterDateFrom, filterDateTo, filterBranch || undefined).then((r) => r.data),
+  });
+
+  const rows = invQuery.data ?? [];
+  const displayRows = useInventoryDisplayRows(rows, filterBranch, isRange);
+
+  // Group by product type
+  const rowsByType = useMemo(() => {
+    const map = new Map<ProductType, Inventory[]>(PRODUCT_TYPE_ORDER.map((t) => [t, []]));
+    for (const row of displayRows) {
+      const product = productById.get(row.productId);
+      if (product) map.get(product.type)?.push(row);
+    }
+    return map;
+  }, [displayRows, productById]);
+
+  // Uninitialized products count
+  const uninitializedCount = useMemo(() => {
+    if (isRange || filterBranch === '') return 0;
+    const existingProductIds = new Set(rows.map((r) => r.productId));
+    return products.filter((p) => p.isActive && !existingProductIds.has(p.id)).length;
+  }, [isRange, filterBranch, rows, products]);
+
+  // Reset pending on filter change
+  useEffect(() => { setPendingUpdates(new Map()); }, [filterDateFrom, filterDateTo, filterBranch]);
+
+  // Date helpers
   const commitDates = useCallback((from: string, to: string) => {
     setFilterDateFrom(from);
     setFilterDateTo(to);
   }, []);
 
-  const [rowError, setRowError] = useState('');
-  const [cascadeWarning, setCascadeWarning] = useState<{
-    count: number;
-    branchId: number;
-    productId: number;
-    fromDate: string;
-  } | null>(null);
-  const [pendingUpdates, setPendingUpdates] = useState<Map<number, Partial<Inventory>>>(
-    new Map(),
-  );
-  const [importOpen, setImportOpen] = useState(false);
-  const [reinitConfirmOpen, setReinitConfirmOpen] = useState(false);
-  const [dateMode, setDateMode] = useState<'date' | 'range'>('date');
-
-  // When switching modes, normalise the dates
-  const switchDateMode = useCallback((mode: 'date' | 'range') => {
-    setDateMode(mode);
-    if (mode === 'date') {
-      // Collapse range to the From date
-      setDraftTo(draftFrom);
-      commitDates(draftFrom, draftFrom);
+  const stepDate = useCallback((delta: number) => {
+    if (dateMode === 'date') {
+      const next = dayjs(draftFrom).add(delta, 'day').format('YYYY-MM-DD');
+      setDraftFrom(next); setDraftTo(next); commitDates(next, next);
+    } else {
+      const span = dayjs(draftTo).diff(dayjs(draftFrom), 'day') + 1;
+      const from = dayjs(draftFrom).add(delta * span, 'day').format('YYYY-MM-DD');
+      const to = dayjs(draftTo).add(delta * span, 'day').format('YYYY-MM-DD');
+      setDraftFrom(from); setDraftTo(to); commitDates(from, to);
     }
+  }, [dateMode, draftFrom, draftTo, commitDates]);
+
+  const handleDateModeChange = useCallback((mode: 'date' | 'range') => {
+    setDateMode(mode);
+    if (mode === 'date') { setDraftTo(draftFrom); commitDates(draftFrom, draftFrom); }
   }, [draftFrom, commitDates]);
 
-  useEffect(() => {
-    setPendingUpdates(new Map());
-  }, [filterBranch, filterDateFrom, filterDateTo]);
-
-  const { data: branches = [] } = useQuery<Branch[]>({
-    queryKey: ['branches'],
-    queryFn: () => branchesApi.list().then((r) => r.data),
-  });
-
-  const { data: products = [] } = useQuery<Product[]>({
-    queryKey: ['products'],
-    queryFn: () => productsApi.list().then((r) => r.data),
-  });
-
-  const branchById = useMemo(() => new Map(branches.map((b) => [b.id, b])), [branches]);
-  const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
-
-  const MAX_RANGE_DAYS = 31;
-  const isRange = filterDateFrom !== filterDateTo;
-
-  const invQuery = useQuery({
-    queryKey: ['inventory', filterBranch, filterDateFrom, filterDateTo],
-    queryFn: async () => {
-      const clampedEnd = dayjs(filterDateTo).isAfter(
-        dayjs(filterDateFrom).add(MAX_RANGE_DAYS - 1, 'day'),
-      )
-        ? dayjs(filterDateFrom).add(MAX_RANGE_DAYS - 1, 'day').format('YYYY-MM-DD')
-        : filterDateTo;
-      if (!filterBranch) {
-        // All branches: single range call to new endpoint
-        return inventoryApi
-          .byDateRange(filterDateFrom, isRange ? clampedEnd : undefined)
-          .then((r) => r.data as Inventory[]);
-      }
-
-      // Specific branch: use dedicated branch range endpoint.
-      return inventoryApi
-        .byBranchDateRange(parseInt(filterBranch, 10), filterDateFrom, isRange ? clampedEnd : undefined)
-        .then((r) => r.data as Inventory[]);
-    },
-  });
-
-  const savePendingMutation = useMutation({
-    mutationFn: async (updates: Map<number, Partial<Inventory>>) => {
-      const results = await Promise.all(
-        Array.from(updates.entries()).map(([id, data]) =>
-          inventoryApi.update(id, data).then((r) => r.data as InventoryUpdateResult),
-        ),
-      );
-      return results;
-    },
-    onSuccess: (results) => {
-      setPendingUpdates(new Map());
-      qc.invalidateQueries({ queryKey: ['inventory'] });
-      const worst = results.reduce((m, r) => Math.max(m, r.cascadeWarning ?? 0), 0);
-      if (worst > 0) {
-        const r = results.find((r) => (r.cascadeWarning ?? 0) > 0)!;
-        setCascadeWarning({
-          count: worst,
-          branchId: r.branchId,
-          productId: r.productId,
-          fromDate: typeof r.date === 'string' ? r.date.slice(0, 10) : '',
-        });
-      }
-    },
-    onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { message?: string | string[] } } })
-        ?.response?.data?.message;
-      setRowError(Array.isArray(msg) ? msg.join(', ') : (msg ?? 'Failed to save changes.'));
-    },
-  });
-
+  // Mutations
   const bulkCreateMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: () => {
       const branchId = parseInt(filterBranch);
-      const yesterday = dayjs(filterDateFrom).subtract(1, 'day').format('YYYY-MM-DD');
-      const prevRes = await inventoryApi.byBranchDate(branchId, yesterday);
-      const prevData = (prevRes.data ?? []) as Inventory[];
-      const prevMap = new Map(prevData.map((i) => [i.productId, Math.max(0, i.leftover - i.reject)]));
-      const existingProductIds = new Set((invQuery.data ?? []).map((r) => r.productId));
+      const existingProductIds = new Set(rows.map((r) => r.productId));
       const payload = products
         .filter((p) => p.isActive && !existingProductIds.has(p.id))
-        .map((p) => ({
-          branchId,
-          productId: p.id,
-          date: filterDateFrom,
-          quantity: prevMap.get(p.id) ?? 0,
-          delivery: 0,
-          leftover: 0,
-          reject: 0,
-        }));
-      if (payload.length === 0) throw new Error('All products already have entries for this day.');
+        .map((p) => ({ branchId, productId: p.id, date: filterDateFrom, quantity: 0, delivery: 0, leftover: 0, reject: 0 }));
       return inventoryApi.createBulk(payload);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory'] }),
-    onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { message?: string | string[] } } })
-        ?.response?.data?.message;
-      setRowError(
-        Array.isArray(msg)
-          ? msg.join(', ')
-          : ((err as Error)?.message ?? 'Failed to initialize day.'),
-      );
-    },
+    onError: (err) => setSnackError(extractError(err)),
   });
 
   const reinitializeMutation = useMutation({
@@ -221,384 +138,288 @@ export default function InventoryPage() {
       const yesterday = dayjs(filterDateFrom).subtract(1, 'day').format('YYYY-MM-DD');
       const prevRes = await inventoryApi.byBranchDate(branchId, yesterday);
       const prevData = (prevRes.data ?? []) as Inventory[];
-      const prevMap = new Map(
-        prevData.map((i) => [i.productId, Math.max(0, (i.leftover ?? 0) - (i.reject ?? 0))]),
+      const prevMap = new Map(prevData.map((i) => [i.productId, Math.max(0, i.leftover - i.reject)]));
+      const existingProductIds = new Set(rows.map((r) => r.productId));
+      const payload = products
+        .filter((p) => p.isActive && !existingProductIds.has(p.id))
+        .map((p) => ({ branchId, productId: p.id, date: filterDateFrom, quantity: prevMap.get(p.id) ?? 0, delivery: 0, leftover: 0, reject: 0 }));
+      if (payload.length > 0) await inventoryApi.createBulk(payload);
+      // Update existing rows
+      for (const r of rows) {
+        const qty = prevMap.get(r.productId) ?? 0;
+        await inventoryApi.update(r.id, { quantity: qty, delivery: 0, leftover: 0, reject: 0 });
+      }
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['inventory'] }); qc.invalidateQueries({ queryKey: ['inventory-summary'] }); },
+    onError: (err) => setSnackError(extractError(err)),
+  });
+
+  const savePendingMutation = useMutation({
+    mutationFn: async () => {
+      const ops = Array.from(pendingUpdates.entries()).map(([id, data]) =>
+        inventoryApi.update(id, data)
       );
-
-      const existingRows = (invQuery.data ?? []) as Inventory[];
-      const existingByProduct = new Map(existingRows.map((r) => [r.productId, r]));
-
-      const updateOps = existingRows.map((row) =>
-        inventoryApi.update(row.id, {
-          quantity: prevMap.get(row.productId) ?? 0,
-          delivery: 0,
-          leftover: 0,
-          reject: 0,
-        }),
-      );
-
-      const missingProducts = products.filter(
-        (p) => p.isActive && !existingByProduct.has(p.id),
-      );
-      const createPayload = missingProducts.map((p) => ({
-        branchId,
-        productId: p.id,
-        date: filterDateFrom,
-        quantity: prevMap.get(p.id) ?? 0,
-        delivery: 0,
-        leftover: 0,
-        reject: 0,
-      }));
-
-      await Promise.all(updateOps);
-      if (createPayload.length > 0) await inventoryApi.createBulk(createPayload);
+      const results = await Promise.all(ops);
+      // Check for cascade warnings
+      for (const res of results) {
+        const result = res.data;
+        if (result && typeof result === 'object' && 'cascadeNeeded' in result && result.cascadeNeeded) {
+          setCascadeWarning({ branchId: result.branchId, productId: result.productId, fromDate: result.date });
+        }
+      }
     },
     onSuccess: () => {
       setPendingUpdates(new Map());
       qc.invalidateQueries({ queryKey: ['inventory'] });
-      setReinitConfirmOpen(false);
+      qc.invalidateQueries({ queryKey: ['inventory-summary'] });
     },
-    onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { message?: string | string[] } } })
-        ?.response?.data?.message;
-      setRowError(
-        Array.isArray(msg)
-          ? msg.join(', ')
-          : ((err as Error)?.message ?? 'Reinitialization failed.'),
-      );
-      setReinitConfirmOpen(false);
-    },
+    onError: (err) => setSnackError(extractError(err)),
   });
 
-  const handleProcessRowUpdate = useCallback((newRow: Inventory, oldRow: Inventory) => {
-    if (
-      newRow.delivery === oldRow.delivery &&
-      newRow.leftover === oldRow.leftover &&
-      newRow.reject === oldRow.reject
-    ) {
-      return oldRow;
-    }
+  const recascadeMutation = useMutation({
+    mutationFn: (data: { branchId: number; productId: number; fromDate: string }) =>
+      inventoryApi.recascade(data.branchId, data.productId, data.fromDate),
+    onSuccess: () => {
+      setCascadeWarning(null);
+      qc.invalidateQueries({ queryKey: ['inventory'] });
+    },
+    onError: (err) => setSnackError(extractError(err)),
+  });
+
+  // Cell editing
+  const handleCellChange = useCallback((invId: number, field: 'delivery' | 'leftover' | 'reject', value: number) => {
     setPendingUpdates((prev) => {
       const next = new Map(prev);
-      next.set(newRow.id, {
-        delivery: Number(newRow.delivery),
-        leftover: Number(newRow.leftover),
-        reject: Number(newRow.reject),
-      });
+      const existing = next.get(invId) ?? {};
+      next.set(invId, { ...existing, [field]: value });
       return next;
     });
-    return newRow;
   }, []);
 
-  const discardPending = () => {
+  const discardPending = useCallback(() => {
     setPendingUpdates(new Map());
     qc.invalidateQueries({ queryKey: ['inventory'] });
-  };
+  }, [qc]);
 
-  // ── Adjustments dialog ───────────────────────────────────────────
-  const [adjustmentTarget, setAdjustmentTarget] = useState<Inventory | null>(null);
-
-  const openAdjustments = (row: Inventory) => setAdjustmentTarget(row);
-
-  const stepDate = (delta: number) => {
-    const rangeLen = dayjs(filterDateTo).diff(dayjs(filterDateFrom), 'day') + 1;
-    const newFrom = dayjs(filterDateFrom).add(delta * rangeLen, 'day').format('YYYY-MM-DD');
-    const newTo = dayjs(filterDateTo).add(delta * rangeLen, 'day').format('YYYY-MM-DD');
-    setDraftFrom(newFrom); setDraftTo(newTo);
-    commitDates(newFrom, newTo);
-  };
-
-  const apiRefBread = useGridApiRef();
-  const apiRefCake = useGridApiRef();
-  const apiRefSpecial = useGridApiRef();
-  const apiRefMiscellaneous = useGridApiRef();
-  const typeApiRefs = {
-    BREAD: apiRefBread,
-    CAKE: apiRefCake,
-    SPECIAL: apiRefSpecial,
-    MISCELLANEOUS: apiRefMiscellaneous,
-  };
-
-  const columns = useInventoryColumns({ filterBranch, isRange, productById, openAdjustments });
-
-  const rows = invQuery.data ?? [];
-  const displayRows = useInventoryDisplayRows(rows, filterBranch, isRange);
-
-  const summaryQuery = useQuery<InventorySummaryData | null>({
-    queryKey: ['inventory-summary', filterBranch, filterDateFrom, filterDateTo],
-    queryFn: () =>
-      inventoryApi
-        .summary(filterDateFrom, filterDateTo, filterBranch || undefined)
-        .then((r) => r.data),
-  });
-
-  const rowsByType = useMemo(() => {
-    const productTypeMap = new Map(products.map((p) => [p.id, p.type]));
-    const map = new Map<ProductType, Inventory[]>(
-      PRODUCT_TYPE_ORDER.map((t) => [t, []]),
-    );
-    for (const inv of displayRows) {
-      const type = productTypeMap.get(inv.productId);
-      if (type) map.get(type)?.push(inv);
-    }
-    return map;
-  }, [displayRows, products]);
-
-  const uninitializedCount =
-    !isRange && filterBranch !== ''
-      ? products.filter((p) => p.isActive && !rows.some((r) => r.productId === p.id)).length
-      : 0;
-
-  const adjustmentRow = adjustmentTarget
-    ? (invQuery.data ?? []).find((r) => r.id === adjustmentTarget.id) ?? adjustmentTarget
-    : null;
+  const totalPending = pendingUpdates.size;
+  const isEditable = !isRange && filterBranch !== '';
 
   return (
     <AuthGuard>
-      <AppLayout title="Inventory">
-        <InventoryFilterBar
-          dateMode={dateMode}
-          draftFrom={draftFrom}
-          draftTo={draftTo}
-          filterBranch={filterBranch}
-          branches={branches}
-          today={today}
-          uninitializedCount={uninitializedCount}
-          isBulkCreatePending={bulkCreateMutation.isPending}
-          onDateModeChange={switchDateMode}
-          onDraftFromChange={setDraftFrom}
-          onDraftToChange={setDraftTo}
-          onCommitDates={commitDates}
-          onStepDate={stepDate}
-          onBranchChange={setFilterBranch}
-          onImportOpen={() => setImportOpen(true)}
-          onBulkCreate={() => bulkCreateMutation.mutate()}
-          onReinitialize={() => setReinitConfirmOpen(true)}
-          isReinitializePending={reinitializeMutation.isPending}
-        />
-
-        {/* Pending changes save bar */}
-        {pendingUpdates.size > 0 && (
-          <Box
-            display="flex"
-            alignItems="center"
-            gap={2}
-            px={2}
-            py={1}
-            mb={2}
-            sx={{
-              bgcolor: 'rgba(255, 167, 38, 0.10)',
-              border: 1,
-              borderColor: 'warning.main',
-              borderRadius: 1,
-            }}
-          >
-            <Typography variant="body2" color="warning.dark" sx={{ flexGrow: 1 }}>
-              {pendingUpdates.size} unsaved change{pendingUpdates.size !== 1 ? 's' : ''}
-            </Typography>
-            <Button
-              size="small"
-              variant="outlined"
-              color="warning"
-              startIcon={<CloseIcon />}
-              onClick={discardPending}
-            >
-              Discard
-            </Button>
-            <Button
-              size="small"
-              variant="contained"
-              color="warning"
-              startIcon={
-                savePendingMutation.isPending ? (
-                  <CircularProgress size={14} />
-                ) : (
-                  <SaveIcon />
-                )
-              }
-              onClick={() => savePendingMutation.mutate(pendingUpdates)}
-              disabled={savePendingMutation.isPending}
-            >
-              Save Changes
-            </Button>
-          </Box>
-        )}
-
-        <InventorySummaryPanel
-          summary={summaryQuery.data ?? null}
-          filterDateFrom={filterDateFrom}
-          filterDateTo={filterDateTo}
-        />
-
-        {/* Per-type grids */}
-        {invQuery.isLoading ? (
-          <Box display="flex" justifyContent="center" py={6}>
-            <CircularProgress />
-          </Box>
-        ) : rows.length === 0 ? (
-          <Typography color="text.secondary" textAlign="center" py={6}>
-            No inventory records for this date.
-          </Typography>
-        ) : (
-          PRODUCT_TYPE_ORDER.map((type) => {
-            const typeRows = rowsByType.get(type) ?? [];
-            if (typeRows.length === 0) return null;
-            return (
-              <Box key={type} mb={3}>
-                <Typography
-                  variant="subtitle1"
-                  fontWeight={700}
-                  sx={{
-                    mb: 0.75,
-                    pb: 0.5,
-                    borderBottom: 2,
-                    borderColor: 'divider',
-                    textTransform: 'uppercase',
-                    letterSpacing: 1,
-                    color: 'text.secondary',
-                  }}
-                >
-                  {TYPE_LABELS[type]}
-                </Typography>
-                <DataGrid
-                  apiRef={typeApiRefs[type]}
-                  rows={typeRows}
-                  columns={columns}
-                  processRowUpdate={isRange || filterBranch === '' ? undefined : handleProcessRowUpdate}
-                  isCellEditable={() => !isRange && filterBranch !== ''}
-                  onCellKeyDown={makeTabNavHandler(EDITABLE_FIELDS, typeApiRefs[type], !isRange)}
-                  onProcessRowUpdateError={(err) =>
-                    setRowError(err instanceof Error ? err.message : String(err))
-                  }
-                  getRowClassName={(params) => {
-                    if (pendingUpdates.has(params.id as number)) return 'row--dirty';
-                    if ((params.row as Inventory).isAutoGenerated) return 'row--autogen';
-                    return '';
-                  }}
-                  autoHeight
-                  disableRowSelectionOnClick
-                  hideFooter
-                  density="compact"
-                  sx={GRID_SX}
-                />
-              </Box>
-            );
-          })
-        )}
-
-        {/* Import Dialog */}
-        {importOpen && (
-          <InventoryImportDialog
+      <AppLayout title="Inventory Details">
+        <TooltipProvider>
+          <InventoryFilterBar
+            dateMode={dateMode}
+            draftFrom={draftFrom}
+            draftTo={draftTo}
+            filterBranch={filterBranch}
             branches={branches}
-            onClose={() => setImportOpen(false)}
-            onImported={() => qc.invalidateQueries({ queryKey: ['inventory'] })}
+            today={today}
+            uninitializedCount={uninitializedCount}
+            isBulkCreatePending={bulkCreateMutation.isPending}
+            isReinitializePending={reinitializeMutation.isPending}
+            onDateModeChange={handleDateModeChange}
+            onDraftFromChange={setDraftFrom}
+            onDraftToChange={setDraftTo}
+            onCommitDates={commitDates}
+            onStepDate={stepDate}
+            onBranchChange={setFilterBranch}
+            onImportOpen={() => window.location.href = '/inventory-import'}
+            onBulkCreate={() => bulkCreateMutation.mutate()}
+            onReinitialize={() => reinitializeMutation.mutate()}
           />
-        )}
 
-        {/* Adjustments Dialog */}
-        {adjustmentRow && (
+          <InventorySummaryPanel
+            summary={summaryQuery.data ?? null}
+            filterDateFrom={filterDateFrom}
+            filterDateTo={filterDateTo}
+          />
+
+          {/* Pending changes bar */}
+          {totalPending > 0 && (
+            <div className="flex items-center gap-3 px-3 py-2 mb-3 bg-amber-50 border border-amber-400 rounded-md">
+              <p className="text-sm text-amber-800 flex-grow">
+                {totalPending} unsaved change{totalPending !== 1 ? 's' : ''}
+              </p>
+              <Button size="sm" variant="outline" className="border-amber-400 text-amber-700" onClick={discardPending}>
+                <X className="h-3.5 w-3.5 mr-1" /> Discard
+              </Button>
+              <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-white" onClick={() => savePendingMutation.mutate()} disabled={savePendingMutation.isPending}>
+                {savePendingMutation.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Save className="h-3.5 w-3.5 mr-1" />}
+                Save Changes
+              </Button>
+            </div>
+          )}
+
+          {/* Per-type grids */}
+          {invQuery.isLoading ? (
+            <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
+          ) : displayRows.length === 0 ? (
+            <p className="text-center text-muted-foreground py-12">No inventory data. Select a branch and date, or sync products.</p>
+          ) : (
+            PRODUCT_TYPE_ORDER.map((type) => {
+              const typeRows = rowsByType.get(type) ?? [];
+              if (typeRows.length === 0) return null;
+              return (
+                <div key={type} className="mb-4">
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground border-b-2 pb-1 mb-2">
+                    {TYPE_LABELS[type]}
+                  </h3>
+                  <Card className="shadow-none overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/50">
+                          <TableHead className="min-w-[120px]">Product</TableHead>
+                          {!isRange && <TableHead className="text-center w-[100px]">Prev. Leftover</TableHead>}
+                          <TableHead className="text-center w-[90px]">Delivery</TableHead>
+                          {filterBranch !== '' && <TableHead className="text-center w-[110px]">Adjustments</TableHead>}
+                          {!isRange && <TableHead className="text-center w-[100px]">Total Stock</TableHead>}
+                          <TableHead className="text-center w-[90px]">Leftover</TableHead>
+                          <TableHead className="text-center w-[80px]">Reject</TableHead>
+                          <TableHead className="text-center w-[80px]">Sold</TableHead>
+                          <TableHead className="text-right w-[110px]">Revenue</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {typeRows.map((inv) => {
+                          const product = productById.get(inv.productId);
+                          const pending = pendingUpdates.get(inv.id);
+                          const effectiveInv = pending ? { ...inv, ...pending } : inv;
+                          const adjSum = getAdjSum(effectiveInv);
+                          const totalStock = getTotalStock(effectiveInv);
+                          const sold = getSold(effectiveInv, productById);
+                          const revenue = getRevenue(effectiveInv, productById);
+                          const hasPending = !!pending;
+
+                          return (
+                            <TableRow key={inv.id} className={hasPending ? 'bg-amber-50/50' : ''}>
+                              <TableCell className="font-medium">{product?.name ?? `Product #${inv.productId}`}</TableCell>
+                              {!isRange && <TableCell className="text-center">{inv.quantity}</TableCell>}
+                              <TableCell className="text-center">
+                                {isEditable ? (
+                                  <Input
+                                    type="number"
+                                    className="w-[70px] h-7 text-center mx-auto"
+                                    value={String(pending?.delivery ?? inv.delivery)}
+                                    onChange={(e) => handleCellChange(inv.id, 'delivery', parseInt(e.target.value) || 0)}
+                                    min={0}
+                                  />
+                                ) : (
+                                  effectiveInv.delivery
+                                )}
+                              </TableCell>
+                              {filterBranch !== '' && (
+                                <TableCell className="text-center">
+                                  <div className="flex items-center justify-center gap-1">
+                                    {(inv.adjustments ?? []).length > 0 && (
+                                      <span className={`text-xs font-bold ${adjSum > 0 ? 'text-green-600' : adjSum < 0 ? 'text-red-600' : 'text-muted-foreground'}`}>
+                                        {adjSum > 0 ? `+${adjSum}` : adjSum}
+                                      </span>
+                                    )}
+                                    {!isRange && (
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setAdjRow(inv)}>
+                                            <Settings2 className="h-3.5 w-3.5" />
+                                          </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>Manage adjustments</TooltipContent>
+                                      </Tooltip>
+                                    )}
+                                  </div>
+                                </TableCell>
+                              )}
+                              {!isRange && (
+                                <TableCell className="text-center font-semibold text-primary">{totalStock}</TableCell>
+                              )}
+                              <TableCell className="text-center">
+                                {isEditable ? (
+                                  <Input
+                                    type="number"
+                                    className="w-[70px] h-7 text-center mx-auto"
+                                    value={String(pending?.leftover ?? inv.leftover)}
+                                    onChange={(e) => handleCellChange(inv.id, 'leftover', parseInt(e.target.value) || 0)}
+                                    min={0}
+                                  />
+                                ) : (
+                                  effectiveInv.leftover
+                                )}
+                              </TableCell>
+                              <TableCell className="text-center">
+                                {isEditable ? (
+                                  <Input
+                                    type="number"
+                                    className="w-[70px] h-7 text-center mx-auto"
+                                    value={String(pending?.reject ?? inv.reject)}
+                                    onChange={(e) => handleCellChange(inv.id, 'reject', parseInt(e.target.value) || 0)}
+                                    min={0}
+                                  />
+                                ) : (
+                                  effectiveInv.reject
+                                )}
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Badge variant={sold > 0 ? 'default' : 'secondary'} className={sold > 0 ? 'bg-green-500' : ''}>
+                                  {sold}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <span className={`font-semibold ${revenue > 0 ? 'text-green-600' : 'text-muted-foreground'}`}>
+                                  ₱{revenue.toLocaleString()}
+                                </span>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </Card>
+                </div>
+              );
+            })
+          )}
+
+          {/* Error toast */}
+          {snackError && (
+            <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50">
+              <Alert variant="destructive" className="shadow-lg">
+                <AlertDescription className="flex items-center gap-2">
+                  {snackError}
+                  <Button variant="ghost" size="sm" onClick={() => setSnackError('')}>×</Button>
+                </AlertDescription>
+              </Alert>
+            </div>
+          )}
+
+          {/* Cascade warning dialog */}
+          <Dialog open={!!cascadeWarning} onOpenChange={() => setCascadeWarning(null)}>
+            <DialogContent className="sm:max-w-sm">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-amber-500" /> Cascade Update
+                </DialogTitle>
+              </DialogHeader>
+              <p className="text-sm text-muted-foreground">
+                Changing the leftover affects the opening quantity for subsequent days. Would you like to cascade the update forward?
+              </p>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setCascadeWarning(null)}>Skip</Button>
+                <Button onClick={() => { if (cascadeWarning) recascadeMutation.mutate(cascadeWarning); }} disabled={recascadeMutation.isPending}>
+                  {recascadeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                  Cascade
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Adjustments dialog */}
           <InventoryAdjustmentsDialog
-            inventory={adjustmentRow}
-            productName={productById.get(adjustmentRow.productId)?.name ?? `Product #${adjustmentRow.productId}`}
+            inventory={adjRow}
+            productName={productById.get(adjRow?.productId ?? 0)?.name ?? ''}
             branches={branches}
-            onClose={() => setAdjustmentTarget(null)}
+            onClose={() => setAdjRow(null)}
           />
-        )}
-
-        <Snackbar
-          open={!!rowError}
-          autoHideDuration={4000}
-          onClose={() => setRowError('')}
-          anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-        >
-          <Alert severity="error" onClose={() => setRowError('')} sx={{ width: '100%' }}>
-            {rowError}
-          </Alert>
-        </Snackbar>
-
-        {/* Reinitialize Confirm Dialog */}
-        <Dialog
-          open={reinitConfirmOpen}
-          onClose={() => !reinitializeMutation.isPending && setReinitConfirmOpen(false)}
-          maxWidth="xs"
-          fullWidth
-        >
-          <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <RestartAltIcon color="warning" />
-            Reinitialize Inventory
-          </DialogTitle>
-          <DialogContent>
-            <Typography variant="body2">
-              This will reset <strong>all inventory rows</strong> for{' '}
-              <strong>
-                {branches.find((b) => b.id.toString() === filterBranch)?.name ?? 'this branch'}
-              </strong>{' '}
-              on <strong>{filterDateFrom}</strong> — setting each product&apos;s opening quantity
-              from the previous day&apos;s leftover and zeroing delivery, leftover, and
-              reject.
-            </Typography>
-            <Typography variant="body2" color="warning.dark" sx={{ mt: 1, fontWeight: 600 }}>
-              Existing values will be overwritten. This cannot be undone.
-            </Typography>
-          </DialogContent>
-          <DialogActions>
-            <Button
-              onClick={() => setReinitConfirmOpen(false)}
-              disabled={reinitializeMutation.isPending}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="contained"
-              color="warning"
-              startIcon={
-                reinitializeMutation.isPending ? (
-                  <CircularProgress size={16} />
-                ) : (
-                  <RestartAltIcon />
-                )
-              }
-              onClick={() => reinitializeMutation.mutate()}
-              disabled={reinitializeMutation.isPending}
-            >
-              Reinitialize
-            </Button>
-          </DialogActions>
-        </Dialog>
-
-        {/* Cascade Warning Dialog */}
-        <Dialog open={!!cascadeWarning} onClose={() => setCascadeWarning(null)} maxWidth="xs" fullWidth>
-          <DialogTitle>Auto-generated rows may be stale</DialogTitle>
-          <DialogContent>
-            <Typography variant="body2">
-              You edited an entry that has <strong>{cascadeWarning?.count}</strong> subsequent
-              auto-generated row{cascadeWarning?.count === 1 ? '' : 's'} for the same branch + product.
-              Their carried-over leftover values may now be incorrect.
-            </Typography>
-            <Typography variant="body2" sx={{ mt: 1 }}>
-              Click <strong>Re-cascade</strong> to propagate the correct leftover forward through those rows.
-            </Typography>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setCascadeWarning(null)}>Dismiss</Button>
-            <Button
-              variant="contained"
-              color="warning"
-              onClick={() => {
-                if (!cascadeWarning) return;
-                inventoryApi
-                  .recascade(cascadeWarning.branchId, cascadeWarning.productId, cascadeWarning.fromDate)
-                  .then(() => {
-                    setCascadeWarning(null);
-                    qc.invalidateQueries({ queryKey: ['inventory'] });
-                  })
-                  .catch(() => setRowError('Re-cascade failed. Please try again.'));
-              }}
-            >
-              Re-cascade
-            </Button>
-          </DialogActions>
-        </Dialog>
+        </TooltipProvider>
       </AppLayout>
     </AuthGuard>
   );

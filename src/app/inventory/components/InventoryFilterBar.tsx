@@ -1,25 +1,11 @@
 'use client';
 
-import {
-  Box,
-  Button,
-  IconButton,
-  TextField,
-  ToggleButton,
-  ToggleButtonGroup,
-  Tooltip,
-  Typography,
-  CircularProgress,
-} from '@mui/material';
-import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
-import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import LibraryAddIcon from '@mui/icons-material/LibraryAdd';
-import TodayIcon from '@mui/icons-material/Today';
-import UploadFileIcon from '@mui/icons-material/UploadFile';
-import DateRangeIcon from '@mui/icons-material/DateRange';
-import EventIcon from '@mui/icons-material/Event';
-import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import { ChevronLeft, ChevronRight, Calendar, CalendarRange, CalendarDays, RotateCcw, Plus, Upload, Loader2 } from 'lucide-react';
 import type { Branch } from '@/types';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface InventoryFilterBarProps {
   dateMode: 'date' | 'range';
@@ -65,41 +51,28 @@ export default function InventoryFilterBar({
   const isRange = draftFrom !== draftTo;
 
   return (
-    <>
+    <TooltipProvider>
       {/* Date navigation */}
-      <Box display="flex" alignItems="center" gap={1} mb={2} flexWrap="wrap">
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
         {/* Mode toggle */}
-        <ToggleButtonGroup
-          value={dateMode}
-          exclusive
-          size="small"
-          onChange={(_, val) => {
-            if (val) onDateModeChange(val as 'date' | 'range');
-          }}
-        >
-          <ToggleButton value="date">
-            <Tooltip title="Single date">
-              <EventIcon fontSize="small" />
-            </Tooltip>
-          </ToggleButton>
-          <ToggleButton value="range">
-            <Tooltip title="Date range">
-              <DateRangeIcon fontSize="small" />
-            </Tooltip>
-          </ToggleButton>
-        </ToggleButtonGroup>
+        <ToggleGroup type="single" value={dateMode} onValueChange={(val) => { if (val) onDateModeChange(val as 'date' | 'range'); }}>
+          <Tooltip><TooltipTrigger asChild>
+            <ToggleGroupItem value="date" size="sm"><Calendar className="h-4 w-4" /></ToggleGroupItem>
+          </TooltipTrigger><TooltipContent>Single date</TooltipContent></Tooltip>
+          <Tooltip><TooltipTrigger asChild>
+            <ToggleGroupItem value="range" size="sm"><CalendarRange className="h-4 w-4" /></ToggleGroupItem>
+          </TooltipTrigger><TooltipContent>Date range</TooltipContent></Tooltip>
+        </ToggleGroup>
 
-        <Tooltip title="Previous period">
-          <IconButton onClick={() => onStepDate(-1)} size="small">
-            <ChevronLeftIcon />
-          </IconButton>
-        </Tooltip>
+        <Tooltip><TooltipTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onStepDate(-1)}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+        </TooltipTrigger><TooltipContent>Previous period</TooltipContent></Tooltip>
 
         {dateMode === 'date' ? (
-          <TextField
-            size="small"
+          <Input
             type="date"
-            label="Date"
             value={draftFrom}
             onChange={(e) => {
               const v = e.target.value;
@@ -107,15 +80,12 @@ export default function InventoryFilterBar({
               onDraftToChange(v);
               onCommitDates(v, v);
             }}
-            InputLabelProps={{ shrink: true }}
-            sx={{ width: 150 }}
+            className="w-[150px] h-8"
           />
         ) : (
           <>
-            <TextField
-              size="small"
+            <Input
               type="date"
-              label="From"
               value={draftFrom}
               onChange={(e) => {
                 const v = e.target.value;
@@ -123,16 +93,11 @@ export default function InventoryFilterBar({
                 if (v > draftTo) onDraftToChange(v);
               }}
               onBlur={() => onCommitDates(draftFrom, draftTo)}
-              InputLabelProps={{ shrink: true }}
-              sx={{ width: 150 }}
+              className="w-[150px] h-8"
             />
-            <Typography variant="body2" color="text.secondary">
-              —
-            </Typography>
-            <TextField
-              size="small"
+            <span className="text-muted-foreground text-sm">—</span>
+            <Input
               type="date"
-              label="To"
               value={draftTo}
               onChange={(e) => {
                 const v = e.target.value;
@@ -140,143 +105,83 @@ export default function InventoryFilterBar({
                 if (v < draftFrom) onDraftFromChange(v);
               }}
               onBlur={() => onCommitDates(draftFrom, draftTo)}
-              InputLabelProps={{ shrink: true }}
-              sx={{ width: 150 }}
+              className="w-[150px] h-8"
             />
           </>
         )}
 
-        <Tooltip title="Next period">
-          <IconButton onClick={() => onStepDate(1)} size="small">
-            <ChevronRightIcon />
-          </IconButton>
-        </Tooltip>
+        <Tooltip><TooltipTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onStepDate(1)}>
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </TooltipTrigger><TooltipContent>Next period</TooltipContent></Tooltip>
 
         {(draftFrom !== today || draftTo !== today) && (
           <Button
-            size="small"
-            variant="outlined"
-            startIcon={<TodayIcon />}
-            onClick={() => {
-              onDraftFromChange(today);
-              onDraftToChange(today);
-              onCommitDates(today, today);
-            }}
+            size="sm"
+            variant="outline"
+            onClick={() => { onDraftFromChange(today); onDraftToChange(today); onCommitDates(today, today); }}
           >
-            Today
+            <CalendarDays className="h-3.5 w-3.5 mr-1" /> Today
           </Button>
         )}
 
         {dateMode === 'range' && (
           <>
-            <Button
-              size="small"
-              variant="text"
-              onClick={() => {
-                const from = new Date();
-                from.setDate(from.getDate() - 6);
-                const fromStr = from.toISOString().slice(0, 10);
-                onDraftFromChange(fromStr);
-                onDraftToChange(today);
-                onCommitDates(fromStr, today);
-              }}
-            >
-              Last 7d
-            </Button>
-            <Button
-              size="small"
-              variant="text"
-              onClick={() => {
-                const now = new Date();
-                const fromStr = new Date(now.getFullYear(), now.getMonth(), 1)
-                  .toISOString()
-                  .slice(0, 10);
-                onDraftFromChange(fromStr);
-                onDraftToChange(today);
-                onCommitDates(fromStr, today);
-              }}
-            >
-              This Month
-            </Button>
+            <Button size="sm" variant="ghost" onClick={() => {
+              const from = new Date(); from.setDate(from.getDate() - 6);
+              const fromStr = from.toISOString().slice(0, 10);
+              onDraftFromChange(fromStr); onDraftToChange(today); onCommitDates(fromStr, today);
+            }}>Last 7d</Button>
+            <Button size="sm" variant="ghost" onClick={() => {
+              const now = new Date();
+              const fromStr = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+              onDraftFromChange(fromStr); onDraftToChange(today); onCommitDates(fromStr, today);
+            }}>This Month</Button>
           </>
         )}
 
-        <Box flexGrow={1} />
+        <div className="flex-grow" />
 
-        <Button
-          size="small"
-          variant="outlined"
-          startIcon={<UploadFileIcon />}
-          onClick={onImportOpen}
-        >
-          Import XLSX
+        <Button size="sm" variant="outline" onClick={onImportOpen}>
+          <Upload className="h-3.5 w-3.5 mr-1" /> Import XLSX
         </Button>
 
         {!isRange && filterBranch !== '' && (
-          <Tooltip title="Reset all entries for this day using yesterday's leftover as opening quantity. Zeroes delivery, leftover, and reject.">
-            <span>
-              <Button
-                size="small"
-                variant="outlined"
-                color="warning"
-                startIcon={
-                  isReinitializePending ? <CircularProgress size={16} /> : <RestartAltIcon />
-                }
-                onClick={onReinitialize}
-                disabled={isReinitializePending}
-              >
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button size="sm" variant="outline" className="border-amber-400 text-amber-700" onClick={onReinitialize} disabled={isReinitializePending}>
+                {isReinitializePending ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5 mr-1" />}
                 Reinitialize
               </Button>
-            </span>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs">Reset all entries for this day using yesterday&apos;s leftover as opening quantity.</TooltipContent>
           </Tooltip>
         )}
 
         {!isRange && uninitializedCount > 0 && (
-          <Tooltip
-            title={`${uninitializedCount} active product${uninitializedCount !== 1 ? 's' : ''} missing entries for this day. Click to create them, seeded from yesterday's leftover.`}
-          >
-            <span>
-              <Button
-                variant="contained"
-                startIcon={
-                  isBulkCreatePending ? <CircularProgress size={16} /> : <LibraryAddIcon />
-                }
-                onClick={onBulkCreate}
-                disabled={isBulkCreatePending}
-              >
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button size="sm" onClick={onBulkCreate} disabled={isBulkCreatePending}>
+                {isBulkCreatePending ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
                 Sync {uninitializedCount} Product{uninitializedCount !== 1 ? 's' : ''}
               </Button>
-            </span>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs">{uninitializedCount} active product{uninitializedCount !== 1 ? 's' : ''} missing entries. Click to create them.</TooltipContent>
           </Tooltip>
         )}
-      </Box>
+      </div>
 
       {/* Branch selector */}
-      <Box mb={2}>
-        <Typography
-          variant="caption"
-          color="text.secondary"
-          sx={{ mb: 0.5, display: 'block', fontWeight: 600, letterSpacing: 1 }}
-        >
-          BRANCH
-        </Typography>
-        <ToggleButtonGroup
-          value={filterBranch}
-          exclusive
-          onChange={(_, val) => onBranchChange(val ?? '')}
-          size="small"
-          sx={{ flexWrap: 'wrap', gap: 0.5 }}
-        >
-          <ToggleButton value="" sx={{ px: 2 }}>
-            All
-          </ToggleButton>
+      <div className="mb-3">
+        <p className="text-xs font-semibold text-muted-foreground tracking-wider mb-1">BRANCH</p>
+        <ToggleGroup type="single" value={filterBranch} onValueChange={(val) => onBranchChange(val ?? '')} className="flex-wrap gap-1 justify-start">
+          <ToggleGroupItem value="" size="sm">All</ToggleGroupItem>
           {branches.map((b) => (
-            <ToggleButton key={b.id} value={b.id.toString()} sx={{ px: 2 }}>
-              {b.name}
-            </ToggleButton>
+            <ToggleGroupItem key={b.id} value={b.id.toString()} size="sm">{b.name}</ToggleGroupItem>
           ))}
-        </ToggleButtonGroup>
-      </Box>
-    </>
+        </ToggleGroup>
+      </div>
+    </TooltipProvider>
   );
 }

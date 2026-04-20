@@ -1,32 +1,20 @@
 'use client';
 
-import {
-  Alert,
-  Box,
-  Card,
-  CardContent,
-  Chip,
-  CircularProgress,
-  Grid,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  Typography,
-} from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
-import CategoryIcon from '@mui/icons-material/Category';
-import StorefrontIcon from '@mui/icons-material/Storefront';
-import ScienceIcon from '@mui/icons-material/Science';
-import MenuBookIcon from '@mui/icons-material/MenuBook';
-import WarningAmberIcon from '@mui/icons-material/WarningAmber';
-import PrecisionManufacturingIcon from '@mui/icons-material/PrecisionManufacturing';
+import {
+  Layers, Store, FlaskConical, BookOpen, AlertTriangle, Factory, Loader2,
+} from 'lucide-react';
 import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
 import { dashboardApi } from '@/lib/apiServices';
 import type { DashboardSummary } from '@/types';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from '@/components/ui/table';
 
 const TYPE_LABELS: Record<string, string> = {
   BREAD: 'Bread',
@@ -46,248 +34,153 @@ export default function DashboardPage() {
   return (
     <AuthGuard>
       <AppLayout title="Dashboard">
-        <Box mb={3}>
-          <Typography variant="h5" fontWeight={700}>
-            Welcome back 👋
-          </Typography>
-          <Typography color="text.secondary">
-            {dayjs().format('dddd, MMMM D, YYYY')}
-          </Typography>
-        </Box>
+        <div className="mb-6">
+          <h2 className="text-xl font-bold">Welcome back 👋</h2>
+          <p className="text-muted-foreground">{dayjs().format('dddd, MMMM D, YYYY')}</p>
+        </div>
 
         {isLoading ? (
-          <Box display="flex" justifyContent="center" mt={8}>
-            <CircularProgress />
-          </Box>
+          <div className="flex justify-center mt-16">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
         ) : isError || !data ? (
-          <Alert severity="error">Failed to load dashboard data.</Alert>
+          <Alert variant="destructive">
+            <AlertDescription>Failed to load dashboard data.</AlertDescription>
+          </Alert>
         ) : (
           <>
-            {/* ── Stat Cards ── */}
-            <Grid container spacing={3} mb={4}>
-              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                <StatCard
-                  title="Total Products"
-                  value={data.stats.products.total}
-                  icon={<CategoryIcon />}
-                  color="#6B3FA0"
-                  subtitle={`${data.stats.products.active} active`}
-                />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                <StatCard
-                  title="Branches"
-                  value={data.stats.branches.total}
-                  icon={<StorefrontIcon />}
-                  color="#F4A261"
-                  subtitle={`${data.stats.branches.active} active`}
-                />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                <StatCard
-                  title="Materials"
-                  value={data.stats.materials.total}
-                  icon={<ScienceIcon />}
-                  color="#2e7d32"
-                  subtitle="in inventory"
-                />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                <StatCard
-                  title="Recipes"
-                  value={data.stats.recipes.total}
-                  icon={<MenuBookIcon />}
-                  color="#d32f2f"
-                  subtitle="configured"
-                />
-              </Grid>
-            </Grid>
+            {/* Stat Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+              <StatCard title="Total Products" value={data.stats.products.total} icon={<Layers className="h-5 w-5" />} color="#6B3FA0" subtitle={`${data.stats.products.active} active`} />
+              <StatCard title="Branches" value={data.stats.branches.total} icon={<Store className="h-5 w-5" />} color="#F4A261" subtitle={`${data.stats.branches.active} active`} />
+              <StatCard title="Materials" value={data.stats.materials.total} icon={<FlaskConical className="h-5 w-5" />} color="#2e7d32" subtitle="in inventory" />
+              <StatCard title="Recipes" value={data.stats.recipes.total} icon={<BookOpen className="h-5 w-5" />} color="#d32f2f" subtitle="configured" />
+            </div>
 
-            {/* ── Operational Sections ── */}
-            <Grid container spacing={3} mb={4}>
-              {/* Low Stock Alerts */}
-              <Grid size={{ xs: 12, md: 6 }}>
-                <Card
-                  sx={{
-                    border: data.lowStock.length > 0 ? '1.5px solid' : undefined,
-                    borderColor: 'error.main',
-                  }}
-                >
-                  <CardContent>
-                    <Box display="flex" alignItems="center" gap={1} mb={2}>
-                      <WarningAmberIcon color={data.lowStock.length > 0 ? 'error' : 'disabled'} />
-                      <Typography variant="h6">Low Stock Alerts</Typography>
-                      {data.lowStock.length > 0 && (
-                        <Chip label={data.lowStock.length} color="error" size="small" />
-                      )}
-                    </Box>
-
-                    {data.lowStock.length === 0 ? (
-                      <Alert severity="success" sx={{ mt: 1 }}>
-                        All materials are above their reorder levels.
-                      </Alert>
-                    ) : (
-                      <Table size="small">
-                        <TableHead>
-                          <TableRow>
-                            <TableCell>Material</TableCell>
-                            <TableCell align="right">Stock</TableCell>
-                            <TableCell align="right">Reorder At</TableCell>
-                            <TableCell>Unit</TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {data.lowStock.map((m) => (
-                            <TableRow key={m.id} hover>
-                              <TableCell sx={{ fontWeight: 500 }}>{m.name}</TableCell>
-                              <TableCell align="right" sx={{ color: 'error.main', fontWeight: 700 }}>
-                                {m.currentStock}
-                              </TableCell>
-                              <TableCell align="right">{m.reorderLevel}</TableCell>
-                              <TableCell>{m.unit}</TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
+            {/* Operational Sections */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+              {/* Low Stock */}
+              <Card className={data.lowStock.length > 0 ? 'border-destructive border-2' : ''}>
+                <CardContent className="p-6">
+                  <div className="flex items-center gap-2 mb-4">
+                    <AlertTriangle className={`h-5 w-5 ${data.lowStock.length > 0 ? 'text-destructive' : 'text-muted-foreground'}`} />
+                    <h3 className="font-semibold text-lg">Low Stock Alerts</h3>
+                    {data.lowStock.length > 0 && (
+                      <Badge variant="destructive">{data.lowStock.length}</Badge>
                     )}
-                  </CardContent>
-                </Card>
-              </Grid>
-
-              {/* Today's Production Summary */}
-              <Grid size={{ xs: 12, md: 6 }}>
-                <Card>
-                  <CardContent>
-                    <Box display="flex" alignItems="center" gap={1} mb={2}>
-                      <PrecisionManufacturingIcon color="primary" />
-                      <Typography variant="h6">Today&apos;s Production</Typography>
-                      <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
-                        {today}
-                      </Typography>
-                    </Box>
-
-                    {data.production.totalYield === 0 ? (
-                      <Alert severity="info">
-                        No production records found for today.
-                      </Alert>
-                    ) : (
-                      <Table size="small">
-                        <TableHead>
-                          <TableRow>
-                            <TableCell>Type</TableCell>
-                            <TableCell align="right">Total Yield</TableCell>
+                  </div>
+                  {data.lowStock.length === 0 ? (
+                    <Alert>
+                      <AlertDescription>All materials are above their reorder levels.</AlertDescription>
+                    </Alert>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Material</TableHead>
+                          <TableHead className="text-right">Stock</TableHead>
+                          <TableHead className="text-right">Reorder At</TableHead>
+                          <TableHead>Unit</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {data.lowStock.map((m) => (
+                          <TableRow key={m.id}>
+                            <TableCell className="font-medium">{m.name}</TableCell>
+                            <TableCell className="text-right text-destructive font-bold">{m.currentStock}</TableCell>
+                            <TableCell className="text-right">{m.reorderLevel}</TableCell>
+                            <TableCell>{m.unit}</TableCell>
                           </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {data.production.byType.map(({ type, totalYield }) => (
-                            <TableRow key={type} hover>
-                              <TableCell>
-                                <Chip
-                                  label={TYPE_LABELS[type] ?? type}
-                                  size="small"
-                                  variant="outlined"
-                                />
-                              </TableCell>
-                              <TableCell align="right" sx={{ fontWeight: 600 }}>
-                                {totalYield.toLocaleString()} pcs
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                          <TableRow>
-                            <TableCell sx={{ fontWeight: 700 }}>Total</TableCell>
-                            <TableCell align="right" sx={{ fontWeight: 700 }}>
-                              {data.production.totalYield.toLocaleString()} pcs
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Today's Production */}
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Factory className="h-5 w-5 text-primary" />
+                    <h3 className="font-semibold text-lg">Today&apos;s Production</h3>
+                    <span className="text-xs text-muted-foreground ml-auto">{today}</span>
+                  </div>
+                  {data.production.totalYield === 0 ? (
+                    <Alert>
+                      <AlertDescription>No production records found for today.</AlertDescription>
+                    </Alert>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Type</TableHead>
+                          <TableHead className="text-right">Total Yield</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {data.production.byType.map(({ type, totalYield }) => (
+                          <TableRow key={type}>
+                            <TableCell>
+                              <Badge variant="outline">{TYPE_LABELS[type] ?? type}</Badge>
                             </TableCell>
+                            <TableCell className="text-right font-semibold">{totalYield.toLocaleString()} pcs</TableCell>
                           </TableRow>
-                        </TableBody>
-                      </Table>
-                    )}
-                  </CardContent>
-                </Card>
-              </Grid>
-            </Grid>
+                        ))}
+                        <TableRow>
+                          <TableCell className="font-bold">Total</TableCell>
+                          <TableCell className="text-right font-bold">{data.production.totalYield.toLocaleString()} pcs</TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
 
-            {/* ── Products & Branches Detail ── */}
-            <Grid container spacing={3}>
-              <Grid size={{ xs: 12, md: 6 }}>
-                <Card>
-                  <CardContent>
-                    <Typography variant="h6" mb={2}>
-                      Products
-                    </Typography>
+            {/* Products & Branches */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <Card>
+                <CardContent className="p-6">
+                  <h3 className="font-semibold text-lg mb-4">Products</h3>
+                  <div className="space-y-0">
                     {data.products.map((p) => (
-                      <Box
-                        key={p.id}
-                        display="flex"
-                        justifyContent="space-between"
-                        alignItems="center"
-                        py={0.75}
-                        borderBottom="1px solid"
-                        sx={{ borderColor: 'divider' }}
-                      >
-                        <Box>
-                          <Typography variant="body2" fontWeight={600}>
-                            {p.name}
-                          </Typography>
-                          <Chip
-                            label={p.type}
-                            size="small"
-                            sx={{ fontSize: '0.65rem', height: 18, mt: 0.25 }}
-                          />
-                        </Box>
-                        <Box textAlign="right">
-                          <Typography variant="body2" fontWeight={700}>
-                            ₱{p.price.toFixed(2)}
-                          </Typography>
-                          <Chip
-                            label={p.isActive ? 'Active' : 'Inactive'}
-                            size="small"
-                            color={p.isActive ? 'success' : 'default'}
-                            sx={{ fontSize: '0.65rem', height: 18 }}
-                          />
-                        </Box>
-                      </Box>
+                      <div key={p.id} className="flex justify-between items-center py-2 border-b last:border-0">
+                        <div>
+                          <p className="text-sm font-semibold">{p.name}</p>
+                          <Badge variant="secondary" className="text-[0.65rem] h-[18px] mt-0.5">{p.type}</Badge>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-bold">₱{p.price.toFixed(2)}</p>
+                          <Badge variant={p.isActive ? 'default' : 'secondary'} className="text-[0.65rem] h-[18px]">
+                            {p.isActive ? 'Active' : 'Inactive'}
+                          </Badge>
+                        </div>
+                      </div>
                     ))}
-                  </CardContent>
-                </Card>
-              </Grid>
+                  </div>
+                </CardContent>
+              </Card>
 
-              <Grid size={{ xs: 12, md: 6 }}>
-                <Card>
-                  <CardContent>
-                    <Typography variant="h6" mb={2}>
-                      Branches
-                    </Typography>
+              <Card>
+                <CardContent className="p-6">
+                  <h3 className="font-semibold text-lg mb-4">Branches</h3>
+                  <div className="space-y-0">
                     {data.branches.map((b) => (
-                      <Box
-                        key={b.id}
-                        display="flex"
-                        justifyContent="space-between"
-                        alignItems="center"
-                        py={0.75}
-                        borderBottom="1px solid"
-                        sx={{ borderColor: 'divider' }}
-                      >
-                        <Box>
-                          <Typography variant="body2" fontWeight={600}>
-                            {b.name}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {b.address ?? 'No address'}
-                          </Typography>
-                        </Box>
-                        <Chip
-                          label={b.isActive ? 'Active' : 'Inactive'}
-                          size="small"
-                          color={b.isActive ? 'success' : 'default'}
-                          sx={{ fontSize: '0.7rem' }}
-                        />
-                      </Box>
+                      <div key={b.id} className="flex justify-between items-center py-2 border-b last:border-0">
+                        <div>
+                          <p className="text-sm font-semibold">{b.name}</p>
+                          <p className="text-xs text-muted-foreground">{b.address ?? 'No address'}</p>
+                        </div>
+                        <Badge variant={b.isActive ? 'default' : 'secondary'} className="text-[0.7rem]">
+                          {b.isActive ? 'Active' : 'Inactive'}
+                        </Badge>
+                      </div>
                     ))}
-                  </CardContent>
-                </Card>
-              </Grid>
-            </Grid>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </>
         )}
       </AppLayout>
@@ -306,34 +199,17 @@ interface StatCardProps {
 function StatCard({ title, value, icon, color, subtitle }: StatCardProps) {
   return (
     <Card>
-      <CardContent>
-        <Box display="flex" alignItems="center" justifyContent="space-between">
-          <Box>
-            <Typography variant="body2" color="text.secondary" gutterBottom>
-              {title}
-            </Typography>
-            <Typography variant="h4" fontWeight={800}>
-              {value}
-            </Typography>
-            {subtitle && (
-              <Typography variant="caption" color="text.secondary">
-                {subtitle}
-              </Typography>
-            )}
-          </Box>
-          <Box
-            sx={{
-              bgcolor: `${color}18`,
-              color,
-              borderRadius: 3,
-              p: 1.5,
-              display: 'flex',
-              alignItems: 'center',
-            }}
-          >
+      <CardContent className="p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm text-muted-foreground mb-1">{title}</p>
+            <p className="text-3xl font-extrabold">{value}</p>
+            {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
+          </div>
+          <div className="rounded-xl p-3 flex items-center" style={{ backgroundColor: `${color}18`, color }}>
             {icon}
-          </Box>
-        </Box>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );

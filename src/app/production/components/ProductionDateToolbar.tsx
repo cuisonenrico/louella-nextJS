@@ -1,17 +1,10 @@
-import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
-import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import LibraryAddIcon from '@mui/icons-material/LibraryAdd';
-import PostAddIcon from '@mui/icons-material/PostAdd';
-import TodayIcon from '@mui/icons-material/Today';
-import {
-  Box,
-  Button,
-  CircularProgress,
-  IconButton,
-  TextField,
-  Tooltip,
-} from '@mui/material';
+'use client';
+
+import { ChevronLeft, ChevronRight, CalendarDays, FilePlus, Plus, Loader2 } from 'lucide-react';
 import dayjs from 'dayjs';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 type Props = {
   filterDate: string;
@@ -41,86 +34,57 @@ export default function ProductionDateToolbar({
   onInitAllInventory,
 }: Props) {
   return (
-    <Box display="flex" alignItems="center" gap={1} mb={3} flexWrap="wrap">
-      <Tooltip title="Previous day">
-        <IconButton
-          onClick={() => onDateChange(dayjs(filterDate).subtract(1, 'day').format('YYYY-MM-DD'))}
-          size="small"
-        >
-          <ChevronLeftIcon />
-        </IconButton>
-      </Tooltip>
-      <TextField
-        size="small"
-        type="date"
-        label="Date"
-        value={filterDate}
-        onChange={(e) => onDateChange(e.target.value)}
-        InputLabelProps={{ shrink: true }}
-        sx={{ width: 150 }}
-      />
-      <Tooltip title="Next day">
-        <IconButton
-          onClick={() => onDateChange(dayjs(filterDate).add(1, 'day').format('YYYY-MM-DD'))}
-          size="small"
-        >
-          <ChevronRightIcon />
-        </IconButton>
-      </Tooltip>
-      {filterDate !== today && (
-        <Button
-          size="small"
-          variant="outlined"
-          startIcon={<TodayIcon />}
-          onClick={() => onDateChange(today)}
-        >
-          Today
-        </Button>
-      )}
-      {!isProdLoading && missingProductionCount > 0 && (
-        <Tooltip title={`Create production records for ${missingProductionCount} product${missingProductionCount !== 1 ? 's' : ''} with no entry on this date`}>
-          <span>
-            <Button
-              size="small"
-              variant="contained"
-              color="primary"
-              startIcon={
-                isInitProdPending ? (
-                  <CircularProgress size={14} color="inherit" />
-                ) : (
-                  <PostAddIcon />
-                )
-              }
-              onClick={onInitProduction}
-              disabled={isInitProdPending}
-            >
-              Init Production ({missingProductionCount})
-            </Button>
-          </span>
-        </Tooltip>
-      )}
-      {!isInvLoading && missingInventoryBranchCount > 0 && (
-        <Tooltip title={`Initialize inventory for ${missingInventoryBranchCount} branch${missingInventoryBranchCount !== 1 ? 'es' : ''} with no records on this date`}>
-          <span>
-            <Button
-              size="small"
-              variant="contained"
-              color="secondary"
-              startIcon={
-                isInitAllInvPending ? (
-                  <CircularProgress size={14} color="inherit" />
-                ) : (
-                  <LibraryAddIcon />
-                )
-              }
-              onClick={onInitAllInventory}
-              disabled={isInitAllInvPending}
-            >
-              Init Inventory ({missingInventoryBranchCount})
-            </Button>
-          </span>
-        </Tooltip>
-      )}
-    </Box>
+    <TooltipProvider>
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
+        <Tooltip><TooltipTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onDateChange(dayjs(filterDate).subtract(1, 'day').format('YYYY-MM-DD'))}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+        </TooltipTrigger><TooltipContent>Previous day</TooltipContent></Tooltip>
+
+        <Input
+          type="date"
+          value={filterDate}
+          onChange={(e) => onDateChange(e.target.value)}
+          className="w-[150px] h-8"
+        />
+
+        <Tooltip><TooltipTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onDateChange(dayjs(filterDate).add(1, 'day').format('YYYY-MM-DD'))}>
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </TooltipTrigger><TooltipContent>Next day</TooltipContent></Tooltip>
+
+        {filterDate !== today && (
+          <Button size="sm" variant="outline" onClick={() => onDateChange(today)}>
+            <CalendarDays className="h-3.5 w-3.5 mr-1" /> Today
+          </Button>
+        )}
+
+        {!isProdLoading && missingProductionCount > 0 && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button size="sm" onClick={onInitProduction} disabled={isInitProdPending}>
+                {isInitProdPending ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <FilePlus className="h-3.5 w-3.5 mr-1" />}
+                Init Production ({missingProductionCount})
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs">Create production records for {missingProductionCount} product{missingProductionCount !== 1 ? 's' : ''}</TooltipContent>
+          </Tooltip>
+        )}
+
+        {!isInvLoading && missingInventoryBranchCount > 0 && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button size="sm" variant="secondary" onClick={onInitAllInventory} disabled={isInitAllInvPending}>
+                {isInitAllInvPending ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
+                Init Inventory ({missingInventoryBranchCount})
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs">Initialize inventory for {missingInventoryBranchCount} branch{missingInventoryBranchCount !== 1 ? 'es' : ''}</TooltipContent>
+          </Tooltip>
+        )}
+      </div>
+    </TooltipProvider>
   );
 }

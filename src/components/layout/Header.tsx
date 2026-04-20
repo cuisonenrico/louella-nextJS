@@ -1,27 +1,24 @@
 'use client';
 
-import {
-  AppBar,
-  Avatar,
-  Box,
-  IconButton,
-  Menu,
-  MenuItem,
-  Toolbar,
-  Typography,
-} from '@mui/material';
-import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { DRAWER_WIDTH } from './Sidebar';
+import { LogOut } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 export default function Header({ title, sidebarWidth = DRAWER_WIDTH }: { title?: string; sidebarWidth?: number }) {
   const { user, logout } = useAuth();
   const router = useRouter();
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
   const handleLogout = async () => {
-    setAnchorEl(null);
     await logout();
     router.replace('/login');
   };
@@ -29,56 +26,32 @@ export default function Header({ title, sidebarWidth = DRAWER_WIDTH }: { title?:
   const initials = user?.email?.slice(0, 2).toUpperCase() ?? '??';
 
   return (
-    <AppBar
-      position="fixed"
-      elevation={0}
-      sx={{
-        width: `calc(100% - ${sidebarWidth}px)`,
-        ml: `${sidebarWidth}px`,
-        transition: 'width 0.2s, margin 0.2s',
-        bgcolor: 'background.paper',
-        borderBottom: '1px solid',
-        borderColor: 'divider',
-        color: 'text.primary',
-      }}
+    <header
+      className="fixed top-0 z-30 flex h-14 items-center border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-6 transition-all duration-200"
+      style={{ left: sidebarWidth, width: `calc(100% - ${sidebarWidth}px)` }}
     >
-      <Toolbar>
-        {title && (
-          <Typography variant="h6" fontWeight={700} flexGrow={1}>
-            {title}
-          </Typography>
-        )}
-        {!title && <Box flexGrow={1} />}
+      {title && <h2 className="text-lg font-bold flex-1">{title}</h2>}
+      {!title && <div className="flex-1" />}
 
-        <IconButton onClick={(e) => setAnchorEl(e.currentTarget)} size="small">
-          <Avatar
-            sx={{
-              width: 34,
-              height: 34,
-              bgcolor: 'primary.main',
-              fontSize: '0.8rem',
-              fontWeight: 700,
-            }}
-          >
-            {initials}
-          </Avatar>
-        </IconButton>
-
-        <Menu
-          anchorEl={anchorEl}
-          open={Boolean(anchorEl)}
-          onClose={() => setAnchorEl(null)}
-          transformOrigin={{ horizontal: 'right', vertical: 'top' }}
-          anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
-        >
-          <MenuItem disabled>
-            <Typography variant="body2" color="text.secondary">
-              {user?.email}
-            </Typography>
-          </MenuItem>
-          <MenuItem onClick={handleLogout}>Logout</MenuItem>
-        </Menu>
-      </Toolbar>
-    </AppBar>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" className="rounded-full">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-[0.8rem] font-bold text-primary-foreground">
+              {initials}
+            </div>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuLabel className="text-xs text-muted-foreground font-normal">
+            {user?.email}
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
+            <LogOut className="mr-2 h-4 w-4" />
+            Logout
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </header>
   );
 }

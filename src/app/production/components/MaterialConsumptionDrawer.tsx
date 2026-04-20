@@ -1,24 +1,15 @@
 'use client';
 
-import {
-  Alert,
-  Box,
-  CircularProgress,
-  Divider,
-  Drawer,
-  IconButton,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  Typography,
-} from '@mui/material';
-import CloseIcon from '@mui/icons-material/Close';
+import { Loader2, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import { productionApi } from '@/lib/apiServices';
 import type { MaterialConsumption } from '@/types';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { Separator } from '@/components/ui/separator';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 interface MaterialConsumptionDrawerProps {
   consumptionId: number | null;
@@ -33,71 +24,55 @@ export default function MaterialConsumptionDrawer({ consumptionId, onClose }: Ma
   });
 
   return (
-    <Drawer
-      anchor="right"
-      open={consumptionId != null}
-      onClose={onClose}
-      PaperProps={{ sx: { width: 440, p: 0 } }}
-    >
-      <Box display="flex" alignItems="center" justifyContent="space-between" px={2} py={1.5} borderBottom={1} borderColor="divider">
-        <Box>
-          <Typography variant="h6" fontWeight={700}>Material Consumption</Typography>
+    <Sheet open={consumptionId != null} onOpenChange={() => onClose()}>
+      <SheetContent className="sm:max-w-md overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle>Material Consumption</SheetTitle>
           {consumptionQuery.data && (
-            <Typography variant="caption" color="text.secondary">
+            <p className="text-xs text-muted-foreground">
               {consumptionQuery.data.productName} — {dayjs(consumptionQuery.data.date).format('MMM D, YYYY')} — {consumptionQuery.data.yield} pcs
-            </Typography>
+            </p>
           )}
-        </Box>
-        <IconButton onClick={onClose}><CloseIcon /></IconButton>
-      </Box>
+        </SheetHeader>
 
-      <Box px={2} py={2} overflow="auto">
-        {consumptionQuery.isLoading ? (
-          <Box display="flex" justifyContent="center" py={6}><CircularProgress /></Box>
-        ) : consumptionQuery.error ? (
-          <Alert severity="error">Failed to load consumption data.</Alert>
-        ) : !consumptionQuery.data || consumptionQuery.data.items.length === 0 ? (
-          <Alert severity="info" sx={{ mt: 1 }}>
-            No recipe configured for this product. Set up a recipe to see material consumption.
-          </Alert>
-        ) : (
-          <>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Material</TableCell>
-                  <TableCell align="right">Used</TableCell>
-                  <TableCell align="right">Unit Cost</TableCell>
-                  <TableCell align="right">Total</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {consumptionQuery.data.items.map((item) => (
-                  <TableRow key={item.materialId} hover>
-                    <TableCell sx={{ fontWeight: 500 }}>{item.materialName}</TableCell>
-                    <TableCell align="right">
-                      {item.consumed} {item.materialUnit}
-                    </TableCell>
-                    <TableCell align="right">₱{item.pricePerUnit.toFixed(2)}</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 600 }}>
-                      ₱{item.totalCost.toFixed(2)}
-                    </TableCell>
+        <div className="mt-4">
+          {consumptionQuery.isLoading ? (
+            <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div>
+          ) : consumptionQuery.error ? (
+            <Alert variant="destructive"><AlertDescription>Failed to load consumption data.</AlertDescription></Alert>
+          ) : !consumptionQuery.data || consumptionQuery.data.items.length === 0 ? (
+            <Alert><AlertDescription>No recipe configured for this product. Set up a recipe to see material consumption.</AlertDescription></Alert>
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Material</TableHead>
+                    <TableHead className="text-right">Used</TableHead>
+                    <TableHead className="text-right">Unit Cost</TableHead>
+                    <TableHead className="text-right">Total</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <Divider sx={{ my: 2 }} />
-            <Box display="flex" justifyContent="space-between" alignItems="center" px={0.5}>
-              <Typography variant="body2" fontWeight={700} color="text.secondary">
-                TOTAL MATERIAL COST
-              </Typography>
-              <Typography variant="h6" fontWeight={800} color="primary.main">
-                ₱{consumptionQuery.data.totalMaterialCost.toFixed(2)}
-              </Typography>
-            </Box>
-          </>
-        )}
-      </Box>
-    </Drawer>
+                </TableHeader>
+                <TableBody>
+                  {consumptionQuery.data.items.map((item) => (
+                    <TableRow key={item.materialId}>
+                      <TableCell className="font-medium">{item.materialName}</TableCell>
+                      <TableCell className="text-right">{item.consumed} {item.materialUnit}</TableCell>
+                      <TableCell className="text-right">₱{item.pricePerUnit.toFixed(2)}</TableCell>
+                      <TableCell className="text-right font-semibold">₱{item.totalCost.toFixed(2)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <Separator className="my-3" />
+              <div className="flex justify-between items-center px-1">
+                <span className="text-sm font-bold text-muted-foreground">TOTAL MATERIAL COST</span>
+                <span className="text-lg font-extrabold text-primary">₱{consumptionQuery.data.totalMaterialCost.toFixed(2)}</span>
+              </div>
+            </>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }

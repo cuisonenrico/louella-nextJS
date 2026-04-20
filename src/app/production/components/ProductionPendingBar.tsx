@@ -1,6 +1,7 @@
-import CloseIcon from '@mui/icons-material/Close';
-import SaveIcon from '@mui/icons-material/Save';
-import { Box, Button, CircularProgress, Typography } from '@mui/material';
+'use client';
+
+import { X, Save, Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 type Props = {
   totalPending: number;
@@ -9,57 +10,21 @@ type Props = {
   onSave: () => void;
 };
 
-export default function ProductionPendingBar({
-  totalPending,
-  isSaving,
-  onDiscard,
-  onSave,
-}: Props) {
+export default function ProductionPendingBar({ totalPending, isSaving, onDiscard, onSave }: Props) {
   if (totalPending <= 0) return null;
 
   return (
-    <Box
-      display="flex"
-      alignItems="center"
-      gap={2}
-      px={2}
-      py={1}
-      mb={2}
-      sx={{
-        bgcolor: 'rgba(255, 167, 38, 0.10)',
-        border: 1,
-        borderColor: 'warning.main',
-        borderRadius: 1,
-      }}
-    >
-      <Typography variant="body2" color="warning.dark" sx={{ flexGrow: 1 }}>
+    <div className="flex items-center gap-3 px-3 py-2 mb-3 bg-amber-50 border border-amber-400 rounded-md">
+      <p className="text-sm text-amber-800 flex-grow">
         {totalPending} unsaved change{totalPending !== 1 ? 's' : ''}
-      </Typography>
-      <Button
-        size="small"
-        variant="outlined"
-        color="warning"
-        startIcon={<CloseIcon />}
-        onClick={onDiscard}
-      >
-        Discard
+      </p>
+      <Button size="sm" variant="outline" className="border-amber-400 text-amber-700" onClick={onDiscard}>
+        <X className="h-3.5 w-3.5 mr-1" /> Discard
       </Button>
-      <Button
-        size="small"
-        variant="contained"
-        color="warning"
-        startIcon={
-          isSaving ? (
-            <CircularProgress size={14} />
-          ) : (
-            <SaveIcon />
-          )
-        }
-        onClick={onSave}
-        disabled={isSaving}
-      >
+      <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-white" onClick={onSave} disabled={isSaving}>
+        {isSaving ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Save className="h-3.5 w-3.5 mr-1" />}
         Save Changes
       </Button>
-    </Box>
+    </div>
   );
 }

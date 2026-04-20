@@ -1,547 +1,259 @@
 'use client';
 
-import {
-  Alert,
-  Box,
-  Button,
-  Card,
-  CardContent,
-  Chip,
-  CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Divider,
-  FormControl,
-  IconButton,
-  InputAdornment,
-  InputLabel,
-  MenuItem,
-  Paper,
-  Select,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  TextField,
-  Tooltip,
-  Typography,
-} from '@mui/material';
-import AddIcon from '@mui/icons-material/Add';
-import DeleteIcon from '@mui/icons-material/Delete';
-import SearchIcon from '@mui/icons-material/Search';
-import CalculateIcon from '@mui/icons-material/Calculate';
-import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
-import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Plus, Trash2, Loader2, Search, CookingPot, DollarSign, ChevronDown, ChevronUp } from 'lucide-react';
 import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
-import { materialsApi, productsApi, recipesApi } from '@/lib/apiServices';
-import type { Material, MeasurementUnit, Product, Recipe, RecipeCost } from '@/types';
+import { recipesApi, productsApi, materialsApi } from '@/lib/apiServices';
+import type { Recipe, RecipeCost, Product, Material, MeasurementUnit, RecipeItem } from '@/types';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-const UNITS: MeasurementUnit[] = [
-  'KG', 'G', 'LITER', 'ML', 'PIECE', 'DOZEN', 'BAG', 'SACHET', 'CUP', 'TBSP', 'TSP',
-];
+const UNITS: MeasurementUnit[] = ['KG', 'G', 'LITER', 'ML', 'PIECE', 'DOZEN', 'BAG', 'SACHET', 'CUP', 'TBSP', 'TSP'];
 
-interface RecipeItemForm {
-  materialId: string;
-  quantity: string;
-  unit: MeasurementUnit;
+interface IngredientRow { materialId: number; quantity: string; unit: MeasurementUnit; }
+
+function extractError(err: unknown): string {
+  const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
+  return Array.isArray(msg) ? msg.join(', ') : (msg ?? 'An error occurred');
 }
-
-interface RecipeFormData {
-  productId: string;
-  recipeYield: string;
-  notes: string;
-  items: RecipeItemForm[];
-}
-
-const defaultForm: RecipeFormData = {
-  productId: '',
-  recipeYield: '1',
-  notes: '',
-  items: [{ materialId: '', quantity: '1', unit: 'KG' }],
-};
 
 export default function RecipesPage() {
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
-  const [createOpen, setCreateOpen] = useState(false);
-  const [form, setForm] = useState<RecipeFormData>(defaultForm);
-  const [formError, setFormError] = useState('');
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [costDialogOpen, setCostDialogOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<Recipe | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Recipe | null>(null);
-  const [costRecipe, setCostRecipe] = useState<RecipeCost | null>(null);
+  const [costTarget, setCostTarget] = useState<RecipeCost | null>(null);
   const [costLoading, setCostLoading] = useState(false);
+  const [formError, setFormError] = useState('');
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
-  const { data: recipes = [], isLoading } = useQuery<Recipe[]>({
-    queryKey: ['recipes'],
-    queryFn: () => recipesApi.list().then((r) => r.data),
+  // Form state
+  const [productId, setProductId] = useState('');
+  const [recipeYield, setRecipeYield] = useState('1');
+  const [notes, setNotes] = useState('');
+  const [ingredients, setIngredients] = useState<IngredientRow[]>([]);
+
+  const { data: recipes = [], isLoading } = useQuery({ queryKey: ['recipes'], queryFn: () => recipesApi.list().then((r) => r.data) });
+  const { data: products = [] } = useQuery({ queryKey: ['products'], queryFn: () => productsApi.list().then((r) => r.data) });
+  const { data: materials = [] } = useQuery({ queryKey: ['materials'], queryFn: () => materialsApi.list().then((r) => r.data) });
+
+  const createMut = useMutation({
+    mutationFn: (data: { productId: number; recipeYield?: number; notes?: string; items: { materialId: number; quantity: number; unit: string }[] }) => recipesApi.create(data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['recipes'] }); setDialogOpen(false); },
+    onError: (err) => setFormError(extractError(err)),
   });
-
-  const { data: products = [] } = useQuery<Product[]>({
-    queryKey: ['products'],
-    queryFn: () => productsApi.list().then((r) => r.data),
+  const updateMut = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: { recipeYield?: number; notes?: string; items?: { materialId: number; quantity: number; unit: string }[] } }) => recipesApi.update(id, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['recipes'] }); setDialogOpen(false); },
+    onError: (err) => setFormError(extractError(err)),
   });
-
-  const { data: materials = [] } = useQuery<Material[]>({
-    queryKey: ['materials'],
-    queryFn: () => materialsApi.list().then((r) => r.data),
-  });
-
-  const createMutation = useMutation({
-    mutationFn: (data: RecipeFormData) =>
-      recipesApi.create({
-        productId: parseInt(data.productId),
-        recipeYield: parseFloat(data.recipeYield) || 1,
-        notes: data.notes || undefined,
-        items: data.items.map((i) => ({
-          materialId: parseInt(i.materialId),
-          quantity: parseFloat(i.quantity) || 0,
-          unit: i.unit,
-        })),
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['recipes'] });
-      setCreateOpen(false);
-    },
-    onError: (err: unknown) => {
-      const msg =
-        (err as { response?: { data?: { message?: string | string[] } } })?.response
-          ?.data?.message;
-      setFormError(Array.isArray(msg) ? msg.join(', ') : (msg ?? 'Failed to save.'));
-    },
-  });
-
-  const deleteMutation = useMutation({
+  const deleteMut = useMutation({
     mutationFn: (id: number) => recipesApi.delete(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['recipes'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['recipes'] }); setDeleteTarget(null); },
   });
 
-  const handleAddItem = () =>
-    setForm((f) => ({
-      ...f,
-      items: [...f.items, { materialId: '', quantity: '1', unit: 'KG' }],
-    }));
+  const openCreate = () => {
+    setEditTarget(null); setProductId(''); setRecipeYield('1'); setNotes('');
+    setIngredients([{ materialId: 0, quantity: '', unit: 'KG' }]);
+    setFormError(''); setDialogOpen(true);
+  };
+  const openEdit = (r: Recipe) => {
+    setEditTarget(r); setProductId(String(r.productId)); setRecipeYield(String(r.recipeYield)); setNotes(r.notes ?? '');
+    setIngredients(r.items.map((i) => ({ materialId: i.materialId, quantity: String(i.quantity), unit: i.unit })));
+    setFormError(''); setDialogOpen(true);
+  };
+  const showCost = async (r: Recipe) => {
+    setCostLoading(true); setCostDialogOpen(true); setCostTarget(null);
+    try { const res = await recipesApi.cost(r.id); setCostTarget(res.data); } catch { setCostTarget(null); }
+    setCostLoading(false);
+  };
 
-  const handleRemoveItem = (index: number) =>
-    setForm((f) => ({
-      ...f,
-      items: f.items.filter((_, i) => i !== index),
-    }));
-
-  const handleItemChange = (
-    index: number,
-    field: keyof RecipeItemForm,
-    value: string
-  ) => {
-    setForm((f) => ({
-      ...f,
-      items: f.items.map((item, i) =>
-        i === index ? { ...item, [field]: value } : item
-      ),
-    }));
+  const addIngredient = () => setIngredients((prev) => [...prev, { materialId: 0, quantity: '', unit: 'KG' }]);
+  const removeIngredient = (idx: number) => setIngredients((prev) => prev.filter((_, i) => i !== idx));
+  const updateIngredient = (idx: number, field: keyof IngredientRow, value: string | number) => {
+    setIngredients((prev) => prev.map((row, i) => i === idx ? { ...row, [field]: value } : row));
   };
 
   const handleSave = () => {
     setFormError('');
-    if (!form.productId) {
-      setFormError('Product is required.');
-      return;
-    }
-    if (form.items.some((i) => !i.materialId)) {
-      setFormError('All recipe items must have a material selected.');
-      return;
-    }
-    createMutation.mutate(form);
-  };
-
-  const handleViewCost = async (recipe: Recipe) => {
-    setCostLoading(true);
-    try {
-      const { data } = await recipesApi.cost(recipe.id);
-      setCostRecipe(data);
-    } finally {
-      setCostLoading(false);
+    const validIngredients = ingredients.filter((i) => i.materialId > 0 && parseFloat(i.quantity) > 0);
+    if (validIngredients.length === 0) { setFormError('At least one ingredient is required'); return; }
+    const items = validIngredients.map((i) => ({ materialId: i.materialId, quantity: parseFloat(i.quantity), unit: i.unit }));
+    const yieldVal = parseFloat(recipeYield) || 1;
+    if (editTarget) {
+      updateMut.mutate({ id: editTarget.id, data: { recipeYield: yieldVal, notes: notes || undefined, items } });
+    } else {
+      if (!productId) { setFormError('Product is required'); return; }
+      createMut.mutate({ productId: parseInt(productId), recipeYield: yieldVal, notes: notes || undefined, items });
     }
   };
 
-  const getProductName = (id: number) =>
-    products.find((p) => p.id === id)?.name ?? `Product #${id}`;
-  const getMaterialName = (id: number) =>
-    materials.find((m) => m.id === id)?.name ?? `Material #${id}`;
-
-  const filtered = recipes.filter((r) => {
-    const product = products.find((p) => p.id === r.productId);
-    return (
-      product?.name.toLowerCase().includes(search.toLowerCase()) ?? false
-    );
+  const filtered = recipes.filter((r: Recipe) => {
+    const pName = r.product?.name ?? '';
+    return pName.toLowerCase().includes(search.toLowerCase());
   });
+  const saving = createMut.isPending || updateMut.isPending;
+  const matMap = Object.fromEntries(materials.map((m: Material) => [m.id, m.name]));
 
   return (
     <AuthGuard>
       <AppLayout title="Recipes">
-        <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-          <TextField
-            size="small"
-            placeholder="Search by product…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon fontSize="small" />
-                </InputAdornment>
-              ),
-            }}
-            sx={{ width: 260 }}
-          />
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => {
-              setForm(defaultForm);
-              setFormError('');
-              setCreateOpen(true);
-            }}
-          >
-            New Recipe
-          </Button>
-        </Box>
+        <div className="flex justify-between items-center mb-4">
+          <div className="relative w-64">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input placeholder="Search by product…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+          </div>
+          <Button onClick={openCreate}><Plus className="mr-2 h-4 w-4" />New Recipe</Button>
+        </div>
 
         {isLoading ? (
-          <Box display="flex" justifyContent="center" mt={8}>
-            <CircularProgress />
-          </Box>
+          <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
         ) : filtered.length === 0 ? (
-          <Typography color="text.secondary" mt={4} textAlign="center">
-            No recipes found.
-          </Typography>
+          <p className="text-center text-muted-foreground py-12">No recipes found.</p>
         ) : (
-          <Box display="grid" gridTemplateColumns="repeat(auto-fill, minmax(340px, 1fr))" gap={3}>
-            {filtered.map((recipe) => (
-              <Card key={recipe.id}>
-                <CardContent>
-                  <Box display="flex" justifyContent="space-between" alignItems="flex-start">
-                    <Box>
-                      <Typography variant="h6" fontWeight={700}>
-                        {getProductName(recipe.productId)}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        Yield: {recipe.recipeYield} unit{recipe.recipeYield !== 1 ? 's' : ''}
-                      </Typography>
-                    </Box>
-                    <Box>
-                      <Tooltip title="View cost breakdown">
-                        <IconButton
-                          size="small"
-                          color="primary"
-                          onClick={() => handleViewCost(recipe)}
-                        >
-                          <CalculateIcon />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Delete">
-                        <IconButton
-                          size="small"
-                          color="error"
-                          onClick={() => setDeleteTarget(recipe)}
-                        >
-                          <DeleteIcon />
-                        </IconButton>
-                      </Tooltip>
-                    </Box>
-                  </Box>
-
-                  {recipe.notes && (
-                    <Typography variant="body2" color="text.secondary" mt={1} mb={1}>
-                      {recipe.notes}
-                    </Typography>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {filtered.map((r: Recipe) => (
+              <Card key={r.id} className="flex flex-col">
+                <CardHeader className="pb-2">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <CardTitle className="text-base">{r.product?.name ?? `Product #${r.productId}`}</CardTitle>
+                      <p className="text-xs text-muted-foreground mt-1">Yield: {r.recipeYield} · {r.items.length} ingredient{r.items.length !== 1 ? 's' : ''}</p>
+                    </div>
+                    <Badge variant="secondary"><CookingPot className="h-3 w-3 mr-1" />Recipe</Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="flex-1 pb-2">
+                  <button onClick={() => setExpandedId(expandedId === r.id ? null : r.id)} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mb-2">
+                    {expandedId === r.id ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                    {expandedId === r.id ? 'Hide' : 'Show'} ingredients
+                  </button>
+                  {expandedId === r.id && (
+                    <ul className="text-sm space-y-1">
+                      {r.items.map((item: RecipeItem) => (
+                        <li key={item.id} className="flex justify-between">
+                          <span>{matMap[item.materialId] ?? `#${item.materialId}`}</span>
+                          <span className="text-muted-foreground">{item.quantity} {item.unit}</span>
+                        </li>
+                      ))}
+                    </ul>
                   )}
-
-                  <Divider sx={{ my: 1 }} />
-
-                  {recipe.items?.map((item) => (
-                    <Box
-                      key={item.id}
-                      display="flex"
-                      justifyContent="space-between"
-                      py={0.4}
-                    >
-                      <Typography variant="body2">
-                        {getMaterialName(item.materialId)}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {item.quantity} {item.unit}
-                      </Typography>
-                    </Box>
-                  ))}
+                  {r.notes && <p className="text-xs text-muted-foreground mt-2 italic">{r.notes}</p>}
                 </CardContent>
+                <CardFooter className="gap-2 pt-0">
+                  <Button size="sm" variant="outline" onClick={() => showCost(r)}><DollarSign className="mr-1 h-3 w-3" />Cost</Button>
+                  <Button size="sm" variant="outline" onClick={() => openEdit(r)}>Edit</Button>
+                  <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive ml-auto" onClick={() => setDeleteTarget(r)}><Trash2 className="h-4 w-4" /></Button>
+                </CardFooter>
               </Card>
             ))}
-          </Box>
+          </div>
         )}
 
-        {/* Create Recipe Dialog */}
-        <Dialog
-          open={createOpen}
-          onClose={() => setCreateOpen(false)}
-          maxWidth="md"
-          fullWidth
-        >
-          <DialogTitle>New Recipe</DialogTitle>
-          <DialogContent sx={{ pt: 2 }}>
-            {formError && (
-              <Alert severity="error" sx={{ mb: 2 }}>
-                {formError}
-              </Alert>
-            )}
-            <Box display="flex" gap={2} mb={2}>
-              <FormControl sx={{ flex: 2 }} required>
-                <InputLabel>Product</InputLabel>
-                <Select
-                  value={form.productId}
-                  label="Product"
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, productId: e.target.value }))
-                  }
-                >
-                  {products.map((p) => (
-                    <MenuItem key={p.id} value={p.id.toString()}>
-                      {p.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              <TextField
-                label="Yield (units per batch)"
-                type="number"
-                sx={{ flex: 1 }}
-                value={form.recipeYield}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, recipeYield: e.target.value }))
-                }
-                inputProps={{ min: 0.01, step: 0.01 }}
-              />
-            </Box>
-            <TextField
-              label="Notes"
-              fullWidth
-              multiline
-              rows={2}
-              value={form.notes}
-              onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-              sx={{ mb: 3 }}
-            />
+        {/* Create / Edit Dialog */}
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+            <DialogHeader><DialogTitle>{editTarget ? 'Edit Recipe' : 'New Recipe'}</DialogTitle></DialogHeader>
+            <div className="space-y-4 py-2">
+              {formError && <Alert variant="destructive"><AlertDescription>{formError}</AlertDescription></Alert>}
+              {!editTarget && (
+                <div className="space-y-2">
+                  <Label>Product</Label>
+                  <Select value={productId} onValueChange={setProductId}>
+                    <SelectTrigger><SelectValue placeholder="Select product" /></SelectTrigger>
+                    <SelectContent>{products.map((p: Product) => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+              )}
+              <div className="space-y-2"><Label>Yield (batches)</Label><Input type="number" value={recipeYield} onChange={(e) => setRecipeYield(e.target.value)} /></div>
+              <div className="space-y-2"><Label>Notes</Label><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} /></div>
 
-            <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
-              <Typography variant="subtitle1" fontWeight={600}>
-                Ingredients
-              </Typography>
-              <Button
-                size="small"
-                startIcon={<AddCircleOutlineIcon />}
-                onClick={handleAddItem}
-              >
-                Add Ingredient
-              </Button>
-            </Box>
-
-            <Paper variant="outlined" sx={{ p: 2 }}>
-              {form.items.map((item, idx) => (
-                <Box key={idx} display="flex" gap={2} alignItems="center" mb={1.5}>
-                  <FormControl sx={{ flex: 3 }} size="small">
-                    <InputLabel>Material</InputLabel>
-                    <Select
-                      value={item.materialId}
-                      label="Material"
-                      onChange={(e) =>
-                        handleItemChange(idx, 'materialId', e.target.value)
-                      }
-                    >
-                      {materials.map((m) => (
-                        <MenuItem key={m.id} value={m.id.toString()}>
-                          {m.name} ({m.unit})
-                        </MenuItem>
-                      ))}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center"><Label>Ingredients</Label><Button type="button" size="sm" variant="outline" onClick={addIngredient}><Plus className="mr-1 h-3 w-3" />Add</Button></div>
+                {ingredients.map((ing, idx) => (
+                  <div key={idx} className="flex gap-2 items-end">
+                    <div className="flex-1">
+                      <Select value={String(ing.materialId || '')} onValueChange={(v) => updateIngredient(idx, 'materialId', parseInt(v))}>
+                        <SelectTrigger className="h-9"><SelectValue placeholder="Material" /></SelectTrigger>
+                        <SelectContent>{materials.map((m: Material) => <SelectItem key={m.id} value={String(m.id)}>{m.name}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                    <Input type="number" placeholder="Qty" value={ing.quantity} onChange={(e) => updateIngredient(idx, 'quantity', e.target.value)} className="w-20 h-9" />
+                    <Select value={ing.unit} onValueChange={(v) => updateIngredient(idx, 'unit', v)}>
+                      <SelectTrigger className="w-24 h-9"><SelectValue /></SelectTrigger>
+                      <SelectContent>{UNITS.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
                     </Select>
-                  </FormControl>
-                  <TextField
-                    label="Qty"
-                    type="number"
-                    size="small"
-                    sx={{ flex: 1 }}
-                    value={item.quantity}
-                    onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)}
-                    inputProps={{ min: 0, step: 0.01 }}
-                  />
-                  <FormControl sx={{ flex: 1 }} size="small">
-                    <InputLabel>Unit</InputLabel>
-                    <Select
-                      value={item.unit}
-                      label="Unit"
-                      onChange={(e) => handleItemChange(idx, 'unit', e.target.value)}
-                    >
-                      {UNITS.map((u) => (
-                        <MenuItem key={u} value={u}>
-                          {u}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                  <IconButton
-                    size="small"
-                    color="error"
-                    onClick={() => handleRemoveItem(idx)}
-                    disabled={form.items.length === 1}
-                  >
-                    <RemoveCircleOutlineIcon />
-                  </IconButton>
-                </Box>
-              ))}
-            </Paper>
+                    <Button type="button" variant="ghost" size="icon" className="h-9 w-9 text-destructive" onClick={() => removeIngredient(idx)}><Trash2 className="h-4 w-4" /></Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+              <Button onClick={handleSave} disabled={saving}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}</Button>
+            </DialogFooter>
           </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 2 }}>
-            <Button onClick={() => setCreateOpen(false)}>Cancel</Button>
-            <Button
-              variant="contained"
-              onClick={handleSave}
-              disabled={createMutation.isPending}
-            >
-              {createMutation.isPending ? <CircularProgress size={18} /> : 'Create Recipe'}
-            </Button>
-          </DialogActions>
         </Dialog>
 
         {/* Cost Breakdown Dialog */}
-        <Dialog
-          open={!!costRecipe || costLoading}
-          onClose={() => setCostRecipe(null)}
-          maxWidth="sm"
-          fullWidth
-        >
-          <DialogTitle>Cost Breakdown</DialogTitle>
-          <DialogContent>
+        <Dialog open={costDialogOpen} onOpenChange={setCostDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader><DialogTitle>Cost Breakdown</DialogTitle></DialogHeader>
             {costLoading ? (
-              <Box display="flex" justifyContent="center" py={4}>
-                <CircularProgress />
-              </Box>
-            ) : costRecipe ? (
-              <>
-                <Typography variant="h6" mb={0.5}>
-                  {costRecipe.productName}
-                </Typography>
-                <Typography variant="body2" color="text.secondary" mb={2}>
-                  Yield: {costRecipe.recipeYield} unit
-                  {costRecipe.recipeYield !== 1 ? 's' : ''} per batch
-                </Typography>
-
-                <TableContainer component={Paper} variant="outlined" sx={{ mb: 2 }}>
-                  <Table size="small">
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Ingredient</TableCell>
-                        <TableCell align="right">Qty</TableCell>
-                        <TableCell align="right">Cost</TableCell>
+              <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div>
+            ) : costTarget ? (
+              <div className="space-y-4">
+                <div className="text-sm space-y-1">
+                  <p><strong>{costTarget.productName}</strong></p>
+                  <p className="text-muted-foreground">Yield: {costTarget.recipeYield} · Price: ₱{Number(costTarget.productPrice).toFixed(2)}</p>
+                </div>
+                <Table>
+                  <TableHeader><TableRow><TableHead>Material</TableHead><TableHead className="text-right">Qty</TableHead><TableHead className="text-right">Cost</TableHead></TableRow></TableHeader>
+                  <TableBody>
+                    {costTarget.items.map((i) => (
+                      <TableRow key={i.materialId}>
+                        <TableCell>{i.materialName}</TableCell>
+                        <TableCell className="text-right">{i.quantity} {i.unit}</TableCell>
+                        <TableCell className="text-right">₱{i.cost.toFixed(2)}</TableCell>
                       </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {costRecipe.items.map((item) => (
-                        <TableRow key={item.materialId}>
-                          <TableCell>{item.materialName}</TableCell>
-                          <TableCell align="right">
-                            {item.quantity} {item.unit}
-                          </TableCell>
-                          <TableCell align="right">
-                            ₱{item.cost.toFixed(2)}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-
-                <Box
-                  sx={{
-                    bgcolor: 'background.default',
-                    borderRadius: 2,
-                    p: 2,
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
-                    gap: 1,
-                  }}
-                >
-                  <Typography variant="body2" color="text.secondary">
-                    Total Batch Cost
-                  </Typography>
-                  <Typography variant="body2" fontWeight={700} textAlign="right">
-                    ₱{costRecipe.totalBatchCost.toFixed(2)}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Cost per Unit
-                  </Typography>
-                  <Typography variant="body2" fontWeight={700} textAlign="right">
-                    ₱{costRecipe.costPerUnit.toFixed(2)}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Selling Price
-                  </Typography>
-                  <Typography variant="body2" fontWeight={700} textAlign="right">
-                    ₱{(costRecipe.productPrice ?? 0).toFixed(2)}
-                  </Typography>
-                  <Divider sx={{ gridColumn: '1/-1' }} />
-                  <Typography variant="body2" fontWeight={700}>
-                    Gross Margin
-                  </Typography>
-                  <Typography
-                    variant="body2"
-                    fontWeight={700}
-                    textAlign="right"
-                    color={
-                      costRecipe.grossMargin >= 0 ? 'success.main' : 'error.main'
-                    }
-                  >
-                    {(costRecipe.grossMargin * 100).toFixed(1)}%
-                  </Typography>
-                </Box>
-              </>
-            ) : null}
+                    ))}
+                  </TableBody>
+                </Table>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="p-2 rounded bg-muted"><p className="text-muted-foreground">Batch Cost</p><p className="font-semibold">₱{costTarget.totalBatchCost.toFixed(2)}</p></div>
+                  <div className="p-2 rounded bg-muted"><p className="text-muted-foreground">Cost / Unit</p><p className="font-semibold">₱{costTarget.costPerUnit.toFixed(2)}</p></div>
+                  <div className="p-2 rounded bg-muted col-span-2"><p className="text-muted-foreground">Gross Margin</p><p className="font-semibold">{(costTarget.grossMargin * 100).toFixed(1)}%</p></div>
+                </div>
+              </div>
+            ) : <p className="text-muted-foreground text-center py-4">Unable to load cost data.</p>}
           </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 2 }}>
-            <Button onClick={() => setCostRecipe(null)}>Close</Button>
-          </DialogActions>
         </Dialog>
 
-        {/* Delete Confirm */}
-        <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} maxWidth="xs" fullWidth>
-          <DialogTitle>Delete Recipe</DialogTitle>
-          <DialogContent>
-            <Typography>
-              Delete recipe for{' '}
-              <strong>{getProductName(deleteTarget?.productId ?? 0)}</strong>?
-            </Typography>
-          </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 2 }}>
-            <Button onClick={() => setDeleteTarget(null)}>Cancel</Button>
-            <Button
-              variant="contained"
-              color="error"
-              disabled={deleteMutation.isPending}
-              onClick={() => {
-                if (deleteTarget) {
-                  deleteMutation.mutate(deleteTarget.id, {
-                    onSuccess: () => setDeleteTarget(null),
-                  });
-                }
-              }}
-            >
-              {deleteMutation.isPending ? <CircularProgress size={18} /> : 'Delete'}
-            </Button>
-          </DialogActions>
-        </Dialog>
+        <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader><AlertDialogTitle>Delete Recipe</AlertDialogTitle><AlertDialogDescription>Delete recipe for <strong>{deleteTarget?.product?.name}</strong>?</AlertDialogDescription></AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" disabled={deleteMut.isPending} onClick={() => { if (deleteTarget) deleteMut.mutate(deleteTarget.id); }}>
+                {deleteMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Delete'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </AppLayout>
     </AuthGuard>
   );

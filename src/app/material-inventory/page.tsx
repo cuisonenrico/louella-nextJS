@@ -1,439 +1,215 @@
-"use client";
+'use client';
 
-import {
-  Alert,
-  Box,
-  Button,
-  Chip,
-  CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  FormControl,
-  IconButton,
-  InputLabel,
-  MenuItem,
-  Paper,
-  Select,
-  Snackbar,
-  TextField,
-  Typography,
-} from "@mui/material";
-import { DataGrid, GridColDef, GridRenderCellParams } from "@mui/x-data-grid";
-import AddIcon from "@mui/icons-material/Add";
-import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
-import ChevronRightIcon from "@mui/icons-material/ChevronRight";
-import DeleteIcon from "@mui/icons-material/Delete";
-import EditIcon from "@mui/icons-material/Edit";
-import TuneIcon from "@mui/icons-material/Tune";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
-import AppLayout from "@/components/layout/AppLayout";
-import AuthGuard from "@/components/AuthGuard";
-import {
-  materialAdjustmentsApi,
-  materialInventoryApi,
-  materialsApi,
-  suppliersApi,
-} from "@/lib/apiServices";
-import type { Material, MaterialAdjustment, MaterialInventory, Supplier } from "@/types";
+import { useEffect, useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ChevronLeft, ChevronRight, Loader2, Plus, Trash2, Pencil, Settings2 } from 'lucide-react';
+import AppLayout from '@/components/layout/AppLayout';
+import AuthGuard from '@/components/AuthGuard';
+import { materialAdjustmentsApi, materialInventoryApi, materialsApi, suppliersApi } from '@/lib/apiServices';
+import type { Material, MaterialAdjustment, MaterialInventory, Supplier } from '@/types';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
-function todayStr() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function addDays(dateStr: string, days: number) {
-  const d = new Date(dateStr);
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-
+function todayStr() { return new Date().toISOString().slice(0, 10); }
+function addDays(dateStr: string, days: number) { const d = new Date(dateStr); d.setDate(d.getDate() + days); return d.toISOString().slice(0, 10); }
 function extractError(err: unknown): string {
-  const msg = (
-    err as { response?: { data?: { message?: string | string[] } } }
-  )?.response?.data?.message;
-  return Array.isArray(msg) ? msg.join(", ") : (msg ?? "An error occurred");
+  const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
+  return Array.isArray(msg) ? msg.join(', ') : (msg ?? 'An error occurred');
 }
 
-const ADJ_COLORS: Record<string, "success" | "warning" | "error"> = {
-  PULL_IN: "success",
-  PULL_OUT: "warning",
-  ANOMALY: "error",
-};
+const ADJ_COLORS: Record<string, string> = { PULL_IN: 'bg-green-100 text-green-800 border-green-300', PULL_OUT: 'bg-amber-100 text-amber-800 border-amber-300', ANOMALY: 'bg-red-100 text-red-800 border-red-300' };
 
-const GRID_SX = {
-  border: 1,
-  borderColor: "divider",
-  borderRadius: 1,
-  "& .MuiDataGrid-columnHeader": { bgcolor: "grey.100", fontWeight: 700 },
-} as const;
-
-// ── Adjustments Dialog ────────────────────────────────────────────────────────
-interface AdjDialogProps {
-  record: MaterialInventory | null;
-  onClose: () => void;
-}
-
-function AdjustmentsDialog({ record, onClose }: AdjDialogProps) {
+// ── Adjustments Dialog ──
+function AdjustmentsDialog({ record, onClose }: { record: MaterialInventory | null; onClose: () => void }) {
   const qc = useQueryClient();
-  const [type, setType] = useState<"PULL_IN" | "PULL_OUT" | "ANOMALY">("PULL_OUT");
-  const [value, setValue] = useState("");
-  const [notes, setNotes] = useState("");
-  const [formErr, setFormErr] = useState("");
+  const [type, setType] = useState<'PULL_IN' | 'PULL_OUT' | 'ANOMALY'>('PULL_OUT');
+  const [value, setValue] = useState('');
+  const [notes, setNotes] = useState('');
+  const [formErr, setFormErr] = useState('');
 
   const adjustments: MaterialAdjustment[] = record?.adjustments ?? [];
 
   const createAdj = useMutation({
-    mutationFn: () =>
-      materialAdjustmentsApi.create({
-        materialInventoryId: record!.id,
-        type,
-        value: parseFloat(value),
-        notes: notes || undefined,
-      }),
-    onSuccess: () => {
-      setValue("");
-      setNotes("");
-      setFormErr("");
-      qc.invalidateQueries({ queryKey: ["material-inventory"] });
-    },
+    mutationFn: () => materialAdjustmentsApi.create({ materialInventoryId: record!.id, type, value: parseFloat(value), notes: notes || undefined }),
+    onSuccess: () => { setValue(''); setNotes(''); setFormErr(''); qc.invalidateQueries({ queryKey: ['material-inventory'] }); },
     onError: (e) => setFormErr(extractError(e)),
   });
 
   const deleteAdj = useMutation({
     mutationFn: (id: number) => materialAdjustmentsApi.delete(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["material-inventory"] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['material-inventory'] }),
     onError: (e) => setFormErr(extractError(e)),
   });
 
   if (!record) return null;
 
   return (
-    <Dialog open={!!record} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>
-        Adjustments — {record.material?.name ?? `ID ${record.materialId}`}
-      </DialogTitle>
-      <DialogContent
-        sx={{ display: "flex", flexDirection: "column", gap: 2, pt: "12px !important" }}
-      >
-        {adjustments.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">
-            No adjustments yet.
-          </Typography>
-        ) : (
-          <Box display="flex" flexDirection="column" gap={1}>
-            {adjustments.map((adj) => (
-              <Box key={adj.id} display="flex" alignItems="center" gap={1}>
-                <Chip
-                  label={adj.type}
-                  size="small"
-                  color={ADJ_COLORS[adj.type] ?? "default"}
-                  sx={{ minWidth: 80 }}
-                />
-                <Typography variant="body2" fontWeight={600}>
-                  {adj.value}
-                </Typography>
-                {adj.notes && (
-                  <Typography variant="body2" color="text.secondary" sx={{ flexGrow: 1 }}>
-                    {adj.notes}
-                  </Typography>
-                )}
-                <IconButton
-                  size="small"
-                  color="error"
-                  onClick={() => deleteAdj.mutate(adj.id)}
-                  disabled={deleteAdj.isPending}
-                >
-                  <DeleteIcon fontSize="small" />
-                </IconButton>
-              </Box>
-            ))}
-          </Box>
-        )}
-
-        <Typography variant="subtitle2" fontWeight={700} mt={1}>
-          Add Adjustment
-        </Typography>
-        <Box display="flex" gap={1} flexWrap="wrap">
-          <FormControl size="small" sx={{ minWidth: 130 }}>
-            <InputLabel>Type</InputLabel>
-            <Select
-              value={type}
-              label="Type"
-              onChange={(e) => setType(e.target.value as typeof type)}
-            >
-              <MenuItem value="PULL_IN">Pull In</MenuItem>
-              <MenuItem value="PULL_OUT">Pull Out</MenuItem>
-              <MenuItem value="ANOMALY">Anomaly</MenuItem>
-            </Select>
-          </FormControl>
-          <TextField
-            size="small"
-            label="Value"
-            type="number"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            inputProps={{ min: 0, step: 0.01 }}
-            sx={{ width: 120 }}
-          />
-          <TextField
-            size="small"
-            label="Notes"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            sx={{ flexGrow: 1, minWidth: 140 }}
-          />
-          <Button
-            variant="contained"
-            size="small"
-            disabled={!value || parseFloat(value) <= 0 || createAdj.isPending}
-            onClick={() => createAdj.mutate()}
-          >
-            {createAdj.isPending ? <CircularProgress size={16} /> : "Add"}
-          </Button>
-        </Box>
-        {formErr && <Alert severity="error">{formErr}</Alert>}
+    <Dialog open={!!record} onOpenChange={() => onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader><DialogTitle>Adjustments — {record.material?.name ?? `ID ${record.materialId}`}</DialogTitle></DialogHeader>
+        <div className="space-y-4">
+          {adjustments.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No adjustments yet.</p>
+          ) : (
+            <div className="space-y-1">
+              {adjustments.map((adj) => (
+                <div key={adj.id} className="flex items-center gap-2 py-1.5 border-b">
+                  <Badge variant="outline" className={ADJ_COLORS[adj.type]}>{adj.type}</Badge>
+                  <span className="text-sm font-semibold">{adj.value}</span>
+                  {adj.notes && <span className="text-sm text-muted-foreground flex-grow">{adj.notes}</span>}
+                  <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" disabled={deleteAdj.isPending} onClick={() => deleteAdj.mutate(adj.id)}>
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+          <Separator />
+          <p className="text-sm font-bold">Add Adjustment</p>
+          <div className="flex gap-2 flex-wrap items-end">
+            <div className="min-w-[120px]">
+              <Label className="text-xs">Type</Label>
+              <Select value={type} onValueChange={(v) => setType(v as typeof type)}>
+                <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="PULL_IN">Pull In</SelectItem>
+                  <SelectItem value="PULL_OUT">Pull Out</SelectItem>
+                  <SelectItem value="ANOMALY">Anomaly</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="w-[100px]">
+              <Label className="text-xs">Value</Label>
+              <Input type="number" value={value} onChange={(e) => setValue(e.target.value)} min={0} step={0.01} className="h-8" />
+            </div>
+            <div className="flex-grow min-w-[120px]">
+              <Label className="text-xs">Notes</Label>
+              <Input value={notes} onChange={(e) => setNotes(e.target.value)} className="h-8" />
+            </div>
+            <Button size="sm" disabled={!value || parseFloat(value) <= 0 || createAdj.isPending} onClick={() => createAdj.mutate()}>
+              {createAdj.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Add'}
+            </Button>
+          </div>
+          {formErr && <Alert variant="destructive"><AlertDescription>{formErr}</AlertDescription></Alert>}
+        </div>
+        <DialogFooter><Button variant="outline" onClick={onClose}>Close</Button></DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Close</Button>
-      </DialogActions>
     </Dialog>
   );
 }
 
-// ── Stock Card Dialog ─────────────────────────────────────────────────────────
-interface StockCardDialogProps {
-  open: boolean;
-  editRecord: MaterialInventory | null;
-  filterDate: string;
-  materials: Material[];
-  suppliers: Supplier[];
-  onClose: () => void;
-  onSaved: () => void;
-}
+// ── Stock Card Dialog ──
+interface StockForm { materialId: string; date: string; supplierId: string; quantity: string; delivery: string; batchNumber: string; notes: string; }
 
-interface StockForm {
-  materialId: string;
-  date: string;
-  supplierId: string;
-  quantity: string;
-  delivery: string;
-  batchNumber: string;
-  notes: string;
-}
-
-function StockCardDialog({
-  open,
-  editRecord,
-  filterDate,
-  materials,
-  suppliers,
-  onClose,
-  onSaved,
-}: StockCardDialogProps) {
-  const [form, setForm] = useState<StockForm>({
-    materialId: "",
-    date: filterDate,
-    supplierId: "",
-    quantity: "0",
-    delivery: "0",
-    batchNumber: "",
-    notes: "",
-  });
-  const [err, setErr] = useState("");
+function StockCardDialog({ open, editRecord, filterDate, materials, suppliers, onClose, onSaved }: {
+  open: boolean; editRecord: MaterialInventory | null; filterDate: string; materials: Material[]; suppliers: Supplier[]; onClose: () => void; onSaved: () => void;
+}) {
+  const [form, setForm] = useState<StockForm>({ materialId: '', date: filterDate, supplierId: '', quantity: '0', delivery: '0', batchNumber: '', notes: '' });
+  const [err, setErr] = useState('');
 
   useEffect(() => {
     if (!open) return;
     if (editRecord) {
-      setForm({
-        materialId: String(editRecord.materialId),
-        date: editRecord.date?.slice(0, 10) ?? filterDate,
-        supplierId: editRecord.supplierId ? String(editRecord.supplierId) : "",
-        quantity: String(editRecord.quantity),
-        delivery: String(editRecord.delivery),
-        batchNumber: editRecord.batchNumber ?? "",
-        notes: editRecord.notes ?? "",
-      });
+      setForm({ materialId: String(editRecord.materialId), date: editRecord.date?.slice(0, 10) ?? filterDate, supplierId: editRecord.supplierId ? String(editRecord.supplierId) : '', quantity: String(editRecord.quantity), delivery: String(editRecord.delivery), batchNumber: editRecord.batchNumber ?? '', notes: editRecord.notes ?? '' });
     } else {
-      setForm({
-        materialId: "",
-        date: filterDate,
-        supplierId: "",
-        quantity: "0",
-        delivery: "0",
-        batchNumber: "",
-        notes: "",
-      });
+      setForm({ materialId: '', date: filterDate, supplierId: '', quantity: '0', delivery: '0', batchNumber: '', notes: '' });
     }
-    setErr("");
+    setErr('');
   }, [open, editRecord, filterDate]);
 
   const saveMutation = useMutation({
     mutationFn: () => {
-      const payload = {
-        materialId: parseInt(form.materialId),
-        date: form.date,
-        supplierId: form.supplierId ? parseInt(form.supplierId) : undefined,
-        quantity: parseFloat(form.quantity) || 0,
-        delivery: parseFloat(form.delivery) || 0,
-        batchNumber: form.batchNumber || undefined,
-        notes: form.notes || undefined,
-      };
-      if (editRecord) {
-        return materialInventoryApi.update(editRecord.id, payload as Partial<MaterialInventory>);
-      }
+      const payload = { materialId: parseInt(form.materialId), date: form.date, supplierId: form.supplierId ? parseInt(form.supplierId) : undefined, quantity: parseFloat(form.quantity) || 0, delivery: parseFloat(form.delivery) || 0, batchNumber: form.batchNumber || undefined, notes: form.notes || undefined };
+      if (editRecord) return materialInventoryApi.update(editRecord.id, payload as Partial<MaterialInventory>);
       return materialInventoryApi.create(payload as Partial<MaterialInventory>);
     },
-    onSuccess: () => {
-      onSaved();
-      onClose();
-    },
+    onSuccess: () => { onSaved(); onClose(); },
     onError: (e) => setErr(extractError(e)),
   });
 
-  const set =
-    (field: keyof StockForm) => (e: React.ChangeEvent<HTMLInputElement>) =>
-      setForm((prev) => ({ ...prev, [field]: e.target.value }));
+  const set = (field: keyof StockForm) => (e: React.ChangeEvent<HTMLInputElement>) => setForm((prev) => ({ ...prev, [field]: e.target.value }));
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>{editRecord ? "Edit Stock Card" : "New Stock Card"}</DialogTitle>
-      <DialogContent
-        sx={{ display: "flex", flexDirection: "column", gap: 2, pt: "16px !important" }}
-      >
-        <TextField
-          size="small"
-          label="Date"
-          type="date"
-          value={form.date}
-          onChange={set("date")}
-          fullWidth
-          InputLabelProps={{ shrink: true }}
-        />
-        <FormControl fullWidth size="small" disabled={!!editRecord}>
-          <InputLabel>Material *</InputLabel>
-          <Select
-            value={form.materialId}
-            label="Material *"
-            onChange={(e) => setForm((prev) => ({ ...prev, materialId: e.target.value }))}
-          >
-            {materials.map((m) => (
-              <MenuItem key={m.id} value={String(m.id)}>
-                {m.name} ({m.unit})
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-        <FormControl fullWidth size="small">
-          <InputLabel>Supplier</InputLabel>
-          <Select
-            value={form.supplierId}
-            label="Supplier"
-            onChange={(e) => setForm((prev) => ({ ...prev, supplierId: e.target.value }))}
-          >
-            <MenuItem value="">— None —</MenuItem>
-            {suppliers
-              .filter((s) => s.isActive)
-              .map((s) => (
-                <MenuItem key={s.id} value={String(s.id)}>
-                  {s.name}
-                </MenuItem>
-              ))}
-          </Select>
-        </FormControl>
-        <Box display="flex" gap={2}>
-          <TextField
-            size="small"
-            label="Opening Stock"
-            type="number"
-            value={form.quantity}
-            onChange={set("quantity")}
-            inputProps={{ min: 0, step: 0.01 }}
-            fullWidth
-          />
-          <TextField
-            size="small"
-            label="Delivery"
-            type="number"
-            value={form.delivery}
-            onChange={set("delivery")}
-            inputProps={{ min: 0, step: 0.01 }}
-            fullWidth
-          />
-        </Box>
-        <Box display="flex" gap={2}>
-          <TextField
-            size="small"
-            label="Batch Number"
-            value={form.batchNumber}
-            onChange={set("batchNumber")}
-            fullWidth
-          />
-          <TextField
-            size="small"
-            label="Notes"
-            value={form.notes}
-            onChange={set("notes")}
-            fullWidth
-          />
-        </Box>
-        {err && <Alert severity="error">{err}</Alert>}
+    <Dialog open={open} onOpenChange={() => onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader><DialogTitle>{editRecord ? 'Edit Stock Card' : 'New Stock Card'}</DialogTitle></DialogHeader>
+        <div className="space-y-3 py-2">
+          <div className="space-y-1"><Label className="text-xs">Date</Label><Input type="date" value={form.date} onChange={set('date')} /></div>
+          <div className="space-y-1">
+            <Label className="text-xs">Material *</Label>
+            <Select value={form.materialId} onValueChange={(v) => setForm((p) => ({ ...p, materialId: v }))} disabled={!!editRecord}>
+              <SelectTrigger><SelectValue placeholder="Select material" /></SelectTrigger>
+              <SelectContent>{materials.map((m) => <SelectItem key={m.id} value={String(m.id)}>{m.name} ({m.unit})</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Supplier</Label>
+            <Select value={form.supplierId} onValueChange={(v) => setForm((p) => ({ ...p, supplierId: v }))}>
+              <SelectTrigger><SelectValue placeholder="— None —" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">— None —</SelectItem>
+                {suppliers.filter((s) => s.isActive).map((s) => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex gap-3">
+            <div className="flex-1 space-y-1"><Label className="text-xs">Opening Stock</Label><Input type="number" value={form.quantity} onChange={set('quantity')} min={0} step={0.01} /></div>
+            <div className="flex-1 space-y-1"><Label className="text-xs">Delivery</Label><Input type="number" value={form.delivery} onChange={set('delivery')} min={0} step={0.01} /></div>
+          </div>
+          <div className="flex gap-3">
+            <div className="flex-1 space-y-1"><Label className="text-xs">Batch Number</Label><Input value={form.batchNumber} onChange={set('batchNumber')} /></div>
+            <div className="flex-1 space-y-1"><Label className="text-xs">Notes</Label><Input value={form.notes} onChange={set('notes')} /></div>
+          </div>
+          {err && <Alert variant="destructive"><AlertDescription>{err}</AlertDescription></Alert>}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button disabled={!form.materialId || !form.date || saveMutation.isPending} onClick={() => saveMutation.mutate()}>
+            {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
+          </Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
-        <Button
-          variant="contained"
-          disabled={!form.materialId || !form.date || saveMutation.isPending}
-          onClick={() => saveMutation.mutate()}
-        >
-          {saveMutation.isPending ? <CircularProgress size={18} /> : "Save"}
-        </Button>
-      </DialogActions>
     </Dialog>
   );
 }
 
-// ── Main Page ─────────────────────────────────────────────────────────────────
+// ── Main Page ──
 export default function MaterialInventoryPage() {
   const qc = useQueryClient();
   const [filterDate, setFilterDate] = useState(todayStr());
   const [stockDialogOpen, setStockDialogOpen] = useState(false);
   const [editRecord, setEditRecord] = useState<MaterialInventory | null>(null);
   const [adjRecord, setAdjRecord] = useState<MaterialInventory | null>(null);
-  const [snackMsg, setSnackMsg] = useState("");
-  const [snackErr, setSnackErr] = useState("");
+  const [snackMsg, setSnackMsg] = useState('');
+  const [snackErr, setSnackErr] = useState('');
 
-  const { data: materials = [] } = useQuery<Material[]>({
-    queryKey: ["materials"],
-    queryFn: () => materialsApi.list().then((r) => r.data),
-  });
-
-  const { data: suppliers = [] } = useQuery<Supplier[]>({
-    queryKey: ["suppliers"],
-    queryFn: () => suppliersApi.list().then((r) => r.data),
-  });
-
+  const { data: materials = [] } = useQuery<Material[]>({ queryKey: ['materials'], queryFn: () => materialsApi.list().then((r) => r.data) });
+  const { data: suppliers = [] } = useQuery<Supplier[]>({ queryKey: ['suppliers'], queryFn: () => suppliersApi.list().then((r) => r.data) });
   const { data: rows = [], isLoading } = useQuery<MaterialInventory[]>({
-    queryKey: ["material-inventory", filterDate],
+    queryKey: ['material-inventory', filterDate],
     queryFn: () => materialInventoryApi.byDate(filterDate).then((r) => r.data),
     enabled: !!filterDate,
   });
 
   const initMutation = useMutation({
     mutationFn: () => materialInventoryApi.initDate(filterDate).then((r) => r.data),
-    onSuccess: (res) => {
-      qc.invalidateQueries({ queryKey: ["material-inventory", filterDate] });
-      setSnackMsg(`Initialized ${res.created} records for ${filterDate}`);
-    },
-    onError: (e) => setSnackErr(extractError(e)),
+    onSuccess: (res) => { qc.invalidateQueries({ queryKey: ['material-inventory', filterDate] }); setSnackMsg(`Initialized ${res.created} records for ${filterDate}`); setTimeout(() => setSnackMsg(''), 4000); },
+    onError: (e) => { setSnackErr(extractError(e)); setTimeout(() => setSnackErr(''), 4000); },
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => materialInventoryApi.delete(id),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: ["material-inventory", filterDate] }),
-    onError: (e) => setSnackErr(extractError(e)),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['material-inventory', filterDate] }),
+    onError: (e) => { setSnackErr(extractError(e)); setTimeout(() => setSnackErr(''), 4000); },
   });
 
   const summary = useMemo(() => {
@@ -441,331 +217,154 @@ export default function MaterialInventoryPage() {
     let totalClosingCost = 0;
     let totalCostUsed = 0;
     for (const r of rows) {
-      const price =
-        r.material?.pricePerUnit ??
-        materials.find((m) => m.id === r.materialId)?.pricePerUnit ??
-        0;
-      totalClosingCost += Math.max(0, r.quantity + r.delivery - r.used) * price;
-      totalCostUsed += r.used * price;
+      const price = r.material?.pricePerUnit ?? materials.find((m) => m.id === r.materialId)?.pricePerUnit ?? 0;
+      totalClosingCost += Math.max(0, r.quantity + r.delivery - r.used) * Number(price);
+      totalCostUsed += r.used * Number(price);
     }
     return { totalClosingCost, totalCostUsed };
   }, [rows, materials]);
 
-  const columns = useMemo<GridColDef[]>(
-    () => [
-      {
-        field: "material",
-        headerName: "Material",
-        flex: 1.5,
-        minWidth: 130,
-        valueGetter: (_v: unknown, row: MaterialInventory) =>
-          row.material?.name ?? `#${row.materialId}`,
-      },
-      {
-        field: "unit",
-        headerName: "Unit",
-        width: 70,
-        valueGetter: (_v: unknown, row: MaterialInventory) =>
-          row.material?.unit ?? "",
-      },
-      {
-        field: "pricePerUnit",
-        headerName: "Price/Unit",
-        width: 105,
-        headerAlign: "right",
-        align: "right",
-        valueGetter: (_v: unknown, row: MaterialInventory) =>
-          row.material?.pricePerUnit ??
-          materials.find((m) => m.id === row.materialId)?.pricePerUnit ??
-          0,
-        renderCell: (params: GridRenderCellParams) => (
-          <Typography variant="body2" color="text.secondary">
-            ₱{(params.value as number).toLocaleString()}
-          </Typography>
-        ),
-      },
-      {
-        field: "quantity",
-        headerName: "Opening",
-        type: "number",
-        width: 90,
-        headerAlign: "center",
-        align: "center",
-      },
-      {
-        field: "delivery",
-        headerName: "Delivery",
-        type: "number",
-        width: 90,
-        headerAlign: "center",
-        align: "center",
-      },
-      {
-        field: "used",
-        headerName: "Used",
-        type: "number",
-        width: 80,
-        headerAlign: "center",
-        align: "center",
-        renderCell: (params: GridRenderCellParams) => {
-          const used = (params.value as number) ?? 0;
-          return (
-            <Chip
-              label={used}
-              size="small"
-              color={used > 0 ? "success" : "default"}
-              sx={{ fontWeight: 600, minWidth: 40 }}
-            />
-          );
-        },
-      },
-      {
-        field: "closing",
-        headerName: "Closing",
-        type: "number",
-        width: 90,
-        headerAlign: "center",
-        align: "center",
-        valueGetter: (_v: unknown, row: MaterialInventory) =>
-          Math.max(0, row.quantity + row.delivery - row.used),
-        renderCell: (params: GridRenderCellParams) => (
-          <Typography variant="body2" fontWeight={700}>
-            {params.value as number}
-          </Typography>
-        ),
-      },
-      {
-        field: "costUsed",
-        headerName: "Cost Used",
-        width: 115,
-        headerAlign: "right",
-        align: "right",
-        valueGetter: (_v: unknown, row: MaterialInventory) => {
-          const price =
-            row.material?.pricePerUnit ??
-            materials.find((m) => m.id === row.materialId)?.pricePerUnit ??
-            0;
-          return row.used * price;
-        },
-        renderCell: (params: GridRenderCellParams) => (
-          <Typography variant="body2" fontWeight={600} color="success.main">
-            ₱{(params.value as number).toLocaleString()}
-          </Typography>
-        ),
-      },
-      {
-        field: "inventoryCost",
-        headerName: "Closing Cost",
-        width: 130,
-        headerAlign: "right",
-        align: "right",
-        valueGetter: (_v: unknown, row: MaterialInventory) => {
-          const price =
-            row.material?.pricePerUnit ??
-            materials.find((m) => m.id === row.materialId)?.pricePerUnit ??
-            0;
-          return Math.max(0, row.quantity + row.delivery - row.used) * price;
-        },
-        renderCell: (params: GridRenderCellParams) => (
-          <Typography variant="body2" fontWeight={600} color="primary.main">
-            ₱{(params.value as number).toLocaleString()}
-          </Typography>
-        ),
-      },
-      {
-        field: "_actions",
-        headerName: "",
-        width: 100,
-        sortable: false,
-        renderCell: (params: GridRenderCellParams<MaterialInventory>) => (
-          <Box display="flex" gap={0.5}>
-            <IconButton
-              size="small"
-              onClick={() => {
-                setEditRecord(params.row);
-                setStockDialogOpen(true);
-              }}
-              title="Edit"
-            >
-              <EditIcon fontSize="small" />
-            </IconButton>
-            <IconButton
-              size="small"
-              color="secondary"
-              onClick={() => setAdjRecord(params.row)}
-              title="Adjustments"
-            >
-              <TuneIcon fontSize="small" />
-            </IconButton>
-            <IconButton
-              size="small"
-              color="error"
-              onClick={() => deleteMutation.mutate(params.row.id)}
-              disabled={deleteMutation.isPending}
-              title="Delete"
-            >
-              <DeleteIcon fontSize="small" />
-            </IconButton>
-          </Box>
-        ),
-      },
-    ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [materials, deleteMutation.isPending],
-  );
-
   return (
     <AuthGuard>
       <AppLayout title="Material Inventory">
-        {/* Date navigation */}
-        <Box display="flex" alignItems="center" gap={1} mb={2} flexWrap="wrap">
-          <IconButton size="small" onClick={() => setFilterDate(addDays(filterDate, -1))}>
-            <ChevronLeftIcon />
-          </IconButton>
-          <TextField
-            size="small"
-            type="date"
-            value={filterDate}
-            onChange={(e) => setFilterDate(e.target.value)}
-            sx={{ width: 160 }}
-            InputLabelProps={{ shrink: true }}
-          />
-          <IconButton
-            size="small"
-            onClick={() => setFilterDate(addDays(filterDate, 1))}
-            disabled={filterDate >= todayStr()}
-          >
-            <ChevronRightIcon />
-          </IconButton>
-          <Button size="small" variant="outlined" onClick={() => setFilterDate(todayStr())}>
-            Today
-          </Button>
-          <Box flexGrow={1} />
-          <Button
-            size="small"
-            variant="outlined"
-            color="secondary"
-            disabled={initMutation.isPending}
-            onClick={() => initMutation.mutate()}
-          >
-            {initMutation.isPending ? <CircularProgress size={16} /> : `Init ${filterDate}`}
-          </Button>
-          <Button
-            variant="contained"
-            size="small"
-            startIcon={<AddIcon />}
-            onClick={() => {
-              setEditRecord(null);
-              setStockDialogOpen(true);
-            }}
-          >
-            New Stock Card
-          </Button>
-        </Box>
-
-        {/* Summary */}
-        {summary && (
-          <Box
-            display="grid"
-            gridTemplateColumns="repeat(auto-fill, minmax(220px, 1fr))"
-            gap={2}
-            mb={3}
-          >
-            {[
-              {
-                label: "CLOSING INVENTORY VALUE",
-                value: `₱${summary.totalClosingCost.toLocaleString()}`,
-                color: "primary.main",
-              },
-              {
-                label: "TOTAL COST USED",
-                value: `₱${summary.totalCostUsed.toLocaleString()}`,
-                color: "success.main",
-              },
-            ].map(({ label, value, color }) => (
-              <Paper key={label} variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  fontWeight={600}
-                  sx={{ letterSpacing: 0.5 }}
-                >
-                  {label}
-                </Typography>
-                <Typography variant="h5" fontWeight={700} color={color} mt={0.25}>
-                  {value}
-                </Typography>
-              </Paper>
-            ))}
-          </Box>
-        )}
-
-        {/* Grid */}
-        {isLoading ? (
-          <Box display="flex" justifyContent="center" py={6}>
-            <CircularProgress />
-          </Box>
-        ) : rows.length === 0 ? (
-          <Box display="flex" flexDirection="column" alignItems="center" gap={2} py={8}>
-            <Typography color="text.secondary">
-              No stock entries for {filterDate}.
-            </Typography>
-            <Button
-              variant="contained"
-              color="secondary"
-              disabled={initMutation.isPending}
-              onClick={() => initMutation.mutate()}
-            >
-              {initMutation.isPending ? <CircularProgress size={18} /> : `Initialize ${filterDate}`}
+        <TooltipProvider>
+          {/* Date navigation */}
+          <div className="flex items-center gap-2 mb-3 flex-wrap">
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setFilterDate(addDays(filterDate, -1))}>
+              <ChevronLeft className="h-4 w-4" />
             </Button>
-          </Box>
-        ) : (
-          <DataGrid
-            rows={rows}
-            columns={columns}
-            autoHeight
-            disableRowSelectionOnClick
-            hideFooter
-            density="compact"
-            sx={GRID_SX}
+            <Input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="w-[160px] h-8" />
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setFilterDate(addDays(filterDate, 1))} disabled={filterDate >= todayStr()}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setFilterDate(todayStr())}>Today</Button>
+            <div className="flex-grow" />
+            <Button size="sm" variant="outline" disabled={initMutation.isPending} onClick={() => initMutation.mutate()}>
+              {initMutation.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : null}
+              Init {filterDate}
+            </Button>
+            <Button size="sm" onClick={() => { setEditRecord(null); setStockDialogOpen(true); }}>
+              <Plus className="h-3.5 w-3.5 mr-1" /> New Stock Card
+            </Button>
+          </div>
+
+          {/* Summary */}
+          {summary && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+              {[
+                { label: 'CLOSING INVENTORY VALUE', value: `₱${summary.totalClosingCost.toLocaleString()}`, color: 'text-primary' },
+                { label: 'TOTAL COST USED', value: `₱${summary.totalCostUsed.toLocaleString()}`, color: 'text-green-600' },
+              ].map(({ label, value, color }) => (
+                <Card key={label} className="shadow-none">
+                  <CardContent className="p-3">
+                    <p className="text-[10px] font-semibold text-muted-foreground tracking-wider">{label}</p>
+                    <p className={`text-xl font-bold ${color} mt-0.5`}>{value}</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+
+          {/* Grid */}
+          {isLoading ? (
+            <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
+          ) : rows.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 py-12">
+              <p className="text-muted-foreground">No stock entries for {filterDate}.</p>
+              <Button variant="secondary" disabled={initMutation.isPending} onClick={() => initMutation.mutate()}>
+                {initMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                Initialize {filterDate}
+              </Button>
+            </div>
+          ) : (
+            <Card className="shadow-none overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50">
+                    <TableHead className="min-w-[130px]">Material</TableHead>
+                    <TableHead className="w-[60px]">Unit</TableHead>
+                    <TableHead className="text-right w-[90px]">Price/Unit</TableHead>
+                    <TableHead className="text-center w-[80px]">Opening</TableHead>
+                    <TableHead className="text-center w-[80px]">Delivery</TableHead>
+                    <TableHead className="text-center w-[70px]">Used</TableHead>
+                    <TableHead className="text-center w-[80px]">Closing</TableHead>
+                    <TableHead className="text-right w-[100px]">Cost Used</TableHead>
+                    <TableHead className="text-right w-[110px]">Closing Cost</TableHead>
+                    <TableHead className="w-[90px]"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {rows.map((r) => {
+                    const price = Number(r.material?.pricePerUnit ?? materials.find((m) => m.id === r.materialId)?.pricePerUnit ?? 0);
+                    const closing = Math.max(0, r.quantity + r.delivery - r.used);
+                    const costUsed = r.used * price;
+                    const closingCost = closing * price;
+
+                    return (
+                      <TableRow key={r.id}>
+                        <TableCell className="font-medium">{r.material?.name ?? `#${r.materialId}`}</TableCell>
+                        <TableCell><Badge variant="secondary" className="text-xs">{r.material?.unit ?? ''}</Badge></TableCell>
+                        <TableCell className="text-right text-muted-foreground">₱{price.toLocaleString()}</TableCell>
+                        <TableCell className="text-center">{r.quantity}</TableCell>
+                        <TableCell className="text-center">{r.delivery}</TableCell>
+                        <TableCell className="text-center">
+                          <Badge variant={r.used > 0 ? 'default' : 'secondary'} className={r.used > 0 ? 'bg-green-500 min-w-[36px]' : 'min-w-[36px]'}>
+                            {r.used}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-center font-bold">{closing}</TableCell>
+                        <TableCell className="text-right font-semibold text-green-600">₱{costUsed.toLocaleString()}</TableCell>
+                        <TableCell className="text-right font-semibold text-primary">₱{closingCost.toLocaleString()}</TableCell>
+                        <TableCell>
+                          <div className="flex gap-0.5">
+                            <Tooltip><TooltipTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditRecord(r); setStockDialogOpen(true); }}>
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                            </TooltipTrigger><TooltipContent>Edit</TooltipContent></Tooltip>
+                            <Tooltip><TooltipTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setAdjRecord(r)}>
+                                <Settings2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </TooltipTrigger><TooltipContent>Adjustments</TooltipContent></Tooltip>
+                            <Tooltip><TooltipTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteMutation.mutate(r.id)} disabled={deleteMutation.isPending}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </TooltipTrigger><TooltipContent>Delete</TooltipContent></Tooltip>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </Card>
+          )}
+
+          {/* Snackbars */}
+          {snackMsg && (
+            <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50">
+              <Alert className="shadow-lg bg-green-50 border-green-300"><AlertDescription>{snackMsg}</AlertDescription></Alert>
+            </div>
+          )}
+          {snackErr && (
+            <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50">
+              <Alert variant="destructive" className="shadow-lg"><AlertDescription>{snackErr}</AlertDescription></Alert>
+            </div>
+          )}
+
+          <StockCardDialog
+            open={stockDialogOpen}
+            editRecord={editRecord}
+            filterDate={filterDate}
+            materials={materials}
+            suppliers={suppliers}
+            onClose={() => setStockDialogOpen(false)}
+            onSaved={() => qc.invalidateQueries({ queryKey: ['material-inventory', filterDate] })}
           />
-        )}
-
-        <Snackbar
-          open={!!snackMsg}
-          autoHideDuration={4000}
-          onClose={() => setSnackMsg("")}
-          anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-        >
-          <Alert severity="success" onClose={() => setSnackMsg("")} sx={{ width: "100%" }}>
-            {snackMsg}
-          </Alert>
-        </Snackbar>
-
-        <Snackbar
-          open={!!snackErr}
-          autoHideDuration={4000}
-          onClose={() => setSnackErr("")}
-          anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-        >
-          <Alert severity="error" onClose={() => setSnackErr("")} sx={{ width: "100%" }}>
-            {snackErr}
-          </Alert>
-        </Snackbar>
-
-        <StockCardDialog
-          open={stockDialogOpen}
-          editRecord={editRecord}
-          filterDate={filterDate}
-          materials={materials}
-          suppliers={suppliers}
-          onClose={() => setStockDialogOpen(false)}
-          onSaved={() =>
-            qc.invalidateQueries({ queryKey: ["material-inventory", filterDate] })
-          }
-        />
-
-        <AdjustmentsDialog record={adjRecord} onClose={() => setAdjRecord(null)} />
+          <AdjustmentsDialog record={adjRecord} onClose={() => setAdjRecord(null)} />
+        </TooltipProvider>
       </AppLayout>
     </AuthGuard>
   );

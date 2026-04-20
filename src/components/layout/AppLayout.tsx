@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { Box, Toolbar } from '@mui/material';
 import Sidebar, { COLLAPSED_WIDTH, DRAWER_WIDTH } from './Sidebar';
 import Header from './Header';
 
@@ -30,23 +29,15 @@ export default function AppLayout({
   const sidebarWidth = collapsed ? COLLAPSED_WIDTH : DRAWER_WIDTH;
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+    <div className="flex min-h-screen">
       <Sidebar collapsed={collapsed} onToggle={handleToggle} />
       <Header title={title} sidebarWidth={sidebarWidth} />
-      <Box
-        component="main"
-        sx={{
-          flexGrow: 1,
-          p: 3,
-          width: `calc(100% - ${sidebarWidth}px)`,
-          bgcolor: 'background.default',
-          minHeight: '100vh',
-          transition: 'width 0.2s, margin 0.2s',
-        }}
+      <main
+        className="flex-1 p-6 bg-background min-h-screen pt-20 transition-all duration-200"
+        style={{ marginLeft: sidebarWidth }}
       >
-        <Toolbar />
         {children}
-      </Box>
-    </Box>
+      </main>
+    </div>
   );
 }

@@ -7,7 +7,6 @@ export interface ProductionSummaryData {
   yieldByType: Record<ProductType, number>;
   assignedByBranch: Map<number, number>;
   totalAssigned: number;
-  totalUnassigned: number;
   expectedRevenue: number;
 }
 
@@ -22,12 +21,7 @@ export function useProductionSummary(
 
     let totalYield = 0;
     let expectedRevenue = 0;
-    const yieldByType: Record<ProductType, number> = {
-      BREAD: 0,
-      CAKE: 0,
-      SPECIAL: 0,
-      MISCELLANEOUS: 0,
-    };
+    const yieldByType: Record<ProductType, number> = { BREAD: 0, CAKE: 0, SPECIAL: 0, MISCELLANEOUS: 0 };
     const assignedByBranch = new Map<number, number>(branches.map((b) => [b.id, 0]));
 
     for (const row of prodRows) {
@@ -44,15 +38,7 @@ export function useProductionSummary(
     }
 
     const totalAssigned = Array.from(assignedByBranch.values()).reduce((a, v) => a + v, 0);
-    const totalUnassigned = Math.max(0, totalYield - totalAssigned);
 
-    return {
-      totalYield,
-      yieldByType,
-      assignedByBranch,
-      totalAssigned,
-      totalUnassigned,
-      expectedRevenue,
-    };
+    return { totalYield, yieldByType, assignedByBranch, totalAssigned, expectedRevenue };
   }, [allRows, branches, productById]);
 }

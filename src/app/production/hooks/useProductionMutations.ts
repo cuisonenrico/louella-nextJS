@@ -6,8 +6,7 @@ import { inventoryApi, productionApi } from '@/lib/apiServices';
 import type { Branch, Inventory, Product, Production } from '@/types';
 
 function extractErrorMessage(err: unknown): string {
-  const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data
-    ?.message;
+  const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
   return Array.isArray(msg) ? msg.join(', ') : (msg ?? (err as Error)?.message ?? 'An error occurred.');
 }
 
@@ -20,11 +19,6 @@ interface UseProductionMutationsParams {
   onError: (msg: string) => void;
 }
 
-/**
- * All four production-page mutations: initBranch, initAllBranches,
- * initProduction, savePending. Query invalidation is handled internally;
- * callers can pass additional `onSuccess` at the mutate() call site.
- */
 export function useProductionMutations({
   filterDate,
   products,
@@ -40,26 +34,13 @@ export function useProductionMutations({
       const yesterday = dayjs(filterDate).subtract(1, 'day').format('YYYY-MM-DD');
       const prevRes = await inventoryApi.byBranchDate(branchId, yesterday);
       const prevData = (prevRes.data ?? []) as Inventory[];
-      const prevMap = new Map(
-        prevData.map((i) => [i.productId, Math.max(0, i.leftover - i.reject)]),
-      );
+      const prevMap = new Map(prevData.map((i) => [i.productId, Math.max(0, i.leftover - i.reject)]));
       const payload = products
         .filter((p) => p.isActive)
-        .map((p) => ({
-          branchId,
-          productId: p.id,
-          date: filterDate,
-          quantity: prevMap.get(p.id) ?? 0,
-          delivery: 0,
-          leftover: 0,
-          reject: 0,
-        }));
+        .map((p) => ({ branchId, productId: p.id, date: filterDate, quantity: prevMap.get(p.id) ?? 0, delivery: 0, leftover: 0, reject: 0 }));
       return inventoryApi.createBulk(payload);
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['inventory-for-production'] });
-      qc.invalidateQueries({ queryKey: ['inventory'] });
-    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['inventory-for-production'] }); qc.invalidateQueries({ queryKey: ['inventory'] }); },
     onError: (err) => onError(extractErrorMessage(err)),
   });
 
@@ -71,28 +52,15 @@ export function useProductionMutations({
         missingBranches.map(async (b) => {
           const prevRes = await inventoryApi.byBranchDate(b.id, yesterday);
           const prevData = (prevRes.data ?? []) as Inventory[];
-          const prevMap = new Map(
-            prevData.map((i) => [i.productId, Math.max(0, i.leftover - i.reject)]),
-          );
+          const prevMap = new Map(prevData.map((i) => [i.productId, Math.max(0, i.leftover - i.reject)]));
           const payload = products
             .filter((p) => p.isActive)
-            .map((p) => ({
-              branchId: b.id,
-              productId: p.id,
-              date: filterDate,
-              quantity: prevMap.get(p.id) ?? 0,
-              delivery: 0,
-              leftover: 0,
-              reject: 0,
-            }));
+            .map((p) => ({ branchId: b.id, productId: p.id, date: filterDate, quantity: prevMap.get(p.id) ?? 0, delivery: 0, leftover: 0, reject: 0 }));
           return inventoryApi.createBulk(payload);
         }),
       );
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['inventory-for-production'] });
-      qc.invalidateQueries({ queryKey: ['inventory'] });
-    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['inventory-for-production'] }); qc.invalidateQueries({ queryKey: ['inventory'] }); },
     onError: (err) => onError(extractErrorMessage(err)),
   });
 

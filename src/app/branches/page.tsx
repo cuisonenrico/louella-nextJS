@@ -1,56 +1,26 @@
 'use client';
 
-import {
-  Alert,
-  Box,
-  Button,
-  Chip,
-  CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  FormControl,
-  IconButton,
-  InputAdornment,
-  InputLabel,
-  MenuItem,
-  Paper,
-  Select,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  TextField,
-  Tooltip,
-  Typography,
-} from '@mui/material';
-import AddIcon from '@mui/icons-material/Add';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
-import SearchIcon from '@mui/icons-material/Search';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { Plus, Pencil, Trash2, Search, Loader2 } from 'lucide-react';
 import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
 import { branchesApi } from '@/lib/apiServices';
 import type { Branch } from '@/types';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Label } from '@/components/ui/label';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
-interface BranchForm {
-  name: string;
-  address: string;
-  phone: string;
-  isActive: boolean;
-}
-
-const defaultForm: BranchForm = {
-  name: '',
-  address: '',
-  phone: '',
-  isActive: true,
-};
+interface BranchForm { name: string; address: string; phone: string; isActive: boolean; }
+const defaultForm: BranchForm = { name: '', address: '', phone: '', isActive: true };
 
 export default function BranchesPage() {
   const qc = useQueryClient();
@@ -68,29 +38,18 @@ export default function BranchesPage() {
 
   const createMutation = useMutation({
     mutationFn: (data: Partial<Branch>) => branchesApi.create(data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['branches'] });
-      setDialogOpen(false);
-    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['branches'] }); setDialogOpen(false); },
     onError: (err: unknown) => {
-      const msg =
-        (err as { response?: { data?: { message?: string | string[] } } })?.response
-          ?.data?.message;
+      const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
       setFormError(Array.isArray(msg) ? msg.join(', ') : (msg ?? 'Failed to save.'));
     },
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Partial<Branch> }) =>
-      branchesApi.update(id, data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['branches'] });
-      setDialogOpen(false);
-    },
+    mutationFn: ({ id, data }: { id: number; data: Partial<Branch> }) => branchesApi.update(id, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['branches'] }); setDialogOpen(false); },
     onError: (err: unknown) => {
-      const msg =
-        (err as { response?: { data?: { message?: string | string[] } } })?.response
-          ?.data?.message;
+      const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
       setFormError(Array.isArray(msg) ? msg.join(', ') : (msg ?? 'Failed to save.'));
     },
   });
@@ -100,222 +59,104 @@ export default function BranchesPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['branches'] }),
   });
 
-  const openCreate = () => {
-    setEditTarget(null);
-    setForm(defaultForm);
-    setFormError('');
-    setDialogOpen(true);
-  };
-
+  const openCreate = () => { setEditTarget(null); setForm(defaultForm); setFormError(''); setDialogOpen(true); };
   const openEdit = (b: Branch) => {
     setEditTarget(b);
-    setForm({
-      name: b.name,
-      address: b.address ?? '',
-      phone: b.phone ?? '',
-      isActive: b.isActive,
-    });
-    setFormError('');
-    setDialogOpen(true);
+    setForm({ name: b.name, address: b.address ?? '', phone: b.phone ?? '', isActive: b.isActive });
+    setFormError(''); setDialogOpen(true);
   };
 
   const handleSave = () => {
     setFormError('');
-    if (!form.name.trim()) {
-      setFormError('Branch name is required.');
-      return;
-    }
-    const payload: Partial<Branch> = {
-      name: form.name.trim(),
-      address: form.address || undefined,
-      phone: form.phone || undefined,
-      isActive: form.isActive,
-    };
-    if (editTarget) {
-      updateMutation.mutate({ id: editTarget.id, data: payload });
-    } else {
-      createMutation.mutate(payload);
-    }
+    if (!form.name.trim()) { setFormError('Branch name is required.'); return; }
+    const payload: Partial<Branch> = { name: form.name.trim(), address: form.address || undefined, phone: form.phone || undefined, isActive: form.isActive };
+    editTarget ? updateMutation.mutate({ id: editTarget.id, data: payload }) : createMutation.mutate(payload);
   };
 
-  const filtered = branches.filter((b) =>
-    b.name.toLowerCase().includes(search.toLowerCase())
-  );
-
+  const filtered = branches.filter((b) => b.name.toLowerCase().includes(search.toLowerCase()));
   const saving = createMutation.isPending || updateMutation.isPending;
 
   return (
     <AuthGuard>
       <AppLayout title="Branches">
-        <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-          <TextField
-            size="small"
-            placeholder="Search branches…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon fontSize="small" />
-                </InputAdornment>
-              ),
-            }}
-            sx={{ width: 260 }}
-          />
-          <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
-            Add Branch
-          </Button>
-        </Box>
+        <div className="flex justify-between items-center mb-4">
+          <div className="relative w-64">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input placeholder="Search branches…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+          </div>
+          <Button onClick={openCreate}><Plus className="mr-2 h-4 w-4" />Add Branch</Button>
+        </div>
 
-        <Paper>
-          <TableContainer>
-            <Table size="medium">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Name</TableCell>
-                  <TableCell>Address</TableCell>
-                  <TableCell>Phone</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell align="right">Actions</TableCell>
+        <Card>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Address</TableHead>
+                <TableHead>Phone</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                <TableRow><TableCell colSpan={5} className="text-center py-8"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></TableCell></TableRow>
+              ) : filtered.length === 0 ? (
+                <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No branches found.</TableCell></TableRow>
+              ) : filtered.map((b) => (
+                <TableRow key={b.id}>
+                  <TableCell className="font-semibold">{b.name}</TableCell>
+                  <TableCell>{b.address ?? '—'}</TableCell>
+                  <TableCell>{b.phone ?? '—'}</TableCell>
+                  <TableCell><Badge variant={b.isActive ? 'default' : 'secondary'}>{b.isActive ? 'Active' : 'Inactive'}</Badge></TableCell>
+                  <TableCell className="text-right">
+                    <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(b)}><Pencil className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>Edit</TooltipContent></Tooltip>
+                    <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setDeleteTarget(b)}><Trash2 className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>Delete</TooltipContent></Tooltip>
+                  </TableCell>
                 </TableRow>
-              </TableHead>
-              <TableBody>
-                {isLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
-                      <CircularProgress />
-                    </TableCell>
-                  </TableRow>
-                ) : filtered.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
-                      <Typography color="text.secondary">No branches found.</Typography>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filtered.map((b) => (
-                    <TableRow key={b.id} hover>
-                      <TableCell>
-                        <Typography fontWeight={600}>{b.name}</Typography>
-                      </TableCell>
-                      <TableCell>{b.address ?? '—'}</TableCell>
-                      <TableCell>{b.phone ?? '—'}</TableCell>
-                      <TableCell>
-                        <Chip
-                          label={b.isActive ? 'Active' : 'Inactive'}
-                          color={b.isActive ? 'success' : 'default'}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell align="right">
-                        <Tooltip title="Edit">
-                          <IconButton size="small" onClick={() => openEdit(b)}>
-                            <EditIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Delete">
-                          <IconButton
-                            size="small"
-                            color="error"
-                            onClick={() => setDeleteTarget(b)}
-                          >
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Paper>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
 
-        {/* Create / Edit Dialog */}
-        <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
-          <DialogTitle>{editTarget ? 'Edit Branch' : 'New Branch'}</DialogTitle>
-          <DialogContent sx={{ pt: 2 }}>
-            {formError && (
-              <Alert severity="error" sx={{ mb: 2 }}>
-                {formError}
-              </Alert>
-            )}
-            <TextField
-              label="Name"
-              fullWidth
-              required
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              sx={{ mb: 2 }}
-              autoFocus
-            />
-            <TextField
-              label="Address"
-              fullWidth
-              value={form.address}
-              onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
-              sx={{ mb: 2 }}
-            />
-            <TextField
-              label="Phone"
-              fullWidth
-              value={form.phone}
-              onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
-              sx={{ mb: 2 }}
-            />
-            <FormControl fullWidth>
-              <InputLabel>Status</InputLabel>
-              <Select
-                value={form.isActive ? 'active' : 'inactive'}
-                label="Status"
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, isActive: e.target.value === 'active' }))
-                }
-              >
-                <MenuItem value="active">Active</MenuItem>
-                <MenuItem value="inactive">Inactive</MenuItem>
-              </Select>
-            </FormControl>
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader><DialogTitle>{editTarget ? 'Edit Branch' : 'New Branch'}</DialogTitle></DialogHeader>
+            <div className="space-y-4 py-2">
+              {formError && <Alert variant="destructive"><AlertDescription>{formError}</AlertDescription></Alert>}
+              <div className="space-y-2"><Label>Name</Label><Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} autoFocus /></div>
+              <div className="space-y-2"><Label>Address</Label><Input value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} /></div>
+              <div className="space-y-2"><Label>Phone</Label><Input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} /></div>
+              <div className="space-y-2">
+                <Label>Status</Label>
+                <Select value={form.isActive ? 'active' : 'inactive'} onValueChange={(v) => setForm((f) => ({ ...f, isActive: v === 'active' }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="active">Active</SelectItem><SelectItem value="inactive">Inactive</SelectItem></SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+              <Button onClick={handleSave} disabled={saving}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}</Button>
+            </DialogFooter>
           </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 2 }}>
-            <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button variant="contained" onClick={handleSave} disabled={saving}>
-              {saving ? <CircularProgress size={18} /> : 'Save'}
-            </Button>
-          </DialogActions>
         </Dialog>
 
-        {/* Delete Confirm */}
-        <Dialog
-          open={!!deleteTarget}
-          onClose={() => setDeleteTarget(null)}
-          maxWidth="xs"
-          fullWidth
-        >
-          <DialogTitle>Delete Branch</DialogTitle>
-          <DialogContent>
-            <Typography>
-              Are you sure you want to delete <strong>{deleteTarget?.name}</strong>?
-            </Typography>
-          </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 2 }}>
-            <Button onClick={() => setDeleteTarget(null)}>Cancel</Button>
-            <Button
-              variant="contained"
-              color="error"
-              disabled={deleteMutation.isPending}
-              onClick={() => {
-                if (deleteTarget) {
-                  deleteMutation.mutate(deleteTarget.id, {
-                    onSuccess: () => setDeleteTarget(null),
-                  });
-                }
-              }}
-            >
-              {deleteMutation.isPending ? <CircularProgress size={18} /> : 'Delete'}
-            </Button>
-          </DialogActions>
-        </Dialog>
+        <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Branch</AlertDialogTitle>
+              <AlertDialogDescription>Are you sure you want to delete <strong>{deleteTarget?.name}</strong>?</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" disabled={deleteMutation.isPending}
+                onClick={() => { if (deleteTarget) deleteMutation.mutate(deleteTarget.id, { onSuccess: () => setDeleteTarget(null) }); }}>
+                {deleteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Delete'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </AppLayout>
     </AuthGuard>
   );

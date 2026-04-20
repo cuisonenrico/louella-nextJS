@@ -1,32 +1,18 @@
 'use client';
 
-import {
-  Alert,
-  Avatar,
-  Box,
-  Button,
-  Chip,
-  CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Divider,
-  FormControl,
-  IconButton,
-  InputLabel,
-  MenuItem,
-  Select,
-  TextField,
-  Tooltip,
-  Typography,
-} from '@mui/material';
-import AddIcon from '@mui/icons-material/Add';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { inventoryApi, inventoryAdjustmentsApi } from '@/lib/apiServices';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Trash2, Plus, Loader2 } from 'lucide-react';
+import { inventoryAdjustmentsApi, inventoryApi } from '@/lib/apiServices';
 import type { AdjustmentType, Branch, Inventory } from '@/types';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
 
 const ADJ_TYPE_LABELS: Record<AdjustmentType, string> = {
   PULL_IN: 'Pull In',
@@ -34,8 +20,14 @@ const ADJ_TYPE_LABELS: Record<AdjustmentType, string> = {
   ANOMALY: 'Anomaly',
 };
 
+const ADJ_COLORS: Record<AdjustmentType, string> = {
+  PULL_IN: 'bg-green-100 text-green-800 border-green-300',
+  PULL_OUT: 'bg-amber-100 text-amber-800 border-amber-300',
+  ANOMALY: 'bg-red-100 text-red-800 border-red-300',
+};
+
 interface InventoryAdjustmentsDialogProps {
-  inventory: Inventory;
+  inventory: Inventory | null;
   productName: string;
   branches: Branch[];
   onClose: () => void;
@@ -50,6 +42,8 @@ export default function InventoryAdjustmentsDialog({ inventory, productName, bra
     toBranchId: '',
   });
   const [formError, setFormError] = useState('');
+
+  if (!inventory) return null;
 
   const currentAdjustments = inventory.adjustments ?? [];
   const adjSum = currentAdjustments.reduce((acc, a) => acc + a.value, 0);
@@ -73,8 +67,7 @@ export default function InventoryAdjustmentsDialog({ inventory, productName, bra
       setFormError('');
     },
     onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { message?: string | string[] } } })
-        ?.response?.data?.message;
+      const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
       setFormError(Array.isArray(msg) ? msg.join(', ') : (msg ?? 'Failed to add adjustment.'));
     },
   });
@@ -88,8 +81,7 @@ export default function InventoryAdjustmentsDialog({ inventory, productName, bra
       setFormError('');
     },
     onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { message?: string | string[] } } })
-        ?.response?.data?.message;
+      const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
       setFormError(Array.isArray(msg) ? msg.join(', ') : (msg ?? 'Transfer failed.'));
     },
   });
@@ -135,154 +127,100 @@ export default function InventoryAdjustmentsDialog({ inventory, productName, bra
   const otherBranches = branches.filter((b) => b.id !== inventory.branchId && b.isActive);
 
   return (
-    <Dialog open onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle sx={{ pr: 10 }}>Adjustments — {productName}</DialogTitle>
-      <Avatar
-        sx={{
-          position: 'absolute',
-          top: 12,
-          right: 16,
-          width: 52,
-          height: 52,
-          fontSize: '0.85rem',
-          fontWeight: 700,
-          bgcolor:
-            adjSum > 0
-              ? 'success.main'
-              : adjSum < 0
-                ? 'error.main'
-                : 'action.disabledBackground',
-          color: adjSum === 0 ? 'text.secondary' : 'white',
-        }}
-      >
-        {adjSum > 0 ? `+${adjSum}` : adjSum}
-      </Avatar>
-      <DialogContent>
-        {currentAdjustments.length === 0 ? (
-          <Typography color="text.secondary" variant="body2" sx={{ py: 1 }}>
-            No adjustments yet.
-          </Typography>
-        ) : (
-          <Box mb={2}>
-            {currentAdjustments.map((adj) => (
-              <Box key={adj.id} display="flex" alignItems="center" gap={1} py={0.75}
-                sx={{ borderBottom: 1, borderColor: 'divider' }}>
-                <Chip
-                  label={ADJ_TYPE_LABELS[adj.type]}
-                  size="small"
-                  color={adj.type === 'PULL_IN' ? 'success' : adj.type === 'PULL_OUT' ? 'warning' : 'error'}
-                  variant="outlined"
-                  sx={{ minWidth: 80 }}
-                />
-                <Typography
-                  variant="body2"
-                  fontWeight={700}
-                  sx={{ minWidth: 40 }}
-                  color={adj.value > 0 ? 'success.main' : 'error.main'}
-                >
-                  {adj.value > 0 ? `+${adj.value}` : adj.value}
-                </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ flexGrow: 1 }}>
-                  {adj.notes ?? '—'}
-                </Typography>
-                {adj.linkedAdjustmentId && (
-                  <Tooltip title="Linked inter-branch transfer">
-                    <Chip label="Transfer" size="small" variant="outlined" color="info" />
-                  </Tooltip>
-                )}
-                <IconButton
-                  size="small"
-                  color="error"
-                  disabled={deleteMutation.isPending}
-                  onClick={() => deleteMutation.mutate(adj.id)}
-                >
-                  <DeleteOutlineIcon fontSize="small" />
-                </IconButton>
-              </Box>
-            ))}
-          </Box>
-        )}
-        <Divider sx={{ my: 1.5 }} />
-        <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1.5 }}>
-          Add Adjustment
-        </Typography>
-        {formError && <Alert severity="error" sx={{ mb: 1.5 }}>{formError}</Alert>}
-        <Box display="flex" gap={1.5} flexDirection="column">
-          <FormControl size="small" fullWidth>
-            <InputLabel>Type</InputLabel>
-            <Select
-              label="Type"
-              value={form.type}
-              onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as AdjustmentType, toBranchId: '' }))}
-            >
-              <MenuItem value="PULL_IN">Pull In — Add stock</MenuItem>
-              <MenuItem value="PULL_OUT">Pull Out — Remove stock</MenuItem>
-              <MenuItem value="ANOMALY">Anomaly — Unexplained variance</MenuItem>
-            </Select>
-          </FormControl>
+    <Dialog open={!!inventory} onOpenChange={() => onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <div className="flex items-center justify-between">
+            <DialogTitle>Adjustments — {productName}</DialogTitle>
+            <div className={`w-12 h-12 rounded-full flex items-center justify-center text-sm font-bold ${adjSum > 0 ? 'bg-green-500 text-white' : adjSum < 0 ? 'bg-red-500 text-white' : 'bg-muted text-muted-foreground'}`}>
+              {adjSum > 0 ? `+${adjSum}` : adjSum}
+            </div>
+          </div>
+        </DialogHeader>
 
-          {form.type === 'PULL_OUT' && (
-            <FormControl size="small" fullWidth>
-              <InputLabel>Transfer to Branch (optional)</InputLabel>
-              <Select
-                label="Transfer to Branch (optional)"
-                value={form.toBranchId}
-                onChange={(e) => setForm((f) => ({ ...f, toBranchId: e.target.value }))}
-              >
-                <MenuItem value="">— Standalone pull-out (no transfer) —</MenuItem>
-                {otherBranches.map((b) => (
-                  <MenuItem key={b.id} value={String(b.id)}>{b.name}</MenuItem>
-                ))}
+        <div className="space-y-4">
+          {currentAdjustments.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-1">No adjustments yet.</p>
+          ) : (
+            <div className="space-y-1">
+              {currentAdjustments.map((adj) => (
+                <div key={adj.id} className="flex items-center gap-2 py-1.5 border-b">
+                  <Badge variant="outline" className={ADJ_COLORS[adj.type]} >{ADJ_TYPE_LABELS[adj.type]}</Badge>
+                  <span className={`text-sm font-bold min-w-[40px] ${adj.value > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {adj.value > 0 ? `+${adj.value}` : adj.value}
+                  </span>
+                  <span className="text-sm text-muted-foreground flex-grow">{adj.notes ?? '—'}</span>
+                  {adj.linkedAdjustmentId && <Badge variant="outline" className="text-xs">Transfer</Badge>}
+                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" disabled={deleteMutation.isPending} onClick={() => deleteMutation.mutate(adj.id)}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <Separator />
+
+          <p className="text-sm font-bold">Add Adjustment</p>
+          {formError && <Alert variant="destructive"><AlertDescription>{formError}</AlertDescription></Alert>}
+
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Type</Label>
+              <Select value={form.type} onValueChange={(v) => setForm((f) => ({ ...f, type: v as AdjustmentType, toBranchId: '' }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="PULL_IN">Pull In — Add stock</SelectItem>
+                  <SelectItem value="PULL_OUT">Pull Out — Remove stock</SelectItem>
+                  <SelectItem value="ANOMALY">Anomaly — Unexplained variance</SelectItem>
+                </SelectContent>
               </Select>
-            </FormControl>
-          )}
+            </div>
 
-          {isTransfer && (
-            destInventoryQuery.isLoading ? (
-              <Box display="flex" alignItems="center" gap={1}>
-                <CircularProgress size={14} />
-                <Typography variant="caption" color="text.secondary">Checking destination…</Typography>
-              </Box>
-            ) : destInventory ? (
-              <Alert severity="success" sx={{ py: 0.5 }}>
-                Destination found — current stock: {destInventory.quantity + destInventory.delivery} pcs
-              </Alert>
-            ) : (
-              <Alert severity="warning" sx={{ py: 0.5 }}>
-                Destination branch has no inventory record for {productName} on this date. Create it first.
-              </Alert>
-            )
-          )}
+            {form.type === 'PULL_OUT' && (
+              <div className="space-y-1">
+                <Label className="text-xs">Transfer to Branch (optional)</Label>
+                <Select value={form.toBranchId} onValueChange={(v) => setForm((f) => ({ ...f, toBranchId: v }))}>
+                  <SelectTrigger><SelectValue placeholder="— Standalone pull-out —" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">— Standalone pull-out (no transfer) —</SelectItem>
+                    {otherBranches.map((b) => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
-          <TextField
-            size="small"
-            label="Value"
-            type="number"
-            value={form.value}
-            onChange={(e) => setForm((f) => ({ ...f, value: e.target.value }))}
-            helperText={isTransfer ? 'Units to move from this branch to the destination' : 'Positive integer'}
-            inputProps={{ min: 1, step: 1 }}
-          />
-          <TextField
-            size="small"
-            label="Notes (optional)"
-            value={form.notes}
-            onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-          />
-        </Box>
+            {isTransfer && (
+              destInventoryQuery.isLoading ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Checking destination…
+                </div>
+              ) : destInventory ? (
+                <Alert><AlertDescription>Destination found — current stock: {destInventory.quantity + destInventory.delivery} pcs</AlertDescription></Alert>
+              ) : (
+                <Alert variant="destructive"><AlertDescription>Destination branch has no inventory record for {productName} on this date.</AlertDescription></Alert>
+              )
+            )}
+
+            <div className="space-y-1">
+              <Label className="text-xs">Value</Label>
+              <Input type="number" value={form.value} onChange={(e) => setForm((f) => ({ ...f, value: e.target.value }))} min={1} step={1} placeholder={isTransfer ? 'Units to move' : 'Positive integer'} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Notes (optional)</Label>
+              <Input value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} />
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Close</Button>
+          <Button onClick={handleAdd} disabled={isPending || (isTransfer && !destInventory)}>
+            {isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
+            {isTransfer ? 'Transfer' : 'Add'}
+          </Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Close</Button>
-        <Button
-          variant="contained"
-          startIcon={isPending ? <CircularProgress size={16} /> : <AddIcon />}
-          onClick={handleAdd}
-          disabled={isPending || (isTransfer && !destInventory)}
-          color={isTransfer ? 'info' : 'primary'}
-        >
-          {isPending ? 'Saving…' : isTransfer ? 'Transfer' : 'Add'}
-        </Button>
-      </DialogActions>
     </Dialog>
   );
 }
