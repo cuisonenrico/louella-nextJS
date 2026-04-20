@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   Box,
@@ -133,14 +134,35 @@ export default function Sidebar({
           minHeight: 56,
         }}
       >
-        {!collapsed && (
-          <Box>
-            <Typography variant="h6" fontWeight={800} color="white" lineHeight={1.1}>
-              Louella
-            </Typography>
-            <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)' }}>
-              Bakery Management
-            </Typography>
+        {collapsed ? (
+          <Box sx={{ bgcolor: 'white', borderRadius: 1.5, p: 0.5, display: 'flex' }}>
+            <Image
+              src="/favicon.png"
+              alt="Louella"
+              width={28}
+              height={28}
+              style={{ objectFit: 'contain' }}
+            />
+          </Box>
+        ) : (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Box sx={{ bgcolor: 'white', borderRadius: 1.5, p: 0.5, display: 'flex' }}>
+              <Image
+                src="/favicon.png"
+                alt="Louella"
+                width={32}
+                height={32}
+                style={{ objectFit: 'contain' }}
+              />
+            </Box>
+            <Box>
+              <Typography variant="h6" fontWeight={800} color="white" lineHeight={1.1}>
+                Louella
+              </Typography>
+              <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)' }}>
+                Bakery Management
+              </Typography>
+            </Box>
           </Box>
         )}
         <IconButton onClick={onToggle} size="small" sx={{ color: '#fff' }}>
