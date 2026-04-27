@@ -43,6 +43,7 @@ export interface Product {
   id: number;
   name: string;
   type: ProductType;
+  sortOrder: number;
   price: number;
   isActive: boolean;
   date: string;
@@ -315,6 +316,7 @@ export interface MaterialConsumption {
   productName: string;
   date: string;
   yield: number;
+  plannedYield: number;
   items: MaterialConsumptionItem[];
   totalMaterialCost: number;
 }
@@ -466,6 +468,36 @@ export interface InventoryGapsResult {
 
 export interface InventoryUpdateResult extends Inventory {
   cascadeWarning: number;
+}
+
+// ────────────────────────────────────────────────────────────────
+// Production Orders
+// ────────────────────────────────────────────────────────────────
+export type ProductionOrderStatus = 'DRAFT' | 'FINALIZED' | 'CANCELLED';
+
+export interface ProductionOrderItem {
+  id: number;
+  productionOrderId: number;
+  productId: number;
+  yield: number;
+  product?: Product;
+}
+
+export interface ProductionOrder {
+  id: number;
+  date: string;
+  status: ProductionOrderStatus;
+  notes: string | null;
+  createdById: number | null;
+  createdAt: string;
+  updatedAt: string;
+  items: ProductionOrderItem[];
+  createdBy?: { id: number; email: string; role: UserRole };
+}
+
+export interface PlannedYield {
+  productId: number;
+  plannedYield: number;
 }
 
 // ────────────────────────────────────────────────────────────────

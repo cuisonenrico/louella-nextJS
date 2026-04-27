@@ -13,13 +13,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 
 interface MaterialConsumptionDrawerProps {
   consumptionId: number | null;
+  plannedYield?: number;
   onClose: () => void;
 }
 
-export default function MaterialConsumptionDrawer({ consumptionId, onClose }: MaterialConsumptionDrawerProps) {
+export default function MaterialConsumptionDrawer({ consumptionId, plannedYield, onClose }: MaterialConsumptionDrawerProps) {
   const consumptionQuery = useQuery<MaterialConsumption>({
-    queryKey: ['production-consumption', consumptionId],
-    queryFn: () => productionApi.materialConsumption(consumptionId!).then((r) => r.data),
+    queryKey: ['production-consumption', consumptionId, plannedYield],
+    queryFn: () => productionApi.materialConsumption(consumptionId!, plannedYield).then((r) => r.data),
     enabled: consumptionId != null,
   });
 
@@ -29,9 +30,10 @@ export default function MaterialConsumptionDrawer({ consumptionId, onClose }: Ma
         <SheetHeader>
           <SheetTitle>Material Consumption</SheetTitle>
           {consumptionQuery.data && (
-            <p className="text-xs text-muted-foreground">
-              {consumptionQuery.data.productName} — {dayjs(consumptionQuery.data.date).format('MMM D, YYYY')} — {consumptionQuery.data.yield} pcs
-            </p>
+            <div className="text-xs text-muted-foreground space-y-0.5">
+              <p>{consumptionQuery.data.productName} — {dayjs(consumptionQuery.data.date).format('MMM D, YYYY')}</p>
+              <p>Actual yield: {consumptionQuery.data.yield} pcs · Cost based on: {consumptionQuery.data.plannedYield} pcs (planned)</p>
+            </div>
           )}
         </SheetHeader>
 

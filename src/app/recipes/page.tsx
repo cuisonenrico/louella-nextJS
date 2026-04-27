@@ -23,10 +23,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 const UNITS: MeasurementUnit[] = ['KG', 'G', 'LITER', 'ML', 'PIECE', 'DOZEN', 'BAG', 'SACHET', 'CUP', 'TBSP', 'TSP'];
 
 interface IngredientRow { materialId: number; quantity: string; unit: MeasurementUnit; }
+type RecipeWithOptionalItems = Recipe & { recipeItems?: RecipeItem[] };
 
 function extractError(err: unknown): string {
   const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
   return Array.isArray(msg) ? msg.join(', ') : (msg ?? 'An error occurred');
+}
+
+function getRecipeItems(recipe: RecipeWithOptionalItems): RecipeItem[] {
+  return recipe.items ?? recipe.recipeItems ?? [];
 }
 
 export default function RecipesPage() {
@@ -72,8 +77,9 @@ export default function RecipesPage() {
     setFormError(''); setDialogOpen(true);
   };
   const openEdit = (r: Recipe) => {
+    const items = getRecipeItems(r as RecipeWithOptionalItems);
     setEditTarget(r); setProductId(String(r.productId)); setRecipeYield(String(r.recipeYield)); setNotes(r.notes ?? '');
-    setIngredients(r.items.map((i) => ({ materialId: i.materialId, quantity: String(i.quantity), unit: i.unit })));
+    setIngredients(items.map((i) => ({ materialId: i.materialId, quantity: String(i.quantity), unit: i.unit })));
     setFormError(''); setDialogOpen(true);
   };
   const showCost = async (r: Recipe) => {
@@ -126,41 +132,45 @@ export default function RecipesPage() {
           <p className="text-center text-muted-foreground py-12">No recipes found.</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {filtered.map((r: Recipe) => (
-              <Card key={r.id} className="flex flex-col">
-                <CardHeader className="pb-2">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <CardTitle className="text-base">{r.product?.name ?? `Product #${r.productId}`}</CardTitle>
-                      <p className="text-xs text-muted-foreground mt-1">Yield: {r.recipeYield} · {r.items.length} ingredient{r.items.length !== 1 ? 's' : ''}</p>
+            {filtered.map((r: Recipe) => {
+              const items = getRecipeItems(r as RecipeWithOptionalItems);
+
+              return (
+                <Card key={r.id} className="flex flex-col">
+                  <CardHeader className="pb-2">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <CardTitle className="text-base">{r.product?.name ?? `Product #${r.productId}`}</CardTitle>
+                        <p className="text-xs text-muted-foreground mt-1">Yield: {r.recipeYield} · {items.length} ingredient{items.length !== 1 ? 's' : ''}</p>
+                      </div>
+                      <Badge variant="secondary"><CookingPot className="h-3 w-3 mr-1" />Recipe</Badge>
                     </div>
-                    <Badge variant="secondary"><CookingPot className="h-3 w-3 mr-1" />Recipe</Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="flex-1 pb-2">
-                  <button onClick={() => setExpandedId(expandedId === r.id ? null : r.id)} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mb-2">
-                    {expandedId === r.id ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                    {expandedId === r.id ? 'Hide' : 'Show'} ingredients
-                  </button>
-                  {expandedId === r.id && (
-                    <ul className="text-sm space-y-1">
-                      {r.items.map((item: RecipeItem) => (
-                        <li key={item.id} className="flex justify-between">
-                          <span>{matMap[item.materialId] ?? `#${item.materialId}`}</span>
-                          <span className="text-muted-foreground">{item.quantity} {item.unit}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {r.notes && <p className="text-xs text-muted-foreground mt-2 italic">{r.notes}</p>}
-                </CardContent>
-                <CardFooter className="gap-2 pt-0">
-                  <Button size="sm" variant="outline" onClick={() => showCost(r)}><DollarSign className="mr-1 h-3 w-3" />Cost</Button>
-                  <Button size="sm" variant="outline" onClick={() => openEdit(r)}>Edit</Button>
-                  <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive ml-auto" onClick={() => setDeleteTarget(r)}><Trash2 className="h-4 w-4" /></Button>
-                </CardFooter>
-              </Card>
-            ))}
+                  </CardHeader>
+                  <CardContent className="flex-1 pb-2">
+                    <button onClick={() => setExpandedId(expandedId === r.id ? null : r.id)} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mb-2">
+                      {expandedId === r.id ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                      {expandedId === r.id ? 'Hide' : 'Show'} ingredients
+                    </button>
+                    {expandedId === r.id && (
+                      <ul className="text-sm space-y-1">
+                        {items.map((item: RecipeItem) => (
+                          <li key={item.id} className="flex justify-between">
+                            <span>{matMap[item.materialId] ?? `#${item.materialId}`}</span>
+                            <span className="text-muted-foreground">{item.quantity} {item.unit}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {r.notes && <p className="text-xs text-muted-foreground mt-2 italic">{r.notes}</p>}
+                  </CardContent>
+                  <CardFooter className="gap-2 pt-0">
+                    <Button size="sm" variant="outline" onClick={() => showCost(r)}><DollarSign className="mr-1 h-3 w-3" />Cost</Button>
+                    <Button size="sm" variant="outline" onClick={() => openEdit(r)}>Edit</Button>
+                    <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive ml-auto" onClick={() => setDeleteTarget(r)}><Trash2 className="h-4 w-4" /></Button>
+                  </CardFooter>
+                </Card>
+              );
+            })}
           </div>
         )}
 

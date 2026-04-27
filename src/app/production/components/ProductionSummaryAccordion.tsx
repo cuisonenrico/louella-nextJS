@@ -18,6 +18,7 @@ export default function ProductionSummaryAccordion({ summary, branches }: Props)
   if (!summary) return null;
 
   const statCards = [
+    { label: 'Total Planned', value: summary.totalPlanned.toLocaleString(), color: 'text-blue-600', big: true },
     { label: 'Total Yield', value: summary.totalYield.toLocaleString(), color: 'text-primary', big: true },
     { label: 'Bread', value: summary.yieldByType.BREAD.toLocaleString() },
     { label: 'Cake', value: summary.yieldByType.CAKE.toLocaleString() },

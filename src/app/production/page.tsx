@@ -2,12 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, Calculator } from 'lucide-react';
+import { Loader2, Calculator, AlertTriangle } from 'lucide-react';
 import dayjs from 'dayjs';
 import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
-import { branchesApi, inventoryApi, productionApi, productsApi } from '@/lib/apiServices';
-import type { Branch, Inventory, Product, Production, ProductType } from '@/types';
+import { branchesApi, inventoryApi, productionApi, productionOrdersApi, productsApi } from '@/lib/apiServices';
+import type { Branch, Inventory, PlannedYield, Product, Production, ProductType } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
@@ -21,6 +21,12 @@ import ProductionSummaryAccordion from './components/ProductionSummaryAccordion'
 import { useProductionRowUpdate, type ProdRow } from './hooks/useProductionRowUpdate';
 import { useProductionMutations } from './hooks/useProductionMutations';
 import { useProductionSummary } from './hooks/useProductionSummary';
+import {
+  buildFinalizedPlannedYields,
+  useProductionTabNavigation,
+  useYieldAutoSync,
+  useYieldEnterNavigation,
+} from './hooks/useProductionPlannedYield';
 
 const PRODUCT_TYPE_ORDER: ProductType[] = ['BREAD', 'CAKE', 'SPECIAL', 'MISCELLANEOUS'];
 const TYPE_LABELS: Record<ProductType, string> = { BREAD: 'Bread', CAKE: 'Cake', SPECIAL: 'Special', MISCELLANEOUS: 'Miscellaneous' };
@@ -30,6 +36,7 @@ export default function ProductionPage() {
   const [filterDate, setFilterDate] = useState(dayjs().format('YYYY-MM-DD'));
   const [rowError, setRowError] = useState('');
   const [consumptionId, setConsumptionId] = useState<number | null>(null);
+  const [consumptionPlannedYield, setConsumptionPlannedYield] = useState<number | undefined>(undefined);
 
   const { data: branches = [] } = useQuery<Branch[]>({ queryKey: ['branches'], queryFn: () => branchesApi.list().then((r) => r.data) });
   const { data: products = [] } = useQuery<Product[]>({ queryKey: ['products'], queryFn: () => productsApi.list().then((r) => r.data) });
@@ -45,15 +52,25 @@ export default function ProductionPage() {
     queryFn: () => inventoryApi.byDateRange(filterDate).then((r) => r.data as Inventory[]),
   });
 
+  const { data: plannedYields = [] } = useQuery<PlannedYield[]>({
+    queryKey: ['planned-yield', filterDate],
+    queryFn: async () => buildFinalizedPlannedYields(await productionOrdersApi.byDate(filterDate).then((r) => r.data)),
+  });
+
+  const plannedByProduct = useMemo(
+    () => new Map(plannedYields.map((p) => [p.productId, p.plannedYield])),
+    [plannedYields],
+  );
+
   const branchesWithNoInventory = useMemo(() => {
     const branchIdsWithRecords = new Set((invQuery.data ?? []).map((inv) => inv.branchId));
     return new Set(branches.filter((b) => !branchIdsWithRecords.has(b.id)).map((b) => b.id));
   }, [invQuery.data, branches]);
 
-  const { pendingProduction, pendingInventory, handleFieldChange, resetPending } = useProductionRowUpdate(branches);
+  const { pendingProduction, pendingInventory, handleFieldChange, resetPending } = useProductionRowUpdate();
 
   const { initBranchMutation, initAllBranchesMutation, initProductionMutation, savePendingMutation } = useProductionMutations({
-    filterDate, products, branches, branchesWithNoInventory, prodQueryData: prodQuery.data, onError: setRowError,
+    filterDate, products, branches, branchesWithNoInventory, prodQueryData: prodQuery.data, plannedByProduct, onError: setRowError,
   });
 
   useEffect(() => { resetPending(); }, [filterDate, resetPending]);
@@ -84,11 +101,17 @@ export default function ProductionPage() {
     });
   }, [products, branches, productionByProduct, inventoryByProductBranch]);
 
+  useYieldAutoSync({ allRows, plannedByProduct, pendingProduction, handleFieldChange, filterDate });
+
   const rowsByType = useMemo(() => {
     const map = new Map<ProductType, ProdRow[]>(PRODUCT_TYPE_ORDER.map((t) => [t, []]));
     for (const row of allRows) map.get(row.type)?.push(row);
     return map;
   }, [allRows]);
+
+  const branchIds = useMemo(() => branches.map((b) => b.id), [branches]);
+  const handleYieldEnter = useYieldEnterNavigation(rowsByType);
+  const handleTabToNextInput = useProductionTabNavigation(rowsByType, branchIds);
 
   const discardPending = useCallback(() => {
     resetPending();
@@ -96,7 +119,7 @@ export default function ProductionPage() {
     qc.invalidateQueries({ queryKey: ['inventory-for-production'] });
   }, [resetPending, qc]);
 
-  const summary = useProductionSummary(allRows, branches, productById);
+  const summary = useProductionSummary(allRows, branches, productById, plannedByProduct);
 
   const today = dayjs().format('YYYY-MM-DD');
   const totalPending = pendingProduction.size + pendingInventory.size;
@@ -129,6 +152,20 @@ export default function ProductionPage() {
     });
   };
 
+  const overAllocatedByProduct = useMemo(() => {
+    const map = new Map<number, { assigned: number; yield: number; overBy: number }>();
+    for (const row of allRows) {
+      const yieldVal = getEffectiveValue(row, 'yield');
+      const assigned = branches.reduce((sum, b) => sum + getEffectiveValue(row, `branch_${b.id}`), 0);
+      if (assigned > yieldVal) {
+        map.set(row.productId, { assigned, yield: yieldVal, overBy: assigned - yieldVal });
+      }
+    }
+    return map;
+  }, [allRows, branches, pendingProduction, pendingInventory]);
+
+  const hasOverAllocation = overAllocatedByProduct.size > 0;
+
   return (
     <AuthGuard>
       <AppLayout title="Production">
@@ -150,8 +187,23 @@ export default function ProductionPage() {
           <ProductionPendingBar
             totalPending={totalPending}
             isSaving={savePendingMutation.isPending}
+            isSaveDisabled={hasOverAllocation}
+            saveDisabledMessage={
+              hasOverAllocation
+                ? 'Cannot save while any branch allocation exceeds yield.'
+                : undefined
+            }
             onDiscard={discardPending}
-            onSave={() => savePendingMutation.mutate({ production: pendingProduction, inventory: pendingInventory }, { onSuccess: resetPending })}
+            onSave={() => {
+              if (hasOverAllocation) {
+                setRowError('Cannot save: one or more products have total branch allocation greater than yield.');
+                return;
+              }
+              savePendingMutation.mutate(
+                { production: pendingProduction, inventory: pendingInventory },
+                { onSuccess: resetPending },
+              );
+            }}
           />
 
           <ProductionSummaryAccordion summary={summary} branches={branches} />
@@ -176,7 +228,9 @@ export default function ProductionPage() {
                       <TableHeader>
                         <TableRow className="bg-muted/50">
                           <TableHead className="w-[130px]">Product</TableHead>
+                          <TableHead className="text-center w-[90px]">Planned</TableHead>
                           <TableHead className="text-center w-[90px]">Yield</TableHead>
+                          <TableHead className="text-center w-[100px]">Discrepancy</TableHead>
                           {branches.map((b) => (
                             <TableHead key={b.id} className="text-center w-[100px]">
                               <div className="flex items-center justify-center gap-1">
@@ -210,19 +264,61 @@ export default function ProductionPage() {
                         {typeRows.map((row) => {
                           const dirty = isRowDirty(row);
                           const yieldVal = getEffectiveValue(row, 'yield');
+                          const planned = plannedByProduct.get(row.productId) ?? 0;
+                          const discrepancy = yieldVal - planned;
                           const totalAssigned = branches.reduce((sum, b) => sum + getEffectiveValue(row, `branch_${b.id}`), 0);
+                          const overAllocation = overAllocatedByProduct.get(row.productId);
                           const price = productById.get(row.productId)?.price ?? 0;
                           const expSales = totalAssigned * price;
 
                           return (
-                            <TableRow key={row.id} className={dirty ? 'bg-amber-50/50' : ''}>
+                            <TableRow
+                              key={row.id}
+                              className={
+                                overAllocation ? 'bg-red-50/60' : dirty ? 'bg-amber-50/50' : ''
+                              }
+                            >
                               <TableCell className="font-medium">{productById.get(row.productId)?.name ?? `Product #${row.productId}`}</TableCell>
                               <TableCell className="text-center">
-                                {row._productionId != null ? (
-                                  <span className={`font-semibold ${dirty ? 'text-amber-700' : ''}`}>{yieldVal}</span>
+                                {planned > 0 ? (
+                                  <span className="text-muted-foreground font-medium">{planned}</span>
                                 ) : (
                                   <span className="text-muted-foreground">—</span>
                                 )}
+                              </TableCell>
+                              <TableCell className="text-center">
+                                {row._productionId != null ? (
+                                  <Input
+                                    id={`yield-input-${row.productId}`}
+                                    type="number"
+                                    className="w-[70px] h-7 text-center mx-auto"
+                                    value={String(yieldVal)}
+                                    onChange={(e) => handleFieldChange(row, 'yield', parseInt(e.target.value) || 0)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        handleYieldEnter(row.productId);
+                                      } else if (e.key === 'Tab' && !e.shiftKey) {
+                                        const moved = handleTabToNextInput(`yield-input-${row.productId}`);
+                                        if (moved) e.preventDefault();
+                                      }
+                                    }}
+                                    min={0}
+                                  />
+                                ) : (
+                                  <span className="text-muted-foreground">—</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <span className={
+                                  discrepancy < 0
+                                    ? 'font-semibold text-red-600'
+                                    : discrepancy > 0
+                                      ? 'font-semibold text-green-600'
+                                      : 'text-muted-foreground'
+                                }>
+                                  {discrepancy > 0 ? `+${discrepancy}` : discrepancy}
+                                </span>
                               </TableCell>
                               {branches.map((b) => {
                                 const hasRecord = (row[`_inv_${b.id}`] as number | null) != null;
@@ -231,10 +327,17 @@ export default function ProductionPage() {
                                   <TableCell key={b.id} className="text-center">
                                     {hasRecord ? (
                                       <Input
+                                        id={`branch-input-${row.productId}-${b.id}`}
                                         type="number"
-                                        className="w-[70px] h-7 text-center mx-auto"
+                                        className={`w-[70px] h-7 text-center mx-auto ${overAllocation ? 'border-red-400 focus-visible:ring-red-400' : ''}`}
                                         value={String(val)}
                                         onChange={(e) => handleFieldChange(row, `branch_${b.id}`, parseInt(e.target.value) || 0)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Tab' && !e.shiftKey) {
+                                            const moved = handleTabToNextInput(`branch-input-${row.productId}-${b.id}`);
+                                            if (moved) e.preventDefault();
+                                          }
+                                        }}
                                         min={0}
                                       />
                                     ) : (
@@ -243,12 +346,26 @@ export default function ProductionPage() {
                                   </TableCell>
                                 );
                               })}
-                              <TableCell className="text-right font-semibold">₱{expSales.toLocaleString()}</TableCell>
+                              <TableCell className="text-right font-semibold">
+                                <div className="flex items-center justify-end gap-1">
+                                  {overAllocation ? (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <AlertTriangle className="h-4 w-4 text-red-600" />
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        Assigned {overAllocation.assigned} exceeds yield {overAllocation.yield} by {overAllocation.overBy}.
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  ) : null}
+                                  <span>₱{expSales.toLocaleString()}</span>
+                                </div>
+                              </TableCell>
                               <TableCell className="text-center">
                                 {row._productionId != null && (
                                   <Tooltip>
                                     <TooltipTrigger asChild>
-                                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setConsumptionId(row._productionId!)}>
+                                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setConsumptionId(row._productionId!); setConsumptionPlannedYield(planned || undefined); }}>
                                         <Calculator className="h-3.5 w-3.5" />
                                       </Button>
                                     </TooltipTrigger>
@@ -279,7 +396,7 @@ export default function ProductionPage() {
             </div>
           )}
 
-          <MaterialConsumptionDrawer consumptionId={consumptionId} onClose={() => setConsumptionId(null)} />
+          <MaterialConsumptionDrawer consumptionId={consumptionId} plannedYield={consumptionPlannedYield} onClose={() => { setConsumptionId(null); setConsumptionPlannedYield(undefined); }} />
         </TooltipProvider>
       </AppLayout>
     </AuthGuard>

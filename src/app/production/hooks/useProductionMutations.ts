@@ -16,6 +16,7 @@ interface UseProductionMutationsParams {
   branches: Branch[];
   branchesWithNoInventory: Set<number>;
   prodQueryData: Production[] | undefined;
+  plannedByProduct: Map<number, number>;
   onError: (msg: string) => void;
 }
 
@@ -25,6 +26,7 @@ export function useProductionMutations({
   branches,
   branchesWithNoInventory,
   prodQueryData,
+  plannedByProduct,
   onError,
 }: UseProductionMutationsParams) {
   const qc = useQueryClient();
@@ -69,7 +71,7 @@ export function useProductionMutations({
       const existingProductIds = new Set((prodQueryData ?? []).map((p) => p.productId));
       const payload = products
         .filter((p) => p.isActive && !existingProductIds.has(p.id))
-        .map((p) => ({ branchId: 1, productId: p.id, date: filterDate, yield: 0 }));
+        .map((p) => ({ branchId: 1, productId: p.id, date: filterDate, yield: plannedByProduct.get(p.id) ?? 0 }));
       return productionApi.createBulk(payload);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['production'] }),

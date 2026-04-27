@@ -16,11 +16,14 @@ import type {
   MaterialConsumption,
   MaterialInventory,
   MaterialPriceHistory,
+  PaginatedResponse,
   ParsedWorkbook,
+  PlannedYield,
   Product,
   ProductPriceHistory,
   Production,
   ProductionEfficiencyItem,
+  ProductionOrder,
   Recipe,
   RecipeCost,
   SaleRecord,
@@ -66,6 +69,8 @@ export const productsApi = {
   delete: (id: number) => api.delete(`/products/${id}`),
   priceHistory: (id: number) =>
     api.get<ProductPriceHistory[]>(`/products/${id}/price-history`),
+  updateOrder: (data: { type: Product['type']; items: { id: number; sortOrder: number }[] }) =>
+    api.patch<Product[]>('/products/order', data),
 };
 
 // ─── Branches ────────────────────────────────────────────────────
@@ -281,8 +286,10 @@ export const productionApi = {
   update: (id: number, data: { yield?: number; notes?: string | null }) =>
     api.patch<Production>(`/production/${id}`, data),
   delete: (id: number) => api.delete(`/production/${id}`),
-  materialConsumption: (id: number) =>
-    api.get<MaterialConsumption>(`/production/${id}/material-consumption`),
+  materialConsumption: (id: number, plannedYield?: number) =>
+    api.get<MaterialConsumption>(`/production/${id}/material-consumption`, {
+      params: plannedYield != null ? { plannedYield } : undefined,
+    }),
   consumptionSummary: (date: string, branchId?: number) =>
     api.get<ConsumptionSummary>('/production/material-consumption/summary', {
       params: branchId ? { date, branchId } : { date },
@@ -291,6 +298,24 @@ export const productionApi = {
     api.get<ProductionEfficiencyItem[]>('/production/efficiency', {
       params: branchId ? { startDate, endDate, branchId } : { startDate, endDate },
     }),
+};
+
+// ─── Production Orders ───────────────────────────────────────────
+export const productionOrdersApi = {
+  list: (page = 1, limit = 20) =>
+    api.get<PaginatedResponse<ProductionOrder>>('/production-orders', { params: { page, limit } }),
+  byDate: (date: string) =>
+    api.get<ProductionOrder[]>('/production-orders/by-date', { params: { date } }),
+  plannedYield: (date: string) =>
+    api.get<PlannedYield[]>('/production-orders/planned-yield', { params: { date } }),
+  get: (id: number) =>
+    api.get<ProductionOrder>(`/production-orders/${id}`),
+  create: (data: { date: string; notes?: string; items: { productId: number; yield?: number }[] }) =>
+    api.post<ProductionOrder>('/production-orders', data),
+  update: (id: number, data: { status?: string; notes?: string; items?: { productId: number; yield?: number }[] }) =>
+    api.patch<ProductionOrder>(`/production-orders/${id}`, data),
+  delete: (id: number) =>
+    api.delete(`/production-orders/${id}`),
 };
 
 // ─── Unit Conversions ────────────────────────────────────────────
