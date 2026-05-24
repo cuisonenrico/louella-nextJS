@@ -7,7 +7,7 @@ import { Loader2, Calculator, AlertTriangle } from 'lucide-react';
 import dayjs from 'dayjs';
 import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
-import { branchesApi, inventoryApi, productionOrdersApi, productsApi } from '@/lib/apiServices';
+import { branchesApi, inventoryApi, productionApi, productionOrdersApi, productsApi } from '@/lib/apiServices';
 import type { Branch, Inventory, PlannedYield, Product, Production, ProductType } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
