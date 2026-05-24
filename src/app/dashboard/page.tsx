@@ -2,8 +2,9 @@
 
 import { useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
+import Link from 'next/link';
 import {
-  Layers, Store, FlaskConical, BookOpen, AlertTriangle, Factory, Loader2,
+  Layers, Store, FlaskConical, BookOpen, AlertTriangle, Factory, Loader2, ArrowRight,
 } from 'lucide-react';
 import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
@@ -15,12 +16,22 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
+import {
+  ResponsiveContainer, PieChart, Pie, Cell, Tooltip as RechartsTooltip,
+} from 'recharts';
 
 const TYPE_LABELS: Record<string, string> = {
   BREAD: 'Bread',
   CAKE: 'Cake',
   SPECIAL: 'Special',
   MISCELLANEOUS: 'Misc',
+};
+
+const TYPE_COLORS: Record<string, string> = {
+  BREAD: '#F4A261',
+  CAKE: '#6B3FA0',
+  SPECIAL: '#2e7d32',
+  MISCELLANEOUS: '#64748b',
 };
 
 export default function DashboardPage() {
@@ -68,6 +79,9 @@ export default function DashboardPage() {
                     {data.lowStock.length > 0 && (
                       <Badge variant="destructive">{data.lowStock.length}</Badge>
                     )}
+                    <Link href="/material-inventory" className="ml-auto flex items-center gap-1 text-xs text-primary hover:underline">
+                      View stock <ArrowRight className="h-3 w-3" />
+                    </Link>
                   </div>
                   {data.lowStock.length === 0 ? (
                     <Alert>
@@ -84,14 +98,24 @@ export default function DashboardPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {data.lowStock.map((m) => (
-                          <TableRow key={m.id}>
-                            <TableCell className="font-medium">{m.name}</TableCell>
-                            <TableCell className="text-right text-destructive font-bold">{m.currentStock}</TableCell>
-                            <TableCell className="text-right">{m.reorderLevel}</TableCell>
-                            <TableCell>{m.unit}</TableCell>
-                          </TableRow>
-                        ))}
+                        {data.lowStock.map((m) => {
+                          const pct = m.reorderLevel > 0
+                            ? Math.round(Math.min(100, (m.currentStock / m.reorderLevel) * 100))
+                            : 0;
+                          return (
+                            <TableRow key={m.id} className="cursor-pointer hover:bg-muted/60" onClick={() => { window.location.href = '/material-inventory'; }}>
+                              <TableCell className="font-medium">
+                                <div>{m.name}</div>
+                                <div className="mt-1 h-1 bg-muted rounded-full w-full overflow-hidden">
+                                  <div className="h-full bg-destructive rounded-full" style={{ width: `${pct}%` }} />
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-right text-destructive font-bold">{m.currentStock}</TableCell>
+                              <TableCell className="text-right">{m.reorderLevel}</TableCell>
+                              <TableCell>{m.unit}</TableCell>
+                            </TableRow>
+                          );
+                        })}
                       </TableBody>
                     </Table>
                   )}
@@ -104,35 +128,57 @@ export default function DashboardPage() {
                   <div className="flex items-center gap-2 mb-4">
                     <Factory className="h-5 w-5 text-primary" />
                     <h3 className="font-semibold text-lg">Today&apos;s Production</h3>
-                    <span className="text-xs text-muted-foreground ml-auto">{today}</span>
+                    <span className="text-xs text-muted-foreground">{today}</span>
+                    <Link href="/production" className="ml-auto flex items-center gap-1 text-xs text-primary hover:underline">
+                      Open board <ArrowRight className="h-3 w-3" />
+                    </Link>
                   </div>
                   {data.production.totalYield === 0 ? (
                     <Alert>
                       <AlertDescription>No production records found for today.</AlertDescription>
                     </Alert>
                   ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Type</TableHead>
-                          <TableHead className="text-right">Total Yield</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {data.production.byType.map(({ type, totalYield }) => (
-                          <TableRow key={type}>
-                            <TableCell>
-                              <Badge variant="outline">{TYPE_LABELS[type] ?? type}</Badge>
-                            </TableCell>
-                            <TableCell className="text-right font-semibold">{totalYield.toLocaleString()} pcs</TableCell>
-                          </TableRow>
+                    <>
+                      <ResponsiveContainer width="100%" height={200}>
+                        <PieChart>
+                          <Pie
+                            data={data.production.byType
+                              .filter((x) => x.totalYield > 0)
+                              .map((x) => ({
+                                name: TYPE_LABELS[x.type] ?? x.type,
+                                value: x.totalYield,
+                              }))}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={55}
+                            outerRadius={82}
+                            dataKey="value"
+                            paddingAngle={4}
+                          >
+                            {data.production.byType
+                              .filter((x) => x.totalYield > 0)
+                              .map(({ type }) => (
+                                <Cell key={type} fill={TYPE_COLORS[type] ?? '#64748b'} />
+                              ))}
+                          </Pie>
+                          <RechartsTooltip
+                            formatter={(v) => [`${(v as number).toLocaleString()} pcs`, '']}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div className="flex flex-wrap justify-center gap-3 mt-1 mb-3">
+                        {data.production.byType.filter((x) => x.totalYield > 0).map(({ type, totalYield }) => (
+                          <div key={type} className="flex items-center gap-1.5 text-xs">
+                            <div className="w-2.5 h-2.5 rounded-full" style={{ background: TYPE_COLORS[type] ?? '#64748b' }} />
+                            <span>{TYPE_LABELS[type] ?? type}</span>
+                            <span className="font-semibold">{totalYield.toLocaleString()}</span>
+                          </div>
                         ))}
-                        <TableRow>
-                          <TableCell className="font-bold">Total</TableCell>
-                          <TableCell className="text-right font-bold">{data.production.totalYield.toLocaleString()} pcs</TableCell>
-                        </TableRow>
-                      </TableBody>
-                    </Table>
+                      </div>
+                      <div className="text-center text-sm text-muted-foreground">
+                        Total: <span className="font-bold text-foreground">{data.production.totalYield.toLocaleString()} pcs</span>
+                      </div>
+                    </>
                   )}
                 </CardContent>
               </Card>

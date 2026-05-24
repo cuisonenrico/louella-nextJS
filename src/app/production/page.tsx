@@ -76,6 +76,14 @@ export default function ProductionPage() {
 
   useEffect(() => { resetPending(); }, [filterDate, resetPending]);
 
+  // Auto-init inventory for any branch that doesn't have records yet
+  useEffect(() => {
+    if (!invQuery.isLoading && branchesWithNoInventory.size > 0 && !initAllBranchesMutation.isPending) {
+      initAllBranchesMutation.mutate();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invQuery.isLoading, branchesWithNoInventory.size]);
+
   // Lookup maps
   const productionByProduct = useMemo(
     () => new Map((prodQuery.data ?? []).map((p) => [p.productId, p])),
@@ -171,12 +179,9 @@ export default function ProductionPage() {
           <ProductionDateToolbar
             filterDate={filterDate}
             today={today}
-            missingInventoryBranchCount={branchesWithNoInventory.size}
-            isProdLoading={prodQuery.isLoading}
             isInvLoading={invQuery.isLoading}
             isInitAllInvPending={initAllBranchesMutation.isPending}
             onDateChange={setFilterDate}
-            onInitAllInventory={() => initAllBranchesMutation.mutate()}
           />
 
           <div className="mb-4 flex items-center gap-2">
@@ -192,17 +197,16 @@ export default function ProductionPage() {
             totalPending={totalPending}
             isSaving={savePendingMutation.isPending}
             isSaveDisabled={hasOverAllocation}
-            saveDisabledMessage={
+            overAllocatedDetails={
               hasOverAllocation
-                ? 'Cannot save while any branch allocation exceeds yield.'
+                ? Array.from(overAllocatedByProduct.entries()).map(([productId, info]) => ({
+                    name: productById.get(productId)?.name ?? `Product #${productId}`,
+                    overBy: info.overBy,
+                  }))
                 : undefined
             }
             onDiscard={discardPending}
             onSave={() => {
-              if (hasOverAllocation) {
-                setRowError('Cannot save: one or more products have total branch allocation greater than yield.');
-                return;
-              }
               savePendingMutation.mutate(
                 { production: pendingProduction, inventory: pendingInventory },
                 { onSuccess: resetPending },
@@ -231,10 +235,15 @@ export default function ProductionPage() {
                     <Table>
                       <TableHeader>
                         <TableRow className="bg-muted/50">
-                          <TableHead className="w-[130px]">Product</TableHead>
+                          <TableHead className="w-[130px] sticky left-0 bg-muted/50 z-10">Product</TableHead>
                           <TableHead className="text-center w-[90px]">Planned</TableHead>
                           <TableHead className="text-center w-[90px]">Yield</TableHead>
-                          <TableHead className="text-center w-[100px]">Discrepancy</TableHead>
+                          <TableHead className="text-center w-[100px]">
+                            <Tooltip>
+                              <TooltipTrigger className="underline decoration-dotted cursor-help">Discrepancy</TooltipTrigger>
+                              <TooltipContent className="max-w-[200px] text-center">Yield minus Planned. Negative = under-produced vs plan.</TooltipContent>
+                            </Tooltip>
+                          </TableHead>
                           {branches.map((b) => (
                             <TableHead key={b.id} className="text-center w-[100px]">
                               <div className="flex items-center justify-center gap-1">
@@ -260,8 +269,8 @@ export default function ProductionPage() {
                               </div>
                             </TableHead>
                           ))}
-                          <TableHead className="text-right w-[100px]">Exp. Sales</TableHead>
-                          <TableHead className="text-center w-[80px]">Mat. Cost</TableHead>
+                          <TableHead className="text-right w-[110px]">Exp. Sales</TableHead>
+                          <TableHead className="text-center w-[90px]">Mat. Cost</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -282,7 +291,7 @@ export default function ProductionPage() {
                                 overAllocation ? 'bg-red-50/60' : dirty ? 'bg-amber-50/50' : ''
                               }
                             >
-                              <TableCell className="font-medium">{productById.get(row.productId)?.name ?? `Product #${row.productId}`}</TableCell>
+                              <TableCell className="font-medium sticky left-0 bg-background z-10">{productById.get(row.productId)?.name ?? `Product #${row.productId}`}</TableCell>
                               <TableCell className="text-center">
                                 {planned > 0 ? (
                                   <span className="text-muted-foreground font-medium">{planned}</span>
@@ -369,11 +378,17 @@ export default function ProductionPage() {
                                 {row._productionId != null && (
                                   <Tooltip>
                                     <TooltipTrigger asChild>
-                                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setConsumptionId(row._productionId!); setConsumptionPlannedYield(planned || undefined); }}>
-                                        <Calculator className="h-3.5 w-3.5" />
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-7 px-2 text-xs gap-1 text-primary border-primary/40 hover:bg-primary/5"
+                                        onClick={() => { setConsumptionId(row._productionId!); setConsumptionPlannedYield(planned || undefined); }}
+                                      >
+                                        <Calculator className="h-3 w-3" />
+                                        ₱ Cost
                                       </Button>
                                     </TooltipTrigger>
-                                    <TooltipContent>View material consumption</TooltipContent>
+                                    <TooltipContent>View recipe-based material cost</TooltipContent>
                                   </Tooltip>
                                 )}
                               </TableCell>

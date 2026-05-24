@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronLeft, ChevronRight, CalendarDays, Plus, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CalendarDays, Loader2 } from 'lucide-react';
 import dayjs from 'dayjs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,23 +9,17 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 type Props = {
   filterDate: string;
   today: string;
-  missingInventoryBranchCount: number;
-  isProdLoading: boolean;
   isInvLoading: boolean;
   isInitAllInvPending: boolean;
   onDateChange: (next: string) => void;
-  onInitAllInventory: () => void;
 };
 
 export default function ProductionDateToolbar({
   filterDate,
   today,
-  missingInventoryBranchCount,
-  isProdLoading: _isProdLoading,
   isInvLoading,
   isInitAllInvPending,
   onDateChange,
-  onInitAllInventory,
 }: Props) {
   return (
     <TooltipProvider>
@@ -55,16 +49,11 @@ export default function ProductionDateToolbar({
           </Button>
         )}
 
-        {!isInvLoading && missingInventoryBranchCount > 0 && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button size="sm" variant="secondary" onClick={onInitAllInventory} disabled={isInitAllInvPending}>
-                {isInitAllInvPending ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
-                Init Inventory ({missingInventoryBranchCount})
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent className="max-w-xs">Initialize inventory for {missingInventoryBranchCount} branch{missingInventoryBranchCount !== 1 ? 'es' : ''}</TooltipContent>
-          </Tooltip>
+        {(isInvLoading || isInitAllInvPending) && (
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            {isInitAllInvPending ? 'Initializing inventory…' : 'Loading…'}
+          </span>
         )}
       </div>
     </TooltipProvider>

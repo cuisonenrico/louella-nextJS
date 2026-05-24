@@ -134,30 +134,13 @@ export default function InventoryDetailsPage() {
     onError: (err) => setSnackError(extractError(err)),
   });
 
-  const reinitializeMutation = useMutation({
-    mutationFn: async () => {
-      const branchId = selectedBranchId ?? Number.parseInt(filterBranch, 10);
-      const yesterday = dayjs(filterDateFrom).subtract(1, 'day').format('YYYY-MM-DD');
-      const prevRes = await inventoryApi.byBranchDate(branchId, yesterday);
-      const prevData = (prevRes.data ?? []) as Inventory[];
-      const prevMap = new Map(prevData.map((i) => [i.productId, Math.max(0, i.leftover - i.reject)]));
-      const existingProductIds = new Set(rows.map((r) => r.productId));
-      const payload = products
-        .filter((p) => p.isActive && !existingProductIds.has(p.id))
-        .map((p) => ({ branchId, productId: p.id, date: filterDateFrom, quantity: prevMap.get(p.id) ?? 0, delivery: 0, leftover: 0, reject: 0 }));
-      if (payload.length > 0) await inventoryApi.createBulk(payload);
-
-      // Update existing rows in parallel to avoid a long serial request chain.
-      await Promise.all(
-        rows.map((r) => {
-          const qty = prevMap.get(r.productId) ?? 0;
-          return inventoryApi.update(r.id, { quantity: qty, delivery: 0, leftover: 0, reject: 0 });
-        }),
-      );
-    },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['inventory'] }); qc.invalidateQueries({ queryKey: ['inventory-summary'] }); },
-    onError: (err) => setSnackError(extractError(err)),
-  });
+  // Auto-sync missing product rows when branch is selected
+  useEffect(() => {
+    if (uninitializedCount > 0 && !invQuery.isLoading && !bulkCreateMutation.isPending) {
+      bulkCreateMutation.mutate();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uninitializedCount, invQuery.isLoading]);
 
   const savePendingMutation = useMutation({
     mutationFn: async () => {
@@ -220,9 +203,6 @@ export default function InventoryDetailsPage() {
             filterBranch={filterBranch}
             branches={branches}
             today={today}
-            uninitializedCount={uninitializedCount}
-            isBulkCreatePending={bulkCreateMutation.isPending}
-            isReinitializePending={reinitializeMutation.isPending}
             onDateModeChange={handleDateModeChange}
             onDraftFromChange={setDraftFrom}
             onDraftToChange={setDraftTo}
@@ -230,8 +210,6 @@ export default function InventoryDetailsPage() {
             onStepDate={stepDate}
             onBranchChange={setFilterBranch}
             onImportOpen={() => router.push('/inventory-import')}
-            onBulkCreate={() => bulkCreateMutation.mutate()}
-            onReinitialize={() => reinitializeMutation.mutate()}
           />
 
           <InventorySummaryPanel
@@ -251,7 +229,7 @@ export default function InventoryDetailsPage() {
           {invQuery.isLoading ? (
             <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
           ) : displayRows.length === 0 ? (
-            <p className="text-center text-muted-foreground py-12">No inventory data. Select a branch and date, or sync products.</p>
+            <p className="text-center text-muted-foreground py-12">No inventory data. Select a branch and date.</p>
           ) : (
             <InventoryTypeTables
               rowsByType={rowsByType}

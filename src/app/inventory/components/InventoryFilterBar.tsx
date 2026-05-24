@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronLeft, ChevronRight, Calendar, CalendarRange, CalendarDays, RotateCcw, Plus, Upload, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar, CalendarRange, CalendarDays, Upload } from 'lucide-react';
 import type { Branch } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,9 +14,6 @@ interface InventoryFilterBarProps {
   filterBranch: string;
   branches: Branch[];
   today: string;
-  uninitializedCount: number;
-  isBulkCreatePending: boolean;
-  isReinitializePending: boolean;
   onDateModeChange: (mode: 'date' | 'range') => void;
   onDraftFromChange: (v: string) => void;
   onDraftToChange: (v: string) => void;
@@ -24,8 +21,6 @@ interface InventoryFilterBarProps {
   onStepDate: (delta: number) => void;
   onBranchChange: (branchId: string) => void;
   onImportOpen: () => void;
-  onBulkCreate: () => void;
-  onReinitialize: () => void;
 }
 
 export default function InventoryFilterBar({
@@ -35,9 +30,6 @@ export default function InventoryFilterBar({
   filterBranch,
   branches,
   today,
-  uninitializedCount,
-  isBulkCreatePending,
-  isReinitializePending,
   onDateModeChange,
   onDraftFromChange,
   onDraftToChange,
@@ -45,8 +37,6 @@ export default function InventoryFilterBar({
   onStepDate,
   onBranchChange,
   onImportOpen,
-  onBulkCreate,
-  onReinitialize,
 }: InventoryFilterBarProps) {
   const isRange = draftFrom !== draftTo;
 
@@ -147,29 +137,7 @@ export default function InventoryFilterBar({
           <Upload className="h-3.5 w-3.5 mr-1" /> Import XLSX
         </Button>
 
-        {!isRange && filterBranch !== '' && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button size="sm" variant="outline" className="border-amber-400 text-amber-700" onClick={onReinitialize} disabled={isReinitializePending}>
-                {isReinitializePending ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5 mr-1" />}
-                Reinitialize
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent className="max-w-xs">Reset all entries for this day using yesterday&apos;s leftover as opening quantity.</TooltipContent>
-          </Tooltip>
-        )}
 
-        {!isRange && uninitializedCount > 0 && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button size="sm" onClick={onBulkCreate} disabled={isBulkCreatePending}>
-                {isBulkCreatePending ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
-                Sync {uninitializedCount} Product{uninitializedCount !== 1 ? 's' : ''}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent className="max-w-xs">{uninitializedCount} active product{uninitializedCount !== 1 ? 's' : ''} missing entries. Click to create them.</TooltipContent>
-          </Tooltip>
-        )}
       </div>
 
       {/* Branch selector */}

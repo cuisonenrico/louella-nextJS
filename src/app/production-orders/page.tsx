@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { Fragment, useCallback, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
@@ -51,6 +51,7 @@ export default function ProductionOrdersPage() {
   const [finalizeTarget, setFinalizeTarget] = useState<ProductionOrder | null>(null);
   const [cancelTarget, setCancelTarget] = useState<ProductionOrder | null>(null);
   const [formNotes, setFormNotes] = useState('');
+  const [formBranchId, setFormBranchId] = useState<number | null>(null);
   const [formItems, setFormItems] = useState<Map<number, number>>(new Map());
   const [formError, setFormError] = useState('');
 
@@ -132,6 +133,7 @@ export default function ProductionOrdersPage() {
     }
     setEditTarget(null);
     setFormNotes('');
+    setFormBranchId(activeBranchId);
     const defaultItems = new Map<number, number>();
     activeProducts.forEach((p) => defaultItems.set(p.id, 0));
     setFormItems(defaultItems);
@@ -142,6 +144,7 @@ export default function ProductionOrdersPage() {
   const openEdit = useCallback((order: ProductionOrder) => {
     setEditTarget(order);
     setFormNotes(order.notes ?? '');
+    setFormBranchId(order.branchId ?? activeBranchId);
     const items = new Map<number, number>();
     // Include all active products, filling from order items
     activeProducts.forEach((p) => items.set(p.id, 0));
@@ -149,11 +152,11 @@ export default function ProductionOrdersPage() {
     setFormItems(items);
     setFormError('');
     setDialogOpen(true);
-  }, [activeProducts]);
+  }, [activeProducts, activeBranchId]);
 
   const handleSave = useCallback(() => {
     setFormError('');
-    if (!activeBranchId) {
+    if (!formBranchId) {
       setFormError('Select a branch before saving.');
       return;
     }
@@ -163,11 +166,11 @@ export default function ProductionOrdersPage() {
     }));
 
     if (editTarget) {
-      updateMutation.mutate({ id: editTarget.id, data: { branchId: activeBranchId, notes: formNotes || undefined, items } });
+      updateMutation.mutate({ id: editTarget.id, data: { branchId: formBranchId, notes: formNotes || undefined, items } });
     } else {
-      createMutation.mutate({ branchId: activeBranchId, date: filterDate, notes: formNotes || undefined, items });
+      createMutation.mutate({ branchId: formBranchId, date: filterDate, notes: formNotes || undefined, items });
     }
-  }, [formItems, formNotes, filterDate, editTarget, activeBranchId, createMutation, updateMutation]);
+  }, [formItems, formNotes, formBranchId, filterDate, editTarget, createMutation, updateMutation]);
 
   const saving = createMutation.isPending || updateMutation.isPending;
 
@@ -206,8 +209,32 @@ export default function ProductionOrdersPage() {
   const productsByType = useMemo(() => {
     const map = new Map<ProductType, Product[]>(PRODUCT_TYPE_ORDER.map((t) => [t, []]));
     activeProducts.forEach((p) => map.get(p.type)?.push(p));
+    map.forEach((prods) => prods.sort((a, b) => a.sortOrder !== b.sortOrder ? a.sortOrder - b.sortOrder : a.name.localeCompare(b.name)));
     return map;
   }, [activeProducts]);
+
+  // Flat ordered list for Enter-key navigation
+  const orderedProducts = useMemo(() => {
+    const list: Product[] = [];
+    PRODUCT_TYPE_ORDER.forEach((type) => list.push(...(productsByType.get(type) ?? [])));
+    return list;
+  }, [productsByType]);
+
+  // Input refs for keyboard navigation
+  const inputRefs = useRef<Map<number, HTMLInputElement>>(new Map());
+
+  const handleInputKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>, productId: number) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const idx = orderedProducts.findIndex((p) => p.id === productId);
+    const next = orderedProducts[idx + 1];
+    if (!next) return;
+    const nextEl = inputRefs.current.get(next.id);
+    if (nextEl) {
+      nextEl.focus();
+      nextEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [orderedProducts]);
 
   const plannedSummaryRows = useMemo(() => {
     return Array.from(plannedByProduct.entries())
@@ -447,58 +474,93 @@ export default function ProductionOrdersPage() {
 
           {/* ── Create/Edit Dialog ── */}
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+            <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col">
               <DialogHeader>
                 <DialogTitle>{editTarget ? `Edit PO #${editTarget.id}` : 'New Production Order'}</DialogTitle>
               </DialogHeader>
 
               {formError && <Alert variant="destructive"><AlertDescription>{formError}</AlertDescription></Alert>}
 
-              <div className="space-y-2">
+              <div className="space-y-1">
+                <Label>Deliver to Branch</Label>
+                <Select
+                  value={formBranchId ? String(formBranchId) : ''}
+                  onValueChange={(v) => setFormBranchId(Number.parseInt(v, 10))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select branch" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {activeBranches.map((b) => (
+                      <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1">
                 <Label>Notes (optional)</Label>
                 <Textarea
                   placeholder="Order notes..."
                   value={formNotes}
                   onChange={(e) => setFormNotes(e.target.value)}
-                  className="h-16"
+                  className="h-14 resize-none"
                 />
               </div>
 
-              {/* Products grouped by type */}
-              {PRODUCT_TYPE_ORDER.map((type) => {
-                const prods = productsByType.get(type) ?? [];
-                if (prods.length === 0) return null;
-                return (
-                  <div key={type}>
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 mt-3">
-                      {TYPE_LABELS[type]}
-                    </h4>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                      {prods.map((p) => (
-                        <div key={p.id} className="flex items-center gap-2">
-                          <Label className="text-xs w-[100px] truncate" title={p.name}>{p.name}</Label>
-                          <Input
-                            type="number"
-                            className="h-7 w-[80px]"
-                            min={0}
-                            value={String(formItems.get(p.id) ?? 0)}
-                            onChange={(e) => {
-                              const val = parseInt(e.target.value) || 0;
-                              setFormItems((prev) => {
-                                const next = new Map(prev);
-                                next.set(p.id, val);
-                                return next;
-                              });
-                            }}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
+              {/* Products table */}
+              <div className="overflow-y-auto flex-1 rounded-md border">
+                <Table>
+                  <TableHeader className="sticky top-0 bg-muted z-10">
+                    <TableRow>
+                      <TableHead className="w-8 text-center">#</TableHead>
+                      <TableHead>Product</TableHead>
+                      <TableHead className="w-36 text-right">Yield</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {PRODUCT_TYPE_ORDER.map((type) => {
+                      const prods = productsByType.get(type) ?? [];
+                      if (prods.length === 0) return null;
+                      return (
+                        <Fragment key={type}>
+                          <TableRow className="bg-muted/60 hover:bg-muted/60">
+                            <TableCell colSpan={3} className="py-1.5 px-3">
+                              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{TYPE_LABELS[type]}</span>
+                            </TableCell>
+                          </TableRow>
+                          {prods.map((p, idx) => (
+                            <TableRow key={p.id}>
+                              <TableCell className="text-center text-xs text-muted-foreground">{idx + 1}</TableCell>
+                              <TableCell className="font-medium">{p.name}</TableCell>
+                              <TableCell className="text-right">
+                                <Input
+                                  ref={(el) => { if (el) inputRefs.current.set(p.id, el); else inputRefs.current.delete(p.id); }}
+                                  type="number"
+                                  className="h-8 w-28 ml-auto text-right"
+                                  min={0}
+                                  value={String(formItems.get(p.id) ?? 0)}
+                                  onChange={(e) => {
+                                    const val = parseInt(e.target.value) || 0;
+                                    setFormItems((prev) => {
+                                      const next = new Map(prev);
+                                      next.set(p.id, val);
+                                      return next;
+                                    });
+                                  }}
+                                  onKeyDown={(e) => handleInputKeyDown(e, p.id)}
+                                />
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </Fragment>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
 
-              <div className="text-sm text-right font-semibold text-primary mt-2">
+              <div className="text-sm text-right font-semibold text-primary pt-1">
                 Total: {Array.from(formItems.values()).reduce((a, b) => a + b, 0).toLocaleString()}
               </div>
 
