@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronLeft, ChevronRight, CalendarDays, FilePlus, Plus, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CalendarDays, Plus, Loader2 } from 'lucide-react';
 import dayjs from 'dayjs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,28 +9,22 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 type Props = {
   filterDate: string;
   today: string;
-  missingProductionCount: number;
   missingInventoryBranchCount: number;
   isProdLoading: boolean;
   isInvLoading: boolean;
-  isInitProdPending: boolean;
   isInitAllInvPending: boolean;
   onDateChange: (next: string) => void;
-  onInitProduction: () => void;
   onInitAllInventory: () => void;
 };
 
 export default function ProductionDateToolbar({
   filterDate,
   today,
-  missingProductionCount,
   missingInventoryBranchCount,
-  isProdLoading,
+  isProdLoading: _isProdLoading,
   isInvLoading,
-  isInitProdPending,
   isInitAllInvPending,
   onDateChange,
-  onInitProduction,
   onInitAllInventory,
 }: Props) {
   return (
@@ -59,18 +53,6 @@ export default function ProductionDateToolbar({
           <Button size="sm" variant="outline" onClick={() => onDateChange(today)}>
             <CalendarDays className="h-3.5 w-3.5 mr-1" /> Today
           </Button>
-        )}
-
-        {!isProdLoading && missingProductionCount > 0 && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button size="sm" onClick={onInitProduction} disabled={isInitProdPending}>
-                {isInitProdPending ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <FilePlus className="h-3.5 w-3.5 mr-1" />}
-                Init Production ({missingProductionCount})
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent className="max-w-xs">Create production records for {missingProductionCount} product{missingProductionCount !== 1 ? 's' : ''}</TooltipContent>
-          </Tooltip>
         )}
 
         {!isInvLoading && missingInventoryBranchCount > 0 && (

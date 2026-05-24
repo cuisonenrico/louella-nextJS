@@ -485,6 +485,7 @@ export interface ProductionOrderItem {
 
 export interface ProductionOrder {
   id: number;
+  branchId: number | null;
   date: string;
   status: ProductionOrderStatus;
   notes: string | null;
@@ -492,6 +493,7 @@ export interface ProductionOrder {
   createdAt: string;
   updatedAt: string;
   items: ProductionOrderItem[];
+  branch?: Branch;
   createdBy?: { id: number; email: string; role: UserRole };
 }
 

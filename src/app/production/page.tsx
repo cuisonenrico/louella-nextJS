@@ -1,12 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, Calculator, AlertTriangle } from 'lucide-react';
 import dayjs from 'dayjs';
 import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
-import { branchesApi, inventoryApi, productionApi, productionOrdersApi, productsApi } from '@/lib/apiServices';
+import { branchesApi, inventoryApi, productionOrdersApi, productsApi } from '@/lib/apiServices';
 import type { Branch, Inventory, PlannedYield, Product, Production, ProductType } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -69,8 +70,8 @@ export default function ProductionPage() {
 
   const { pendingProduction, pendingInventory, handleFieldChange, resetPending } = useProductionRowUpdate();
 
-  const { initBranchMutation, initAllBranchesMutation, initProductionMutation, savePendingMutation } = useProductionMutations({
-    filterDate, products, branches, branchesWithNoInventory, prodQueryData: prodQuery.data, plannedByProduct, onError: setRowError,
+  const { initBranchMutation, initAllBranchesMutation, savePendingMutation } = useProductionMutations({
+    filterDate, products, branches, branchesWithNoInventory, onError: setRowError,
   });
 
   useEffect(() => { resetPending(); }, [filterDate, resetPending]);
@@ -124,15 +125,12 @@ export default function ProductionPage() {
   const today = dayjs().format('YYYY-MM-DD');
   const totalPending = pendingProduction.size + pendingInventory.size;
   const isLoading = prodQuery.isLoading || invQuery.isLoading;
-  const missingProductionCount = products.filter(
-    (p) => p.isActive && !(prodQuery.data ?? []).some((pr) => pr.productId === p.id),
-  ).length;
 
   // Get effective value considering pending changes
   const getEffectiveValue = (row: ProdRow, field: string): number => {
     if (field === 'yield') {
-      const prodId = row._productionId;
-      if (prodId != null && pendingProduction.has(prodId)) return pendingProduction.get(prodId)!.yield;
+      const pending = pendingProduction.get(row.productId);
+      if (pending !== undefined) return pending.yield;
       return row.yield;
     }
     if (field.startsWith('branch_')) {
@@ -145,7 +143,7 @@ export default function ProductionPage() {
   };
 
   const isRowDirty = (row: ProdRow): boolean => {
-    if (row._productionId != null && pendingProduction.has(row._productionId)) return true;
+    if (pendingProduction.has(row.productId)) return true;
     return branches.some((b) => {
       const invId = row[`_inv_${b.id}`] as number | null;
       return invId != null && pendingInventory.has(invId);
@@ -173,16 +171,22 @@ export default function ProductionPage() {
           <ProductionDateToolbar
             filterDate={filterDate}
             today={today}
-            missingProductionCount={missingProductionCount}
             missingInventoryBranchCount={branchesWithNoInventory.size}
             isProdLoading={prodQuery.isLoading}
             isInvLoading={invQuery.isLoading}
-            isInitProdPending={initProductionMutation.isPending}
             isInitAllInvPending={initAllBranchesMutation.isPending}
             onDateChange={setFilterDate}
-            onInitProduction={() => initProductionMutation.mutate()}
             onInitAllInventory={() => initAllBranchesMutation.mutate()}
           />
+
+          <div className="mb-4 flex items-center gap-2">
+            <Button asChild variant="default" size="sm">
+              <Link href="/production">Production Board</Link>
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link href="/production/orders">Branch Orders</Link>
+            </Button>
+          </div>
 
           <ProductionPendingBar
             totalPending={totalPending}

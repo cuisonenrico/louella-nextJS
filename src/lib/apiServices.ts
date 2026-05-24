@@ -283,6 +283,8 @@ export const productionApi = {
   create: (data: Partial<Production>) => api.post<Production>('/production', data),
   createBulk: (data: Partial<Production>[]) =>
     api.post<Production[]>('/production/bulk', data),
+  upsertBulk: (data: Array<{ productId: number; date: string; yield: number; branchId?: number }>) =>
+    api.post<Production[]>('/production/upsert-bulk', data),
   update: (id: number, data: { yield?: number; notes?: string | null }) =>
     api.patch<Production>(`/production/${id}`, data),
   delete: (id: number) => api.delete(`/production/${id}`),
@@ -304,15 +306,19 @@ export const productionApi = {
 export const productionOrdersApi = {
   list: (page = 1, limit = 20) =>
     api.get<PaginatedResponse<ProductionOrder>>('/production-orders', { params: { page, limit } }),
-  byDate: (date: string) =>
-    api.get<ProductionOrder[]>('/production-orders/by-date', { params: { date } }),
-  plannedYield: (date: string) =>
-    api.get<PlannedYield[]>('/production-orders/planned-yield', { params: { date } }),
+  byDate: (date: string, branchId?: number) =>
+    api.get<ProductionOrder[]>('/production-orders/by-date', {
+      params: branchId ? { date, branchId } : { date },
+    }),
+  plannedYield: (date: string, branchId?: number) =>
+    api.get<PlannedYield[]>('/production-orders/planned-yield', {
+      params: branchId ? { date, branchId } : { date },
+    }),
   get: (id: number) =>
     api.get<ProductionOrder>(`/production-orders/${id}`),
-  create: (data: { date: string; notes?: string; items: { productId: number; yield?: number }[] }) =>
+  create: (data: { branchId: number; date: string; notes?: string; items: { productId: number; yield?: number }[] }) =>
     api.post<ProductionOrder>('/production-orders', data),
-  update: (id: number, data: { status?: string; notes?: string; items?: { productId: number; yield?: number }[] }) =>
+  update: (id: number, data: { branchId?: number; status?: string; notes?: string; items?: { productId: number; yield?: number }[] }) =>
     api.patch<ProductionOrder>(`/production-orders/${id}`, data),
   delete: (id: number) =>
     api.delete(`/production-orders/${id}`),

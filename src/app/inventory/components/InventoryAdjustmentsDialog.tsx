@@ -43,20 +43,15 @@ export default function InventoryAdjustmentsDialog({ inventory, productName, bra
   });
   const [formError, setFormError] = useState('');
 
-  if (!inventory) return null;
-
-  const currentAdjustments = inventory.adjustments ?? [];
-  const adjSum = currentAdjustments.reduce((acc, a) => acc + a.value, 0);
-
+  // All hooks must be called unconditionally before any early return.
   const destInventoryQuery = useQuery<Inventory[]>({
-    queryKey: ['inventory-dest', form.toBranchId, inventory.productId, inventory.date],
+    queryKey: ['inventory-dest', form.toBranchId, inventory?.productId, inventory?.date],
     queryFn: () =>
       inventoryApi
-        .byBranchDate(parseInt(form.toBranchId), inventory.date.slice(0, 10))
+        .byBranchDate(parseInt(form.toBranchId), inventory!.date.slice(0, 10))
         .then((r) => r.data as Inventory[]),
-    enabled: form.type === 'PULL_OUT' && !!form.toBranchId,
+    enabled: form.type === 'PULL_OUT' && !!form.toBranchId && !!inventory,
   });
-  const destInventory = destInventoryQuery.data?.find((r) => r.productId === inventory.productId) ?? null;
 
   const createMutation = useMutation({
     mutationFn: (data: { inventoryId: number; type: AdjustmentType; value: number; notes?: string }) =>
@@ -90,6 +85,12 @@ export default function InventoryAdjustmentsDialog({ inventory, productName, bra
     mutationFn: (id: number) => inventoryAdjustmentsApi.delete(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory'] }),
   });
+
+  if (!inventory) return null;
+
+  const currentAdjustments = inventory.adjustments ?? [];
+  const adjSum = currentAdjustments.reduce((acc, a) => acc + a.value, 0);
+  const destInventory = destInventoryQuery.data?.find((r) => r.productId === inventory.productId) ?? null;
 
   const isPending = createMutation.isPending || transferMutation.isPending;
   const isTransfer = form.type === 'PULL_OUT' && !!form.toBranchId;

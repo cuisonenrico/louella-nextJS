@@ -18,7 +18,7 @@ export function buildFinalizedPlannedYields(orders: ProductionOrder[]): PlannedY
 interface UseYieldAutoSyncParams {
   allRows: ProdRow[];
   plannedByProduct: Map<number, number>;
-  pendingProduction: Map<number, { yield: number }>;
+  pendingProduction: Map<number, { _productionId: number | null; yield: number }>;
   handleFieldChange: (row: ProdRow, field: string, newValue: number) => void;
   filterDate: string;
 }
@@ -37,17 +37,15 @@ export function useYieldAutoSync({
     const nextPending = new Map(pendingProduction);
 
     for (const row of allRows) {
-      if (row._productionId == null) continue;
-
       const planned = plannedByProduct.get(row.productId) ?? 0;
       const previousPlanned = plannedBaselineRef.current.get(row.productId);
-      const pending = nextPending.get(row._productionId);
+      const pending = nextPending.get(row.productId);
 
       if (previousPlanned == null) {
         plannedBaselineRef.current.set(row.productId, planned);
         // Initial fill: if yield is zero and planned exists, initialize yield from planned.
         if (row.yield === 0 && planned > 0 && pending == null) {
-          nextPending.set(row._productionId, { yield: planned });
+          nextPending.set(row.productId, { _productionId: row._productionId, yield: planned });
           changed = true;
         }
         continue;
@@ -56,7 +54,7 @@ export function useYieldAutoSync({
       const delta = planned - previousPlanned;
       if (delta !== 0) {
         const baseYield = pending?.yield ?? row.yield;
-        nextPending.set(row._productionId, { yield: Math.max(0, baseYield + delta) });
+        nextPending.set(row.productId, { _productionId: row._productionId, yield: Math.max(0, baseYield + delta) });
         plannedBaselineRef.current.set(row.productId, planned);
         changed = true;
       }
@@ -64,10 +62,9 @@ export function useYieldAutoSync({
 
     if (changed) {
       for (const row of allRows) {
-        if (row._productionId == null) continue;
-        const updated = nextPending.get(row._productionId);
+        const updated = nextPending.get(row.productId);
         if (!updated) continue;
-        if ((pendingProduction.get(row._productionId)?.yield ?? row.yield) !== updated.yield) {
+        if ((pendingProduction.get(row.productId)?.yield ?? row.yield) !== updated.yield) {
           handleFieldChange(row, 'yield', updated.yield);
         }
       }

@@ -1,9 +1,8 @@
 'use client';
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import dayjs from 'dayjs';
-import { inventoryApi, productionApi } from '@/lib/apiServices';
-import type { Branch, Inventory, Product, Production } from '@/types';
+import { inventoryApi, jobsApi, productionApi } from '@/lib/apiServices';
+import type { Branch, Product } from '@/types';
 
 function extractErrorMessage(err: unknown): string {
   const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
@@ -15,76 +14,60 @@ interface UseProductionMutationsParams {
   products: Product[];
   branches: Branch[];
   branchesWithNoInventory: Set<number>;
-  prodQueryData: Production[] | undefined;
-  plannedByProduct: Map<number, number>;
   onError: (msg: string) => void;
 }
 
 export function useProductionMutations({
   filterDate,
-  products,
-  branches,
-  branchesWithNoInventory,
-  prodQueryData,
-  plannedByProduct,
+  products: _products,
+  branches: _branches,
+  branchesWithNoInventory: _branchesWithNoInventory,
   onError,
 }: UseProductionMutationsParams) {
   const qc = useQueryClient();
 
+  const invalidateInventory = () => {
+    qc.invalidateQueries({ queryKey: ['inventory-for-production'] });
+    qc.invalidateQueries({ queryKey: ['inventory'] });
+  };
+
+  /**
+   * Init a single branch's inventory for filterDate.
+   * Delegates to the autofill job so the carry-forward is always derived from
+   * the most recent actual record (not just yesterday), correctly handling gaps.
+   */
   const initBranchMutation = useMutation({
-    mutationFn: async (branchId: number) => {
-      const yesterday = dayjs(filterDate).subtract(1, 'day').format('YYYY-MM-DD');
-      const prevRes = await inventoryApi.byBranchDate(branchId, yesterday);
-      const prevData = (prevRes.data ?? []) as Inventory[];
-      const prevMap = new Map(prevData.map((i) => [i.productId, Math.max(0, i.leftover - i.reject)]));
-      const payload = products
-        .filter((p) => p.isActive)
-        .map((p) => ({ branchId, productId: p.id, date: filterDate, quantity: prevMap.get(p.id) ?? 0, delivery: 0, leftover: 0, reject: 0 }));
-      return inventoryApi.createBulk(payload);
-    },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['inventory-for-production'] }); qc.invalidateQueries({ queryKey: ['inventory'] }); },
+    mutationFn: (_branchId: number) => jobsApi.autofill(filterDate),
+    onSuccess: invalidateInventory,
     onError: (err) => onError(extractErrorMessage(err)),
   });
 
+  /**
+   * Init all missing branches' inventory for filterDate.
+   * Same gap-safe approach — one autofill call handles all missing rows.
+   */
   const initAllBranchesMutation = useMutation({
-    mutationFn: async () => {
-      const yesterday = dayjs(filterDate).subtract(1, 'day').format('YYYY-MM-DD');
-      const missingBranches = branches.filter((b) => branchesWithNoInventory.has(b.id));
-      await Promise.all(
-        missingBranches.map(async (b) => {
-          const prevRes = await inventoryApi.byBranchDate(b.id, yesterday);
-          const prevData = (prevRes.data ?? []) as Inventory[];
-          const prevMap = new Map(prevData.map((i) => [i.productId, Math.max(0, i.leftover - i.reject)]));
-          const payload = products
-            .filter((p) => p.isActive)
-            .map((p) => ({ branchId: b.id, productId: p.id, date: filterDate, quantity: prevMap.get(p.id) ?? 0, delivery: 0, leftover: 0, reject: 0 }));
-          return inventoryApi.createBulk(payload);
-        }),
-      );
-    },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['inventory-for-production'] }); qc.invalidateQueries({ queryKey: ['inventory'] }); },
-    onError: (err) => onError(extractErrorMessage(err)),
-  });
-
-  const initProductionMutation = useMutation({
-    mutationFn: () => {
-      const existingProductIds = new Set((prodQueryData ?? []).map((p) => p.productId));
-      const payload = products
-        .filter((p) => p.isActive && !existingProductIds.has(p.id))
-        .map((p) => ({ branchId: 1, productId: p.id, date: filterDate, yield: plannedByProduct.get(p.id) ?? 0 }));
-      return productionApi.createBulk(payload);
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['production'] }),
+    mutationFn: () => jobsApi.autofill(filterDate),
+    onSuccess: invalidateInventory,
     onError: (err) => onError(extractErrorMessage(err)),
   });
 
   const savePendingMutation = useMutation({
     mutationFn: async (data: {
-      production: Map<number, { yield: number }>;
+      production: Map<number, { _productionId: number | null; yield: number }>;
       inventory: Map<number, { delivery: number }>;
     }) => {
+      const toUpsert = Array.from(data.production.entries())
+        .filter(([, d]) => d._productionId == null)
+        .map(([productId, d]) => ({ productId, date: filterDate, yield: d.yield }));
+
+      const toUpdate = Array.from(data.production.entries())
+        .filter(([, d]) => d._productionId != null)
+        .map(([, d]) => ({ id: d._productionId!, yield: d.yield }));
+
       await Promise.all([
-        ...Array.from(data.production.entries()).map(([id, d]) => productionApi.update(id, d)),
+        toUpsert.length > 0 ? productionApi.upsertBulk(toUpsert) : Promise.resolve(),
+        ...toUpdate.map(({ id, yield: y }) => productionApi.update(id, { yield: y })),
         ...Array.from(data.inventory.entries()).map(([id, d]) => inventoryApi.update(id, d)),
       ]);
     },
@@ -96,5 +79,5 @@ export function useProductionMutations({
     onError: (err) => onError(extractErrorMessage(err)),
   });
 
-  return { initBranchMutation, initAllBranchesMutation, initProductionMutation, savePendingMutation };
+  return { initBranchMutation, initAllBranchesMutation, savePendingMutation };
 }

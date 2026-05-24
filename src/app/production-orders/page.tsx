@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import {
@@ -9,8 +10,8 @@ import {
 } from 'lucide-react';
 import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
-import { productionOrdersApi, productsApi } from '@/lib/apiServices';
-import type { Product, ProductionOrder, ProductionOrderStatus, ProductType } from '@/types';
+import { branchesApi, productionOrdersApi, productsApi } from '@/lib/apiServices';
+import type { Branch, Product, ProductionOrder, ProductionOrderStatus, ProductType } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,6 +23,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useAuth } from '@/contexts/AuthContext';
 
 const PRODUCT_TYPE_ORDER: ProductType[] = ['BREAD', 'CAKE', 'SPECIAL', 'MISCELLANEOUS'];
 const TYPE_LABELS: Record<ProductType, string> = { BREAD: 'Bread', CAKE: 'Cake', SPECIAL: 'Special', MISCELLANEOUS: 'Miscellaneous' };
@@ -38,8 +41,10 @@ function extractError(err: unknown): string {
 }
 
 export default function ProductionOrdersPage() {
+  const { user } = useAuth();
   const qc = useQueryClient();
   const [filterDate, setFilterDate] = useState(dayjs().format('YYYY-MM-DD'));
+  const [selectedBranchId, setSelectedBranchId] = useState<number | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<ProductionOrder | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ProductionOrder | null>(null);
@@ -48,6 +53,8 @@ export default function ProductionOrdersPage() {
   const [formNotes, setFormNotes] = useState('');
   const [formItems, setFormItems] = useState<Map<number, number>>(new Map());
   const [formError, setFormError] = useState('');
+
+  const isAdmin = user?.role === 'ADMIN';
 
   const invalidateProductionViews = useCallback(() => {
     qc.invalidateQueries({ queryKey: ['production-orders'] });
@@ -61,24 +68,37 @@ export default function ProductionOrdersPage() {
     queryFn: () => productsApi.list().then((r) => r.data),
   });
 
+  const { data: branches = [] } = useQuery<Branch[]>({
+    queryKey: ['branches'],
+    queryFn: () => branchesApi.list().then((r) => r.data),
+  });
+
+  const activeBranches = useMemo(() => branches.filter((b) => b.isActive), [branches]);
+  const activeBranchId = selectedBranchId ?? activeBranches[0]?.id ?? null;
+  const activeBranch = useMemo(
+    () => activeBranches.find((b) => b.id === activeBranchId) ?? null,
+    [activeBranches, activeBranchId],
+  );
+
   const activeProducts = useMemo(() => products.filter((p) => p.isActive), [products]);
   const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
 
   const { data: orders = [], isLoading } = useQuery<ProductionOrder[]>({
-    queryKey: ['production-orders', filterDate],
-    queryFn: () => productionOrdersApi.byDate(filterDate).then((r) => r.data),
+    queryKey: ['production-orders', filterDate, activeBranchId],
+    queryFn: () => productionOrdersApi.byDate(filterDate, activeBranchId ?? undefined).then((r) => r.data),
+    enabled: activeBranches.length > 0,
   });
 
   // ── Mutations ──
   const createMutation = useMutation({
-    mutationFn: (data: { date: string; notes?: string; items: { productId: number; yield: number }[] }) =>
+    mutationFn: (data: { branchId: number; date: string; notes?: string; items: { productId: number; yield: number }[] }) =>
       productionOrdersApi.create(data),
     onSuccess: () => { invalidateProductionViews(); setDialogOpen(false); },
     onError: (err) => setFormError(extractError(err)),
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: { notes?: string; items?: { productId: number; yield: number }[] } }) =>
+    mutationFn: ({ id, data }: { id: number; data: { branchId?: number; notes?: string; items?: { productId: number; yield: number }[] } }) =>
       productionOrdersApi.update(id, data),
     onSuccess: () => { invalidateProductionViews(); setDialogOpen(false); },
     onError: (err) => setFormError(extractError(err)),
@@ -87,8 +107,12 @@ export default function ProductionOrdersPage() {
   const statusMutation = useMutation({
     mutationFn: ({ id, status }: { id: number; status: ProductionOrderStatus }) =>
       productionOrdersApi.update(id, { status }),
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       invalidateProductionViews();
+      if (variables.status === 'FINALIZED') {
+        // Delivery was allocated to inventory on the backend — refresh inventory views.
+        qc.invalidateQueries({ queryKey: ['inventory'] });
+      }
       setFinalizeTarget(null);
       setCancelTarget(null);
     },
@@ -102,6 +126,10 @@ export default function ProductionOrdersPage() {
 
   // ── Dialog helpers ──
   const openCreate = useCallback(() => {
+    if (!activeBranchId) {
+      setFormError('Select a branch before creating a production order.');
+      return;
+    }
     setEditTarget(null);
     setFormNotes('');
     const defaultItems = new Map<number, number>();
@@ -109,7 +137,7 @@ export default function ProductionOrdersPage() {
     setFormItems(defaultItems);
     setFormError('');
     setDialogOpen(true);
-  }, [activeProducts]);
+  }, [activeProducts, activeBranchId]);
 
   const openEdit = useCallback((order: ProductionOrder) => {
     setEditTarget(order);
@@ -125,17 +153,21 @@ export default function ProductionOrdersPage() {
 
   const handleSave = useCallback(() => {
     setFormError('');
+    if (!activeBranchId) {
+      setFormError('Select a branch before saving.');
+      return;
+    }
     const items = Array.from(formItems.entries()).map(([productId, yieldVal]) => ({
       productId,
       yield: yieldVal,
     }));
 
     if (editTarget) {
-      updateMutation.mutate({ id: editTarget.id, data: { notes: formNotes || undefined, items } });
+      updateMutation.mutate({ id: editTarget.id, data: { branchId: activeBranchId, notes: formNotes || undefined, items } });
     } else {
-      createMutation.mutate({ date: filterDate, notes: formNotes || undefined, items });
+      createMutation.mutate({ branchId: activeBranchId, date: filterDate, notes: formNotes || undefined, items });
     }
-  }, [formItems, formNotes, filterDate, editTarget, createMutation, updateMutation]);
+  }, [formItems, formNotes, filterDate, editTarget, activeBranchId, createMutation, updateMutation]);
 
   const saving = createMutation.isPending || updateMutation.isPending;
 
@@ -197,7 +229,10 @@ export default function ProductionOrdersPage() {
         <TooltipProvider>
           {/* ── Date Toolbar ── */}
           <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button asChild variant="outline" size="sm">
+                <Link href="/production">Production Board</Link>
+              </Button>
               <Button variant="outline" size="icon" onClick={() => goDate(-1)}>
                 <ChevronLeft className="h-4 w-4" />
               </Button>
@@ -213,11 +248,33 @@ export default function ProductionOrdersPage() {
               {filterDate !== today && (
                 <Button variant="ghost" size="sm" onClick={() => setFilterDate(today)}>Today</Button>
               )}
+              {activeBranches.length > 0 && (
+                <div className="min-w-[220px]">
+                  <Select
+                    value={activeBranchId ? String(activeBranchId) : undefined}
+                    onValueChange={(value) => setSelectedBranchId(Number.parseInt(value, 10))}
+                    disabled={!isAdmin}
+                  >
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder="Select branch" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {activeBranches.map((branch) => (
+                        <SelectItem key={branch.id} value={String(branch.id)}>{branch.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
-            <Button onClick={openCreate}>
+            <Button onClick={openCreate} disabled={!activeBranchId}>
               <Plus className="h-4 w-4 mr-1" /> New Order
             </Button>
           </div>
+
+          {!isAdmin && activeBranch ? (
+            <div className="mb-3 text-xs text-muted-foreground">Branch view: <span className="font-semibold text-foreground">{activeBranch.name}</span></div>
+          ) : null}
 
           {/* ── Day Summary Cards ── */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
@@ -289,6 +346,9 @@ export default function ProductionOrdersPage() {
                           {dayjs(order.createdAt).format('h:mm A')}
                           {order.createdBy ? ` by ${order.createdBy.email}` : ''}
                         </span>
+                        {order.branch?.name ? (
+                          <Badge variant="outline">{order.branch.name}</Badge>
+                        ) : null}
                       </div>
                       <div className="flex items-center gap-1">
                         {order.status === 'DRAFT' && (
@@ -458,7 +518,10 @@ export default function ProductionOrdersPage() {
               <AlertDialogHeader>
                 <AlertDialogTitle>Finalize PO #{finalizeTarget?.id}?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This marks the production order as finalized. It cannot be edited after this.
+                  This will record the production yield and automatically add the quantities as{' '}
+                  <strong>delivery</strong> to{' '}
+                  <strong>{finalizeTarget?.branch?.name ?? 'the destination branch'}</strong>
+                  's inventory. This cannot be undone.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>

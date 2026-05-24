@@ -1,5 +1,18 @@
 # louella-web — Next.js Frontend Copilot Instructions
 
+## Active Skills (Always Apply)
+
+These skills must be read and applied on every prompt in this project:
+
+| Skill | Path | When to Apply |
+|---|---|---|
+| `vercel-react-best-practices` | `../.agents/skills/vercel-react-best-practices/SKILL.md` | All React component work, data fetching, bundle optimization, and Next.js pages |
+| `find-skills` | `../.agents/skills/find-skills/SKILL.md` | When asked about agent capabilities or discovering new tools |
+
+Before writing any React component, Next.js page, or data-fetching code, read `vercel-react-best-practices/SKILL.md` and apply its rules.
+
+---
+
 ## Stack
 - **Framework:** Next.js 16 (App Router), TypeScript 5, React 19
 - **UI Components:** MUI v7 (`@mui/material`), MUI X DataGrid v8, MUI X DatePickers v8
