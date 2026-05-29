@@ -15,6 +15,46 @@ export function buildFinalizedPlannedYields(orders: ProductionOrder[]): PlannedY
   return Array.from(totals.entries()).map(([productId, plannedYield]) => ({ productId, plannedYield }));
 }
 
+type PendingYield = { _productionId: number | null; yield: number };
+
+/**
+ * Pure function: computes which yield values need to be updated given the current
+ * planned values vs. the stored baseline. Also returns the new baseline to persist.
+ */
+function computeYieldDeltas(
+  allRows: ProdRow[],
+  plannedByProduct: Map<number, number>,
+  pendingProduction: Map<number, PendingYield>,
+  baseline: Map<number, number>,
+): { updates: Map<number, PendingYield>; newBaseline: Map<number, number> } {
+  const updates = new Map<number, PendingYield>();
+  const newBaseline = new Map(baseline);
+
+  for (const row of allRows) {
+    const planned = plannedByProduct.get(row.productId) ?? 0;
+    const previousPlanned = baseline.get(row.productId);
+    const pending = pendingProduction.get(row.productId);
+
+    if (previousPlanned == null) {
+      newBaseline.set(row.productId, planned);
+      // Initial fill: if yield is zero and planned exists, initialize yield from planned.
+      if (row.yield === 0 && planned > 0 && pending == null) {
+        updates.set(row.productId, { _productionId: row._productionId, yield: planned });
+      }
+      continue;
+    }
+
+    const delta = planned - previousPlanned;
+    if (delta !== 0) {
+      const baseYield = pending?.yield ?? row.yield;
+      updates.set(row.productId, { _productionId: row._productionId, yield: Math.max(0, baseYield + delta) });
+      newBaseline.set(row.productId, planned);
+    }
+  }
+
+  return { updates, newBaseline };
+}
+
 interface UseYieldAutoSyncParams {
   allRows: ProdRow[];
   plannedByProduct: Map<number, number>;
@@ -33,40 +73,16 @@ export function useYieldAutoSync({
   const plannedBaselineRef = useRef<Map<number, number>>(new Map());
 
   useEffect(() => {
-    let changed = false;
-    const nextPending = new Map(pendingProduction);
+    const { updates, newBaseline } = computeYieldDeltas(
+      allRows, plannedByProduct, pendingProduction, plannedBaselineRef.current,
+    );
+    plannedBaselineRef.current = newBaseline;
 
     for (const row of allRows) {
-      const planned = plannedByProduct.get(row.productId) ?? 0;
-      const previousPlanned = plannedBaselineRef.current.get(row.productId);
-      const pending = nextPending.get(row.productId);
-
-      if (previousPlanned == null) {
-        plannedBaselineRef.current.set(row.productId, planned);
-        // Initial fill: if yield is zero and planned exists, initialize yield from planned.
-        if (row.yield === 0 && planned > 0 && pending == null) {
-          nextPending.set(row.productId, { _productionId: row._productionId, yield: planned });
-          changed = true;
-        }
-        continue;
-      }
-
-      const delta = planned - previousPlanned;
-      if (delta !== 0) {
-        const baseYield = pending?.yield ?? row.yield;
-        nextPending.set(row.productId, { _productionId: row._productionId, yield: Math.max(0, baseYield + delta) });
-        plannedBaselineRef.current.set(row.productId, planned);
-        changed = true;
-      }
-    }
-
-    if (changed) {
-      for (const row of allRows) {
-        const updated = nextPending.get(row.productId);
-        if (!updated) continue;
-        if ((pendingProduction.get(row.productId)?.yield ?? row.yield) !== updated.yield) {
-          handleFieldChange(row, 'yield', updated.yield);
-        }
+      const updated = updates.get(row.productId);
+      if (!updated) continue;
+      if ((pendingProduction.get(row.productId)?.yield ?? row.yield) !== updated.yield) {
+        handleFieldChange(row, 'yield', updated.yield);
       }
     }
   }, [allRows, plannedByProduct, pendingProduction, handleFieldChange]);

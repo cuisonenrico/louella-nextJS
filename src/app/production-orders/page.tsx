@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
@@ -10,24 +10,21 @@ import {
 } from 'lucide-react';
 import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
-import { branchesApi, productionOrdersApi, productsApi } from '@/lib/apiServices';
+import { productionOrdersApi, branchesApi, productsApi } from '@/lib/apiServices';
 import type { Branch, Product, ProductionOrder, ProductionOrderStatus, ProductType } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/contexts/AuthContext';
+import { ProductionOrderFormDialog } from './components/ProductionOrderFormDialog';
 
 const PRODUCT_TYPE_ORDER: ProductType[] = ['BREAD', 'CAKE', 'SPECIAL', 'MISCELLANEOUS'];
-const TYPE_LABELS: Record<ProductType, string> = { BREAD: 'Bread', CAKE: 'Cake', SPECIAL: 'Special', MISCELLANEOUS: 'Miscellaneous' };
 
 const STATUS_BADGE: Record<ProductionOrderStatus, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
   DRAFT: { label: 'Draft', variant: 'secondary' },
@@ -50,10 +47,7 @@ export default function ProductionOrdersPage() {
   const [deleteTarget, setDeleteTarget] = useState<ProductionOrder | null>(null);
   const [finalizeTarget, setFinalizeTarget] = useState<ProductionOrder | null>(null);
   const [cancelTarget, setCancelTarget] = useState<ProductionOrder | null>(null);
-  const [formNotes, setFormNotes] = useState('');
-  const [formBranchId, setFormBranchId] = useState<number | null>(null);
-  const [formItems, setFormItems] = useState<Map<number, number>>(new Map());
-  const [formError, setFormError] = useState('');
+  const [actionError, setActionError] = useState('');
 
   const isAdmin = user?.role === 'ADMIN';
 
@@ -90,34 +84,19 @@ export default function ProductionOrdersPage() {
     enabled: activeBranches.length > 0,
   });
 
-  // ── Mutations ──
-  const createMutation = useMutation({
-    mutationFn: (data: { branchId: number; date: string; notes?: string; items: { productId: number; yield: number }[] }) =>
-      productionOrdersApi.create(data),
-    onSuccess: () => { invalidateProductionViews(); setDialogOpen(false); },
-    onError: (err) => setFormError(extractError(err)),
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: { branchId?: number; notes?: string; items?: { productId: number; yield: number }[] } }) =>
-      productionOrdersApi.update(id, data),
-    onSuccess: () => { invalidateProductionViews(); setDialogOpen(false); },
-    onError: (err) => setFormError(extractError(err)),
-  });
-
+  // ── Status & Delete Mutations ──
   const statusMutation = useMutation({
     mutationFn: ({ id, status }: { id: number; status: ProductionOrderStatus }) =>
       productionOrdersApi.update(id, { status }),
     onSuccess: (_, variables) => {
       invalidateProductionViews();
       if (variables.status === 'FINALIZED') {
-        // Delivery was allocated to inventory on the backend — refresh inventory views.
         qc.invalidateQueries({ queryKey: ['inventory'] });
       }
       setFinalizeTarget(null);
       setCancelTarget(null);
     },
-    onError: (err) => setFormError(extractError(err)),
+    onError: (err) => setActionError(extractError(err)),
   });
 
   const deleteMutation = useMutation({
@@ -127,52 +106,15 @@ export default function ProductionOrdersPage() {
 
   // ── Dialog helpers ──
   const openCreate = useCallback(() => {
-    if (!activeBranchId) {
-      setFormError('Select a branch before creating a production order.');
-      return;
-    }
+    if (!activeBranchId) { setActionError('Select a branch before creating a production order.'); return; }
     setEditTarget(null);
-    setFormNotes('');
-    setFormBranchId(activeBranchId);
-    const defaultItems = new Map<number, number>();
-    activeProducts.forEach((p) => defaultItems.set(p.id, 0));
-    setFormItems(defaultItems);
-    setFormError('');
     setDialogOpen(true);
-  }, [activeProducts, activeBranchId]);
+  }, [activeBranchId]);
 
   const openEdit = useCallback((order: ProductionOrder) => {
     setEditTarget(order);
-    setFormNotes(order.notes ?? '');
-    setFormBranchId(order.branchId ?? activeBranchId);
-    const items = new Map<number, number>();
-    // Include all active products, filling from order items
-    activeProducts.forEach((p) => items.set(p.id, 0));
-    order.items.forEach((i) => items.set(i.productId, i.yield));
-    setFormItems(items);
-    setFormError('');
     setDialogOpen(true);
-  }, [activeProducts, activeBranchId]);
-
-  const handleSave = useCallback(() => {
-    setFormError('');
-    if (!formBranchId) {
-      setFormError('Select a branch before saving.');
-      return;
-    }
-    const items = Array.from(formItems.entries()).map(([productId, yieldVal]) => ({
-      productId,
-      yield: yieldVal,
-    }));
-
-    if (editTarget) {
-      updateMutation.mutate({ id: editTarget.id, data: { branchId: formBranchId, notes: formNotes || undefined, items } });
-    } else {
-      createMutation.mutate({ branchId: formBranchId, date: filterDate, notes: formNotes || undefined, items });
-    }
-  }, [formItems, formNotes, formBranchId, filterDate, editTarget, createMutation, updateMutation]);
-
-  const saving = createMutation.isPending || updateMutation.isPending;
+  }, []);
 
   // ── Date nav ──
   const goDate = (days: number) => setFilterDate(dayjs(filterDate).add(days, 'day').format('YYYY-MM-DD'));
@@ -204,37 +146,6 @@ export default function ProductionOrdersPage() {
     }
     return { drafts, finalized };
   }, [orders]);
-
-  // Group by type for the form
-  const productsByType = useMemo(() => {
-    const map = new Map<ProductType, Product[]>(PRODUCT_TYPE_ORDER.map((t) => [t, []]));
-    activeProducts.forEach((p) => map.get(p.type)?.push(p));
-    map.forEach((prods) => prods.sort((a, b) => a.sortOrder !== b.sortOrder ? a.sortOrder - b.sortOrder : a.name.localeCompare(b.name)));
-    return map;
-  }, [activeProducts]);
-
-  // Flat ordered list for Enter-key navigation
-  const orderedProducts = useMemo(() => {
-    const list: Product[] = [];
-    PRODUCT_TYPE_ORDER.forEach((type) => list.push(...(productsByType.get(type) ?? [])));
-    return list;
-  }, [productsByType]);
-
-  // Input refs for keyboard navigation
-  const inputRefs = useRef<Map<number, HTMLInputElement>>(new Map());
-
-  const handleInputKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>, productId: number) => {
-    if (e.key !== 'Enter') return;
-    e.preventDefault();
-    const idx = orderedProducts.findIndex((p) => p.id === productId);
-    const next = orderedProducts[idx + 1];
-    if (!next) return;
-    const nextEl = inputRefs.current.get(next.id);
-    if (nextEl) {
-      nextEl.focus();
-      nextEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
-  }, [orderedProducts]);
 
   const plannedSummaryRows = useMemo(() => {
     return Array.from(plannedByProduct.entries())
@@ -473,106 +384,16 @@ export default function ProductionOrdersPage() {
           )}
 
           {/* ── Create/Edit Dialog ── */}
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col">
-              <DialogHeader>
-                <DialogTitle>{editTarget ? `Edit PO #${editTarget.id}` : 'New Production Order'}</DialogTitle>
-              </DialogHeader>
-
-              {formError && <Alert variant="destructive"><AlertDescription>{formError}</AlertDescription></Alert>}
-
-              <div className="space-y-1">
-                <Label>Deliver to Branch</Label>
-                <Select
-                  value={formBranchId ? String(formBranchId) : ''}
-                  onValueChange={(v) => setFormBranchId(Number.parseInt(v, 10))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select branch" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {activeBranches.map((b) => (
-                      <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1">
-                <Label>Notes (optional)</Label>
-                <Textarea
-                  placeholder="Order notes..."
-                  value={formNotes}
-                  onChange={(e) => setFormNotes(e.target.value)}
-                  className="h-14 resize-none"
-                />
-              </div>
-
-              {/* Products table */}
-              <div className="overflow-y-auto flex-1 rounded-md border">
-                <Table>
-                  <TableHeader className="sticky top-0 bg-muted z-10">
-                    <TableRow>
-                      <TableHead className="w-8 text-center">#</TableHead>
-                      <TableHead>Product</TableHead>
-                      <TableHead className="w-36 text-right">Yield</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {PRODUCT_TYPE_ORDER.map((type) => {
-                      const prods = productsByType.get(type) ?? [];
-                      if (prods.length === 0) return null;
-                      return (
-                        <Fragment key={type}>
-                          <TableRow className="bg-muted/60 hover:bg-muted/60">
-                            <TableCell colSpan={3} className="py-1.5 px-3">
-                              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{TYPE_LABELS[type]}</span>
-                            </TableCell>
-                          </TableRow>
-                          {prods.map((p, idx) => (
-                            <TableRow key={p.id}>
-                              <TableCell className="text-center text-xs text-muted-foreground">{idx + 1}</TableCell>
-                              <TableCell className="font-medium">{p.name}</TableCell>
-                              <TableCell className="text-right">
-                                <Input
-                                  ref={(el) => { if (el) inputRefs.current.set(p.id, el); else inputRefs.current.delete(p.id); }}
-                                  type="number"
-                                  className="h-8 w-28 ml-auto text-right"
-                                  min={0}
-                                  value={String(formItems.get(p.id) ?? 0)}
-                                  onChange={(e) => {
-                                    const val = parseInt(e.target.value) || 0;
-                                    setFormItems((prev) => {
-                                      const next = new Map(prev);
-                                      next.set(p.id, val);
-                                      return next;
-                                    });
-                                  }}
-                                  onKeyDown={(e) => handleInputKeyDown(e, p.id)}
-                                />
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </Fragment>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-
-              <div className="text-sm text-right font-semibold text-primary pt-1">
-                Total: {Array.from(formItems.values()).reduce((a, b) => a + b, 0).toLocaleString()}
-              </div>
-
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-                <Button onClick={handleSave} disabled={saving}>
-                  {saving && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
-                  {editTarget ? 'Save' : 'Create'}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+          <ProductionOrderFormDialog
+            open={dialogOpen}
+            editTarget={editTarget}
+            filterDate={filterDate}
+            activeBranchId={activeBranchId}
+            activeBranches={activeBranches}
+            activeProducts={activeProducts}
+            onSaved={invalidateProductionViews}
+            onClose={() => setDialogOpen(false)}
+          />
 
           {/* ── Finalize Confirm ── */}
           <AlertDialog open={!!finalizeTarget} onOpenChange={() => setFinalizeTarget(null)}>
@@ -642,12 +463,12 @@ export default function ProductionOrdersPage() {
           </AlertDialog>
 
           {/* Error snackbar */}
-          {formError && !dialogOpen && (
+          {actionError && (
             <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50">
               <Alert variant="destructive" className="shadow-lg">
                 <AlertDescription className="flex items-center gap-2">
-                  {formError}
-                  <Button variant="ghost" size="sm" onClick={() => setFormError('')}>×</Button>
+                  {actionError}
+                  <Button variant="ghost" size="sm" onClick={() => setActionError('')}>×</Button>
                 </AlertDescription>
               </Alert>
             </div>

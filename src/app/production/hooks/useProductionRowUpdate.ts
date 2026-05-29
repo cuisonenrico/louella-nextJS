@@ -52,5 +52,23 @@ export function useProductionRowUpdate() {
     setPendingInventory(new Map());
   }, []);
 
-  return { pendingProduction, pendingInventory, handleFieldChange, resetPending };
+  const getEffectiveValue = useCallback(
+    (row: ProdRow, field: string): number => {
+      if (field === 'yield') {
+        const pending = pendingProduction.get(row.productId);
+        if (pending !== undefined) return pending.yield;
+        return row.yield;
+      }
+      if (field.startsWith('branch_')) {
+        const branchSuffix = field.slice('branch_'.length);
+        const invId = row[`_inv_${branchSuffix}`] as number | null;
+        if (invId != null && pendingInventory.has(invId)) return pendingInventory.get(invId)!.delivery;
+        return (row[field] as number) ?? 0;
+      }
+      return (row[field] as number) ?? 0;
+    },
+    [pendingProduction, pendingInventory],
+  );
+
+  return { pendingProduction, pendingInventory, handleFieldChange, resetPending, getEffectiveValue };
 }
