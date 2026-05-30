@@ -122,6 +122,11 @@ export const inventoryApi = {
     api.get<InventoryDashboardData>('/inventory/dashboard', {
       params: { startDate, endDate, branchId },
     }),
+  exportSales: (startDate: string, endDate: string, branchId?: string) =>
+    api.get<Blob>('/inventory/export-sales', {
+      params: { startDate, endDate, ...(branchId ? { branchId } : {}) },
+      responseType: 'blob',
+    }),
   gaps: (startDate: string, endDate: string, branchId?: number) =>
     api.get<InventoryGapsResult>('/inventory/gaps', {
       params: { startDate, endDate, ...(branchId ? { branchId } : {}) },

@@ -20,6 +20,7 @@ import { BulkSetDialog } from './components/BulkSetDialog';
 
 function todayStr() { return new Date().toISOString().slice(0, 10); }
 function addDays(dateStr: string, days: number) { const d = new Date(dateStr); d.setDate(d.getDate() + days); return d.toISOString().slice(0, 10); }
+function fmt(n: number) { return n.toLocaleString(undefined, { maximumFractionDigits: 2 }); }
 function extractError(err: unknown): string {
   const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
   return Array.isArray(msg) ? msg.join(', ') : (msg ?? 'An error occurred');
@@ -89,7 +90,9 @@ export default function MaterialInventoryPage() {
             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setFilterDate(addDays(filterDate, 1))} disabled={filterDate >= todayStr()}>
               <ChevronRight className="h-4 w-4" />
             </Button>
-            <Button size="sm" variant="outline" onClick={() => setFilterDate(todayStr())}>Today</Button>
+            {filterDate !== todayStr() && (
+              <Button size="sm" variant="outline" onClick={() => setFilterDate(todayStr())}>Today</Button>
+            )}
             <div className="flex-grow" />
             <Button size="sm" variant="outline" onClick={() => setBulkSetOpen(true)}>
               <Plus className="h-3.5 w-3.5 mr-1" /> New Set
@@ -103,8 +106,8 @@ export default function MaterialInventoryPage() {
           {summary && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
               {[
-                { label: 'CLOSING INVENTORY VALUE', value: `₱${summary.totalClosingCost.toLocaleString()}`, color: 'text-primary' },
-                { label: 'TOTAL COST USED', value: `₱${summary.totalCostUsed.toLocaleString()}`, color: 'text-green-600' },
+                { label: 'CLOSING INVENTORY VALUE', value: `₱${fmt(summary.totalClosingCost)}`, color: 'text-primary' },
+                { label: 'TOTAL COST USED', value: `₱${fmt(summary.totalCostUsed)}`, color: 'text-green-600' },
               ].map(({ label, value, color }) => (
                 <Card key={label} className="shadow-none">
                   <CardContent className="p-3">
@@ -149,17 +152,17 @@ export default function MaterialInventoryPage() {
                       <TableRow key={r.id}>
                         <TableCell className="font-medium">{r.material?.name ?? `#${r.materialId}`}</TableCell>
                         <TableCell><Badge variant="secondary" className="text-xs">{r.material?.unit ?? ''}</Badge></TableCell>
-                        <TableCell className="text-right text-muted-foreground">₱{price.toLocaleString()}</TableCell>
-                        <TableCell className="text-center">{r.quantity}</TableCell>
-                        <TableCell className="text-center">{r.delivery}</TableCell>
+                        <TableCell className="text-right text-muted-foreground">₱{fmt(price)}</TableCell>
+                        <TableCell className="text-center">{fmt(r.quantity)}</TableCell>
+                        <TableCell className="text-center">{fmt(r.delivery)}</TableCell>
                         <TableCell className="text-center">
                           <Badge variant={r.used > 0 ? 'default' : 'secondary'} className={r.used > 0 ? 'bg-green-500 min-w-[36px]' : 'min-w-[36px]'}>
-                            {r.used}
+                            {fmt(r.used)}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-center font-bold">{closing}</TableCell>
-                        <TableCell className="text-right font-semibold text-green-600">₱{costUsed.toLocaleString()}</TableCell>
-                        <TableCell className="text-right font-semibold text-primary">₱{closingCost.toLocaleString()}</TableCell>
+                        <TableCell className="text-center font-bold">{fmt(closing)}</TableCell>
+                        <TableCell className="text-right font-semibold text-green-600">₱{fmt(costUsed)}</TableCell>
+                        <TableCell className="text-right font-semibold text-primary">₱{fmt(closingCost)}</TableCell>
                         <TableCell>
                           <div className="flex gap-0.5">
                             <Tooltip><TooltipTrigger asChild>

@@ -14,7 +14,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-export default function Header({ title, sidebarWidth = DRAWER_WIDTH }: { title?: string; sidebarWidth?: number }) {
+export default function Header({ title, sidebarWidth = DRAWER_WIDTH, headerContent, headerActions }: { title?: string; sidebarWidth?: number; headerContent?: React.ReactNode; headerActions?: React.ReactNode }) {
   const { user, logout } = useAuth();
   const router = useRouter();
 
@@ -27,11 +27,13 @@ export default function Header({ title, sidebarWidth = DRAWER_WIDTH }: { title?:
 
   return (
     <header
-      className="fixed top-0 z-30 flex h-14 items-center border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-6 transition-all duration-200"
+      className="fixed top-0 z-30 flex min-h-14 items-center border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-6 transition-all duration-200 gap-4"
       style={{ left: sidebarWidth, width: `calc(100% - ${sidebarWidth}px)` }}
     >
-      {title && <h2 className="text-lg font-bold flex-1">{title}</h2>}
-      {!title && <div className="flex-1" />}
+      {title && <h2 className="text-lg font-bold shrink-0">{title}</h2>}
+      {headerContent && <div className="flex items-center gap-4">{headerContent}</div>}
+      <div className="flex-1" />
+      {headerActions && <div className="flex items-center gap-2 mr-2">{headerActions}</div>}
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

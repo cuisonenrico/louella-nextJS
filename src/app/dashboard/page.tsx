@@ -5,11 +5,12 @@ import dayjs from 'dayjs';
 import Link from 'next/link';
 import {
   Layers, Store, FlaskConical, BookOpen, AlertTriangle, Factory, Loader2, ArrowRight,
+  ClipboardList, CheckCircle2, FileEdit,
 } from 'lucide-react';
 import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
-import { dashboardApi } from '@/lib/apiServices';
-import type { DashboardSummary } from '@/types';
+import { dashboardApi, productionOrdersApi, branchesApi, inventoryApi } from '@/lib/apiServices';
+import type { DashboardSummary, ProductionOrder, Branch, Inventory } from '@/types';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -42,6 +43,31 @@ export default function DashboardPage() {
     queryFn: () => dashboardApi.summary(today).then((r) => r.data),
   });
 
+  const { data: todayOrders = [] } = useQuery<ProductionOrder[]>({
+    queryKey: ['dashboard-orders', today],
+    queryFn: () => productionOrdersApi.byDate(today).then((r) => r.data),
+  });
+
+  const { data: allBranches = [] } = useQuery<Branch[]>({
+    queryKey: ['branches'],
+    queryFn: () => branchesApi.list().then((r) => r.data),
+  });
+
+  const { data: todayInventory = [] } = useQuery<Inventory[]>({
+    queryKey: ['dashboard-inventory', today],
+    queryFn: () => inventoryApi.byDateRange(today).then((r) => r.data),
+  });
+
+  const orderStats = {
+    total: todayOrders.length,
+    drafts: todayOrders.filter((o) => o.status === 'DRAFT').length,
+    finalized: todayOrders.filter((o) => o.status === 'FINALIZED').length,
+  };
+
+  const activeBranches = allBranches.filter((b) => b.isActive);
+  const branchesWithInventory = new Set(todayInventory.map((inv) => inv.branchId));
+  const branchesMissingInventory = activeBranches.filter((b) => !branchesWithInventory.has(b.id));
+
   return (
     <AuthGuard>
       <AppLayout title="Dashboard">
@@ -68,7 +94,80 @@ export default function DashboardPage() {
               <StatCard title="Recipes" value={data.stats.recipes.total} icon={<BookOpen className="h-5 w-5" />} color="#d32f2f" subtitle="configured" />
             </div>
 
-            {/* Operational Sections */}
+            {/* Today's Operations */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+              {/* Production Orders Status */}
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center gap-2 mb-4">
+                    <ClipboardList className="h-5 w-5 text-primary" />
+                    <h3 className="font-semibold text-lg">Branch Orders Today</h3>
+                    <Link href="/production/orders" className="ml-auto flex items-center gap-1 text-xs text-primary hover:underline">
+                      Manage <ArrowRight className="h-3 w-3" />
+                    </Link>
+                  </div>
+                  {orderStats.total === 0 ? (
+                    <Alert>
+                      <AlertDescription>No branch orders created yet today.</AlertDescription>
+                    </Alert>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="flex items-center gap-2 text-muted-foreground">
+                          <FileEdit className="h-4 w-4" /> Draft
+                        </span>
+                        <span className={`font-bold text-lg ${orderStats.drafts > 0 && orderStats.finalized === 0 ? 'text-amber-600' : ''}`}>
+                          {orderStats.drafts}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="flex items-center gap-2 text-muted-foreground">
+                          <CheckCircle2 className="h-4 w-4 text-green-600" /> Finalized
+                        </span>
+                        <span className="font-bold text-lg text-green-600">{orderStats.finalized}</span>
+                      </div>
+                      {orderStats.drafts > 0 && orderStats.finalized === 0 && (
+                        <Alert className="mt-2">
+                          <AlertDescription className="text-xs">
+                            All orders are drafts — finalize them so the Production Board shows planned yield.
+                          </AlertDescription>
+                        </Alert>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Branches Missing Inventory */}
+              <Card className={branchesMissingInventory.length > 0 ? 'border-amber-400 border-2' : ''}>
+                <CardContent className="p-6">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Store className={`h-5 w-5 ${branchesMissingInventory.length > 0 ? 'text-amber-600' : 'text-muted-foreground'}`} />
+                    <h3 className="font-semibold text-lg">Inventory Coverage</h3>
+                    {branchesMissingInventory.length > 0 && (
+                      <Badge variant="outline" className="border-amber-400 text-amber-600">{branchesMissingInventory.length} missing</Badge>
+                    )}
+                    <Link href="/inventory/details" className="ml-auto flex items-center gap-1 text-xs text-primary hover:underline">
+                      View <ArrowRight className="h-3 w-3" />
+                    </Link>
+                  </div>
+                  {branchesMissingInventory.length === 0 ? (
+                    <Alert>
+                      <AlertDescription>All active branches have inventory records for today.</AlertDescription>
+                    </Alert>
+                  ) : (
+                    <div className="space-y-2">
+                      {branchesMissingInventory.map((b) => (
+                        <div key={b.id} className="flex items-center justify-between py-1.5 border-b last:border-0">
+                          <span className="text-sm font-medium">{b.name}</span>
+                          <Badge variant="outline" className="text-xs border-amber-400 text-amber-600">No entries</Badge>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
               {/* Low Stock */}
               <Card className={data.lowStock.length > 0 ? 'border-destructive border-2' : ''}>

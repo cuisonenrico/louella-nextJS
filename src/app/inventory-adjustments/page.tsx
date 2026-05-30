@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Loader2, ChevronDown, ChevronRight, Plus } from 'lucide-react';
+import { Loader2, ChevronDown, ChevronRight, ChevronLeft, Plus } from 'lucide-react';
 import dayjs from 'dayjs';
 import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
@@ -97,7 +97,21 @@ export default function InventoryAdjustmentsPage() {
               <SelectContent>{branches.map((b: Branch) => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}</SelectContent>
             </Select>
           </div>
-          <div className="space-y-1"><Label className="text-xs">Date</Label><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-40" /></div>
+          <div className="space-y-1">
+            <Label className="text-xs">Date</Label>
+            <div className="flex items-center gap-1">
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setDate(dayjs(date).subtract(1, 'day').format('YYYY-MM-DD'))}>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-40 h-8" />
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setDate(dayjs(date).add(1, 'day').format('YYYY-MM-DD'))}>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+              {date !== today && (
+                <Button size="sm" variant="outline" onClick={() => setDate(today)}>Today</Button>
+              )}
+            </div>
+          </div>
         </div>
 
         <Card>
@@ -122,8 +136,8 @@ export default function InventoryAdjustmentsPage() {
                 const isOpen = expandedId === inv.id;
                 const adjs = adjCache[inv.id] ?? inv.adjustments ?? [];
                 return (
-                  <>{/* This fragment allows expanding rows */}
-                    <TableRow key={inv.id} className="cursor-pointer" onClick={() => toggleExpand(inv)}>
+                  <React.Fragment key={inv.id}>
+                    <TableRow className="cursor-pointer" onClick={() => toggleExpand(inv)}>
                       <TableCell>{isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}</TableCell>
                       <TableCell className="font-medium">{inv.product?.name ?? `#${inv.productId}`}</TableCell>
                       <TableCell className="text-right">{inv.quantity}</TableCell>
@@ -157,7 +171,7 @@ export default function InventoryAdjustmentsPage() {
                         </TableCell>
                       </TableRow>
                     )}
-                  </>
+                  </React.Fragment>
                 );
               })}
             </TableBody>

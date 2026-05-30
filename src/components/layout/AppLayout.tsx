@@ -7,9 +7,13 @@ import Header from './Header';
 export default function AppLayout({
   children,
   title,
+  headerContent,
+  headerActions,
 }: {
   children: React.ReactNode;
   title?: string;
+  headerContent?: React.ReactNode;
+  headerActions?: React.ReactNode;
 }) {
   const [collapsed, setCollapsed] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -31,7 +35,7 @@ export default function AppLayout({
   return (
     <div className="flex min-h-screen">
       <Sidebar collapsed={collapsed} onToggle={handleToggle} />
-      <Header title={title} sidebarWidth={sidebarWidth} />
+      <Header title={title} sidebarWidth={sidebarWidth} headerContent={headerContent} headerActions={headerActions} />
       <main
         className="flex-1 p-6 bg-background min-h-screen pt-20 transition-all duration-200"
         style={{ marginLeft: sidebarWidth }}

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, AlertTriangle } from 'lucide-react';
+import { Loader2, AlertTriangle, Info } from 'lucide-react';
 import dayjs from 'dayjs';
 import { useRouter } from 'next/navigation';
 import AppLayout from '@/components/layout/AppLayout';
@@ -224,6 +224,15 @@ export default function InventoryDetailsPage() {
             onDiscard={discardPending}
             onSave={() => savePendingMutation.mutate()}
           />
+
+          {!isEditable && displayRows.length > 0 && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/40 rounded-lg px-3 py-2 mb-3">
+              <Info className="h-4 w-4 shrink-0" />
+              {isRange
+                ? 'Date range mode is read-only. Switch to single date and select a branch to edit.'
+                : 'Select a specific branch to enable editing.'}
+            </div>
+          )}
 
           {/* Per-type grids */}
           {invQuery.isLoading ? (

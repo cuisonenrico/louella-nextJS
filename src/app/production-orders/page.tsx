@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import {
@@ -23,6 +22,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/contexts/AuthContext';
 import { ProductionOrderFormDialog } from './components/ProductionOrderFormDialog';
+import ProductionTabNav from '@/app/production/components/ProductionTabNav';
 
 const PRODUCT_TYPE_ORDER: ProductType[] = ['BREAD', 'CAKE', 'SPECIAL', 'MISCELLANEOUS'];
 
@@ -165,12 +165,10 @@ export default function ProductionOrdersPage() {
     <AuthGuard>
       <AppLayout title="Production Orders">
         <TooltipProvider>
+          <ProductionTabNav />
           {/* ── Date Toolbar ── */}
           <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
             <div className="flex items-center gap-2 flex-wrap">
-              <Button asChild variant="outline" size="sm">
-                <Link href="/production">Production Board</Link>
-              </Button>
               <Button variant="outline" size="icon" onClick={() => goDate(-1)}>
                 <ChevronLeft className="h-4 w-4" />
               </Button>
@@ -213,6 +211,14 @@ export default function ProductionOrdersPage() {
           {!isAdmin && activeBranch ? (
             <div className="mb-3 text-xs text-muted-foreground">Branch view: <span className="font-semibold text-foreground">{activeBranch.name}</span></div>
           ) : null}
+
+          {!isLoading && orders.length > 0 && orderStats.drafts > 0 && orderStats.finalized === 0 && (
+            <Alert className="mb-4">
+              <AlertDescription>
+                All orders are in Draft status. Finalize them so the Production Board reflects today&apos;s planned yield.
+              </AlertDescription>
+            </Alert>
+          )}
 
           {/* ── Day Summary Cards ── */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">

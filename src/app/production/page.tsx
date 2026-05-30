@@ -8,7 +8,7 @@ import dayjs from 'dayjs';
 import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
 import { branchesApi, inventoryApi, productionApi, productionOrdersApi, productsApi } from '@/lib/apiServices';
-import type { Branch, Inventory, PlannedYield, Product, Production, ProductType } from '@/types';
+import type { Branch, Inventory, PlannedYield, Product, Production, ProductionOrder, ProductType } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -20,6 +20,7 @@ import { ProductionTypeTable } from './components/ProductionTypeTable';
 import { useProductionRowUpdate, type ProdRow } from './hooks/useProductionRowUpdate';
 import { useProductionMutations } from './hooks/useProductionMutations';
 import { useProductionSummary } from './hooks/useProductionSummary';
+import ProductionTabNav from './components/ProductionTabNav';
 import {
   buildFinalizedPlannedYields,
   useProductionTabNavigation,
@@ -51,10 +52,12 @@ export default function ProductionPage() {
     queryFn: () => inventoryApi.byDateRange(filterDate).then((r) => r.data as Inventory[]),
   });
 
-  const { data: plannedYields = [] } = useQuery<PlannedYield[]>({
+  const { data: rawOrders = [] } = useQuery<ProductionOrder[]>({
     queryKey: ['planned-yield', filterDate],
-    queryFn: async () => buildFinalizedPlannedYields(await productionOrdersApi.byDate(filterDate).then((r) => r.data)),
+    queryFn: () => productionOrdersApi.byDate(filterDate).then((r) => r.data as ProductionOrder[]),
   });
+
+  const plannedYields = useMemo(() => buildFinalizedPlannedYields(rawOrders), [rawOrders]);
 
   const plannedByProduct = useMemo(
     () => new Map(plannedYields.map((p) => [p.productId, p.plannedYield])),
@@ -158,6 +161,7 @@ export default function ProductionPage() {
     <AuthGuard>
       <AppLayout title="Production">
         <TooltipProvider>
+          <ProductionTabNav />
           <ProductionDateToolbar
             filterDate={filterDate}
             today={today}
@@ -166,14 +170,14 @@ export default function ProductionPage() {
             onDateChange={setFilterDate}
           />
 
-          <div className="mb-4 flex items-center gap-2">
-            <Button asChild variant="default" size="sm">
-              <Link href="/production">Production Board</Link>
-            </Button>
-            <Button asChild variant="outline" size="sm">
-              <Link href="/production/orders">Branch Orders</Link>
-            </Button>
-          </div>
+          {!prodQuery.isLoading && !invQuery.isLoading && rawOrders.length > 0 && plannedYields.length === 0 && allRows.length > 0 && (
+            <Alert className="mb-4">
+              <AlertDescription>
+                No Branch Orders have been finalized for {dayjs(filterDate).format('MMM D')}. The Production Board will show no planned yield.{' '}
+                <Link href="/production/orders" className="font-medium underline">Go to Branch Orders →</Link>
+              </AlertDescription>
+            </Alert>
+          )}
 
           <ProductionPendingBar
             totalPending={totalPending}
