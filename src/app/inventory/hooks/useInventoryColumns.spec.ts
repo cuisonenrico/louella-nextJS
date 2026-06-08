@@ -53,9 +53,19 @@ describe('getAdjSum', () => {
     expect(getAdjSum(makeInventory({ adjustments: [] }))).toBe(0);
   });
 
-  it('sums all adjustment values', () => {
-    const inv = makeInventory({ adjustments: [{ value: 5 }, { value: -3 }] as never });
+  it('adds PULL_IN values and subtracts PULL_OUT values', () => {
+    const inv = makeInventory({
+      adjustments: [
+        { type: 'PULL_IN', value: 5 },
+        { type: 'PULL_OUT', value: 3 },
+      ] as never,
+    });
     expect(getAdjSum(inv)).toBe(2);
+  });
+
+  it('subtracts ANOMALY values', () => {
+    const inv = makeInventory({ adjustments: [{ type: 'ANOMALY', value: 4 }] as never });
+    expect(getAdjSum(inv)).toBe(-4);
   });
 
   it('handles undefined adjustments gracefully', () => {
@@ -74,19 +84,19 @@ describe('getSold', () => {
     expect(getSold(inv, makeProductMap())).toBe(110);
   });
 
-  it('includes positive adjustments (PULL_IN) in sold count', () => {
+  it('includes PULL_IN adjustments positively in sold count', () => {
     const inv = makeInventory({
       quantity: 50, delivery: 0, leftover: 10,
-      adjustments: [{ value: 10 }] as never,
+      adjustments: [{ type: 'PULL_IN', value: 10 }] as never,
     });
     // sold = 50 + 0 + 10 - 10 = 50
     expect(getSold(inv, makeProductMap())).toBe(50);
   });
 
-  it('includes negative adjustments (PULL_OUT) in sold count', () => {
+  it('includes PULL_OUT adjustments negatively in sold count', () => {
     const inv = makeInventory({
       quantity: 50, delivery: 0, leftover: 10,
-      adjustments: [{ value: -5 }] as never,
+      adjustments: [{ type: 'PULL_OUT', value: 5 }] as never,
     });
     // sold = 50 + 0 + (-5) - 10 = 35
     expect(getSold(inv, makeProductMap())).toBe(35);
@@ -147,18 +157,18 @@ describe('getTotalStock', () => {
     expect(getTotalStock(inv)).toBe(130);
   });
 
-  it('includes positive adjustments', () => {
+  it('includes PULL_IN adjustments positively', () => {
     const inv = makeInventory({
       quantity: 100, delivery: 30,
-      adjustments: [{ value: 10 }] as never,
+      adjustments: [{ type: 'PULL_IN', value: 10 }] as never,
     });
     expect(getTotalStock(inv)).toBe(140);
   });
 
-  it('includes negative adjustments', () => {
+  it('includes PULL_OUT adjustments negatively', () => {
     const inv = makeInventory({
       quantity: 100, delivery: 30,
-      adjustments: [{ value: -20 }] as never,
+      adjustments: [{ type: 'PULL_OUT', value: 20 }] as never,
     });
     expect(getTotalStock(inv)).toBe(110);
   });

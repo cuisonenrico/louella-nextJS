@@ -43,7 +43,10 @@ export function useInventoryColumns({ filterBranch, isRange }: UseInventoryColum
 }
 
 export function getAdjSum(inv: Inventory): number {
-  return (inv.adjustments ?? []).reduce((acc, a) => acc + a.value, 0);
+  return (inv.adjustments ?? []).reduce(
+    (acc, a) => acc + (a.type === 'PULL_IN' ? a.value : -a.value),
+    0,
+  );
 }
 
 export function getSold(inv: Inventory, productById: Map<number, Product>): number {

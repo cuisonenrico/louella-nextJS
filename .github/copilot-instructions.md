@@ -15,11 +15,12 @@ Before writing any React component, Next.js page, or data-fetching code, read `v
 
 ## Stack
 - **Framework:** Next.js 16 (App Router), TypeScript 5, React 19
-- **UI Components:** MUI v7 (`@mui/material`), MUI X DataGrid v8, MUI X DatePickers v8
+- **UI Components:** shadcn/ui (Radix-based — `components.json` governs component generation)
 - **Data Fetching:** TanStack Query v5 (React Query)
 - **HTTP Client:** Axios (`src/lib/api.ts`)
 - **Date Handling:** dayjs
 - **Auth State:** React Context (`src/contexts/AuthContext.tsx`)
+- **Icons:** `lucide-react`
 
 ---
 
@@ -44,7 +45,7 @@ src/
   lib/
     api.ts                 ← Axios instance + interceptors (auth + auto-refresh)
     apiServices.ts         ← all domain API objects
-    theme.ts               ← MUI theme
+    errors.ts              ← shared extractError() utility
   types/
     index.ts               ← all TypeScript interfaces and enums
 ```
@@ -144,39 +145,30 @@ File: `src/app/<module>/page.tsx`
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  Button, TextField, Dialog, DialogTitle, DialogContent, DialogActions,
-  IconButton, Typography, Alert, CircularProgress, Select, MenuItem, FormControl, InputLabel,
-} from '@mui/material';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
-import AddIcon from '@mui/icons-material/Add';
+import { Plus, Pencil, Trash2, Loader2 } from 'lucide-react';
 import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
 import { xxxApi } from '@/lib/apiServices';
+import { extractError } from '@/lib/errors';
 import type { Xxx } from '@/types';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 
-// ── Form state interface (numbers stored as strings until submit) ──────────
+// ── Form state (numbers stored as strings until submit) ──────────────────
 interface XxxForm {
   name: string;
-  value: string;        // number fields are strings in form state
-  type: ProductType;    // enum fields use the actual type
-  notes: string;
+  value: string;
 }
-const defaultForm: XxxForm = { name: '', value: '', type: 'BREAD', notes: '' };
-
-// ── Helper: extract error message from Axios error ────────────────────────
-function extractError(err: unknown): string {
-  const msg = (err as { response?: { data?: { message?: string | string[] } } })
-    ?.response?.data?.message;
-  return Array.isArray(msg) ? msg.join(', ') : (msg ?? 'An error occurred');
-}
+const defaultForm: XxxForm = { name: '', value: '' };
 
 export default function XxxsPage() {
   const qc = useQueryClient();
-
-  // UI state
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Xxx | null>(null);
@@ -184,132 +176,120 @@ export default function XxxsPage() {
   const [deleteTarget, setDeleteTarget] = useState<Xxx | null>(null);
   const [formError, setFormError] = useState('');
 
-  // Data fetching
   const { data: items = [], isLoading } = useQuery({
     queryKey: ['xxxs'],
-    queryFn: () => xxxApi.list().then(r => r.data),
+    queryFn: () => xxxApi.list().then((r) => r.data),
   });
 
-  // Mutations
   const createMutation = useMutation({
-    mutationFn: (data: CreateXxxPayload) => xxxApi.create(data),
+    mutationFn: (data: Partial<Xxx>) => xxxApi.create(data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['xxxs'] }); setDialogOpen(false); },
     onError: (err) => setFormError(extractError(err)),
   });
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Partial<CreateXxxPayload> }) =>
-      xxxApi.update(id, data),
+    mutationFn: ({ id, data }: { id: number; data: Partial<Xxx> }) => xxxApi.update(id, data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['xxxs'] }); setDialogOpen(false); },
     onError: (err) => setFormError(extractError(err)),
   });
   const deleteMutation = useMutation({
     mutationFn: (id: number) => xxxApi.delete(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['xxxs'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['xxxs'] }); setDeleteTarget(null); },
   });
 
-  // Dialog helpers
-  const openCreate = () => {
-    setEditTarget(null);
-    setForm(defaultForm);
-    setFormError('');
-    setDialogOpen(true);
-  };
+  const openCreate = () => { setEditTarget(null); setForm(defaultForm); setFormError(''); setDialogOpen(true); };
   const openEdit = (item: Xxx) => {
     setEditTarget(item);
-    setForm({ name: item.name, value: String(item.value), type: item.type, notes: item.notes ?? '' });
+    setForm({ name: item.name, value: String(item.value) });
     setFormError('');
     setDialogOpen(true);
   };
 
-  // Save with minimal client-side validation
   const handleSave = () => {
     setFormError('');
     if (!form.name.trim()) { setFormError('Name is required'); return; }
-    const payload = { name: form.name.trim(), value: parseFloat(form.value), type: form.type, notes: form.notes || undefined };
-    if (editTarget) {
-      updateMutation.mutate({ id: editTarget.id, data: payload });
-    } else {
-      createMutation.mutate(payload);
-    }
+    const payload = { name: form.name.trim(), value: parseFloat(form.value) };
+    editTarget ? updateMutation.mutate({ id: editTarget.id, data: payload }) : createMutation.mutate(payload);
   };
 
   const saving = createMutation.isPending || updateMutation.isPending;
-  const filtered = items.filter(i => i.name.toLowerCase().includes(search.toLowerCase()));
+  const filtered = items.filter((i) => i.name.toLowerCase().includes(search.toLowerCase()));
 
   return (
     <AuthGuard>
       <AppLayout title="Xxxs">
-        {/* Top bar */}
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-          <TextField size="small" placeholder="Search..." value={search}
-            onChange={e => setSearch(e.target.value)} sx={{ width: 280 }} />
-          <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>Add Xxx</Button>
-        </Box>
+        <div className="flex justify-between items-center mb-4">
+          <Input placeholder="Search…" value={search} onChange={(e) => setSearch(e.target.value)} className="w-64" />
+          <Button onClick={openCreate}><Plus className="mr-2 h-4 w-4" />Add Xxx</Button>
+        </div>
 
-        {/* Table */}
-        <Paper>
-          <TableContainer>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Name</TableCell>
-                  <TableCell>Value</TableCell>
-                  <TableCell align="right">Actions</TableCell>
+        <Card>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Value</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                <TableRow><TableCell colSpan={3} className="text-center"><Loader2 className="mx-auto h-4 w-4 animate-spin" /></TableCell></TableRow>
+              ) : filtered.length === 0 ? (
+                <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground">No xxxs found.</TableCell></TableRow>
+              ) : filtered.map((item) => (
+                <TableRow key={item.id}>
+                  <TableCell>{item.name}</TableCell>
+                  <TableCell>{item.value}</TableCell>
+                  <TableCell className="text-right space-x-1">
+                    <Button variant="ghost" size="icon" onClick={() => openEdit(item)}><Pencil className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" className="text-destructive" onClick={() => setDeleteTarget(item)}><Trash2 className="h-4 w-4" /></Button>
+                  </TableCell>
                 </TableRow>
-              </TableHead>
-              <TableBody>
-                {isLoading ? (
-                  <TableRow><TableCell colSpan={3} align="center"><CircularProgress size={24} /></TableCell></TableRow>
-                ) : filtered.length === 0 ? (
-                  <TableRow><TableCell colSpan={3} align="center">No xxxs found.</TableCell></TableRow>
-                ) : filtered.map(item => (
-                  <TableRow key={item.id} hover>
-                    <TableCell>{item.name}</TableCell>
-                    <TableCell>{item.value}</TableCell>
-                    <TableCell align="right">
-                      <IconButton size="small" onClick={() => openEdit(item)}><EditIcon fontSize="small" /></IconButton>
-                      <IconButton size="small" color="error" onClick={() => setDeleteTarget(item)}><DeleteIcon fontSize="small" /></IconButton>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Paper>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
 
-        {/* Create / Edit Dialog */}
-        <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} fullWidth maxWidth="sm">
-          <DialogTitle>{editTarget ? 'Edit Xxx' : 'Add Xxx'}</DialogTitle>
-          <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
-            {formError && <Alert severity="error">{formError}</Alert>}
-            <TextField label="Name" value={form.name} autoFocus required
-              onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
-            <TextField label="Value" type="number" value={form.value}
-              onChange={e => setForm(f => ({ ...f, value: e.target.value }))} />
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button variant="contained" onClick={handleSave} disabled={saving}>
-              {saving ? 'Saving…' : 'Save'}
-            </Button>
-          </DialogActions>
-        </Dialog>
-
-        {/* Delete Confirm Dialog */}
-        <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)}>
-          <DialogTitle>Delete {deleteTarget?.name}?</DialogTitle>
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogContent>
-            <Typography>This action cannot be undone.</Typography>
+            <DialogHeader><DialogTitle>{editTarget ? 'Edit Xxx' : 'Add Xxx'}</DialogTitle></DialogHeader>
+            <div className="flex flex-col gap-4 py-2">
+              {formError && <Alert variant="destructive"><AlertDescription>{formError}</AlertDescription></Alert>}
+              <div className="grid gap-1.5">
+                <Label htmlFor="name">Name</Label>
+                <Input id="name" value={form.name} autoFocus onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="value">Value</Label>
+                <Input id="value" type="number" value={form.value} onChange={(e) => setForm((f) => ({ ...f, value: e.target.value }))} />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+              <Button onClick={handleSave} disabled={saving}>
+                {saving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving…</> : 'Save'}
+              </Button>
+            </DialogFooter>
           </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setDeleteTarget(null)}>Cancel</Button>
-            <Button color="error" variant="contained"
-              disabled={deleteMutation.isPending}
-              onClick={() => { deleteMutation.mutate(deleteTarget!.id); setDeleteTarget(null); }}>
-              Delete
-            </Button>
-          </DialogActions>
         </Dialog>
+
+        <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete {deleteTarget?.name}?</AlertDialogTitle>
+              <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={deleteMutation.isPending}
+                onClick={() => deleteMutation.mutate(deleteTarget!.id)}>
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </AppLayout>
     </AuthGuard>
   );
@@ -329,7 +309,7 @@ const navItems = [
 ];
 ```
 
-Import the icon from `@mui/icons-material`.
+Import the icon from `lucide-react`.
 
 ---
 
@@ -373,17 +353,18 @@ Import the icon from `@mui/icons-material`.
 
 ---
 
-## MUI Component Guidelines
+## shadcn/ui Component Guidelines
 
-- Use `<Table size="small">` for data tables.
-- `<Paper>` wraps all tables.
-- Row hover: `<TableRow hover>`.
-- Action buttons: `<IconButton size="small">` with `EditIcon` / `DeleteIcon`.
-- Dialogs: `fullWidth maxWidth="sm"` for standard forms.
-- `<Select>` for enum fields — always paired with `<FormControl>` + `<InputLabel>`.
-- `<Alert severity="error">` for inline form errors.
-- Loading state: `<CircularProgress size={24} />` inside a `TableRow` spanning all columns.
+- Tables: `<Card>` wraps `<Table>` with `<TableHeader>` / `<TableBody>` / `<TableRow>` / `<TableHead>` / `<TableCell>`.
+- Action buttons: `<Button variant="ghost" size="icon">` with lucide-react icons (`<Pencil>`, `<Trash2>`).
+- Destructive actions: `className="text-destructive"` on the button.
+- Modals: `<Dialog>` for forms, `<AlertDialog>` for destructive confirmations.
+- Error messages: `<Alert variant="destructive"><AlertDescription>…</AlertDescription></Alert>`.
+- Loading: `<Loader2 className="h-4 w-4 animate-spin" />`.
+- Enum selects: `<Select>` + `<SelectTrigger>` + `<SelectContent>` + `<SelectItem>`.
+- Never import from `@mui/material` — it is not installed.
 - Currency: always prefix monetary values with `₱` (Philippine Peso).
+- Navigation icons: import from `lucide-react`, not `@mui/icons-material`.
 
 ---
 
