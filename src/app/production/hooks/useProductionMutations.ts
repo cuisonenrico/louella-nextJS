@@ -3,11 +3,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { inventoryApi, jobsApi, productionApi } from '@/lib/apiServices';
 import type { Branch, Product } from '@/types';
-
-function extractErrorMessage(err: unknown): string {
-  const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
-  return Array.isArray(msg) ? msg.join(', ') : (msg ?? (err as Error)?.message ?? 'An error occurred.');
-}
+import { extractError } from '@/lib/errors';
 
 interface UseProductionMutationsParams {
   filterDate: string;
@@ -39,7 +35,7 @@ export function useProductionMutations({
   const initBranchMutation = useMutation({
     mutationFn: (_branchId: number) => jobsApi.autofill(filterDate),
     onSuccess: invalidateInventory,
-    onError: (err) => onError(extractErrorMessage(err)),
+    onError: (err) => onError(extractError(err)),
   });
 
   /**
@@ -49,7 +45,7 @@ export function useProductionMutations({
   const initAllBranchesMutation = useMutation({
     mutationFn: () => jobsApi.autofill(filterDate),
     onSuccess: invalidateInventory,
-    onError: (err) => onError(extractErrorMessage(err)),
+    onError: (err) => onError(extractError(err)),
   });
 
   const savePendingMutation = useMutation({
@@ -76,7 +72,7 @@ export function useProductionMutations({
       qc.invalidateQueries({ queryKey: ['inventory'] });
       qc.invalidateQueries({ queryKey: ['inventory-for-production'] });
     },
-    onError: (err) => onError(extractErrorMessage(err)),
+    onError: (err) => onError(extractError(err)),
   });
 
   return { initBranchMutation, initAllBranchesMutation, savePendingMutation };

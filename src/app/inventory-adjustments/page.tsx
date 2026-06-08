@@ -8,6 +8,7 @@ import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
 import { inventoryApi, inventoryAdjustmentsApi, branchesApi } from '@/lib/apiServices';
 import type { Branch, Inventory, InventoryAdjustment, AdjustmentType } from '@/types';
+import { extractError } from '@/lib/errors';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -20,11 +21,6 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const ADJ_TYPES: AdjustmentType[] = ['PULL_IN', 'PULL_OUT', 'ANOMALY'];
-
-function extractError(err: unknown): string {
-  const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
-  return Array.isArray(msg) ? msg.join(', ') : (msg ?? 'An error occurred');
-}
 
 export default function InventoryAdjustmentsPage() {
   const qc = useQueryClient();

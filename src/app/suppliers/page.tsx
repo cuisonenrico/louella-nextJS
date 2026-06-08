@@ -7,6 +7,7 @@ import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
 import { suppliersApi } from '@/lib/apiServices';
 import type { Supplier } from '@/types';
+import { extractError } from '@/lib/errors';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -21,11 +22,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 
 interface SupplierForm { name: string; contact: string; phone: string; email: string; address: string; isActive: boolean; }
 const defaultForm: SupplierForm = { name: '', contact: '', phone: '', email: '', address: '', isActive: true };
-
-function extractError(err: unknown): string {
-  const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
-  return Array.isArray(msg) ? msg.join(', ') : (msg ?? 'An error occurred');
-}
 
 export default function SuppliersPage() {
   const qc = useQueryClient();

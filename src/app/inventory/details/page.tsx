@@ -9,6 +9,7 @@ import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
 import { branchesApi, inventoryApi, productsApi } from '@/lib/apiServices';
 import type { Branch, Inventory, InventorySummaryData, Product, ProductType } from '@/types';
+import { extractError } from '@/lib/errors';
 import { Button } from '@/components/ui/button';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -22,10 +23,6 @@ import { useInventoryDisplayRows } from '../hooks/useInventoryDisplayRows';
 import { CardContent } from '@/components/ui/card';
 
 const PRODUCT_TYPE_ORDER: ProductType[] = ['BREAD', 'CAKE', 'SPECIAL', 'MISCELLANEOUS'];
-function extractError(err: unknown): string {
-  const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
-  return Array.isArray(msg) ? msg.join(', ') : (msg ?? 'An error occurred');
-}
 
 export default function InventoryDetailsPage() {
   const qc = useQueryClient();
@@ -151,7 +148,7 @@ export default function InventoryDetailsPage() {
       // Check for cascade warnings
       for (const res of results) {
         const result = res.data;
-        if (result && typeof result === 'object' && 'cascadeNeeded' in result && result.cascadeNeeded) {
+        if (result && typeof result === 'object' && 'cascadeWarning' in result && (result.cascadeWarning as number) > 0) {
           setCascadeWarning({ branchId: result.branchId, productId: result.productId, fromDate: result.date });
         }
       }

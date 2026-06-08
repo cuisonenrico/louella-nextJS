@@ -63,7 +63,7 @@ All types here must mirror the BE Prisma schema exactly. Rules:
 ### Enums (must match Prisma schema)
 ```typescript
 type UserRole = 'USER' | 'VIEWER' | 'INVENTORY' | 'MANAGER' | 'ADMIN';
-type ProductType = 'BREAD' | 'CAKE' | 'SPECIAL';
+type ProductType = 'BREAD' | 'CAKE' | 'SPECIAL' | 'MISCELLANEOUS';
 type MeasurementUnit = 'KG' | 'G' | 'LITER' | 'ML' | 'PIECE' | 'DOZEN' | 'BAG' | 'SACHET' | 'CUP' | 'TBSP' | 'TSP';
 type FileStatus = 'PENDING' | 'UPLOADED' | 'PROCESSING' | 'FAILED';
 type JobStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
@@ -407,30 +407,3 @@ NEXT_PUBLIC_API_URL=http://localhost:3000/api/v1
 
 ---
 
-## Post-Change Analysis (Ruflo + Copilot)
-
-After implementing code changes, run Ruflo analysis in terminal before finalizing:
-
-1. Complexity scan on touched areas:
-  - `npx @claude-flow/cli@latest analyze complexity louella-be/src --threshold 15`
-  - `npx @claude-flow/cli@latest analyze complexity louella-web/src --threshold 15`
-2. Circular dependency check:
-  - `npx @claude-flow/cli@latest analyze circular louella-be/src`
-  - `npx @claude-flow/cli@latest analyze circular louella-web/src`
-3. If issues are found, apply refactors/fixes, then rerun the same checks.
-4. Validate project build/test commands for changed projects.
-5. Write key analysis findings to a persistent repo note in `.claude-flow/workflows/ruflo-findings-log.md`.
-   - Include: date, task summary, top complexity findings, circular dependency result, actions taken, and remaining risks.
-6. Store a compact task memory entry after completing the task:
-  - `npx @claude-flow/cli@latest memory store -k "task:<timestamp>:<short-slug>" -v "<task summary>; files touched; key decisions; risks"`
-7. If the change is meaningful and analysis was not run (or was deferred), explicitly remind the user to run:
-  - `npx @claude-flow/cli@latest analyze complexity louella-be/src --threshold 15`
-  - `npx @claude-flow/cli@latest analyze complexity louella-web/src --threshold 15`
-  - `npx @claude-flow/cli@latest analyze circular louella-be/src`
-  - `npx @claude-flow/cli@latest analyze circular louella-web/src`
-
-Notes:
-- Use Ruflo as an analysis layer; Copilot performs actual file edits and implementation.
-- `swarm` objectives are optional for broad recommendations, but do not replace direct implementation and verification.
-- For very small edits (e.g., typo/UI text only), complexity scan can be skipped, but circular checks and build validation are still preferred when practical.
-- Keep memory values concise and implementation-focused (no secrets, no credentials, no token values).
