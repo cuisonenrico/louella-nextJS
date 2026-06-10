@@ -124,7 +124,7 @@ export default function ImportHistoryPage() {
                   {data.items.map((log: ImportLog) => (
                     <TableRow key={log.id}>
                       <TableCell className="text-sm">
-                        {new Date(log.importedAt).toLocaleDateString('en-PH', {
+                        {new Date(log.importedAt).toLocaleString('en-PH', {
                           year: 'numeric', month: 'short', day: 'numeric',
                           hour: '2-digit', minute: '2-digit',
                         })}
@@ -164,9 +164,10 @@ export default function ImportHistoryPage() {
                                 <AlertDialogCancel>Cancel</AlertDialogCancel>
                                 <AlertDialogAction
                                   className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                  disabled={deleteMut.isPending}
                                   onClick={() => deleteMut.mutate(log.id)}
                                 >
-                                  Delete log
+                                  {deleteMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Delete log'}
                                 </AlertDialogAction>
                               </AlertDialogFooter>
                             </AlertDialogContent>
