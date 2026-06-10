@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import type { LucideIcon } from 'lucide-react';
 import {
   LayoutDashboard, Store, Package, Layers, BookOpen, TrendingUp,
-  Warehouse, FlaskConical, Factory, ChevronLeft, Menu, ClipboardList, Settings,
+  Warehouse, FlaskConical, Factory, ChevronLeft, Menu, ClipboardList, Settings, Upload,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -31,6 +31,7 @@ const navGroups: { label: string | null; items: NavItem[] }[] = [
       { label: 'Inventory', href: '/inventory/details', icon: Package },
       { label: 'Production', href: '/production', icon: Factory, exact: true },
       { label: 'Prod. Orders', href: '/production/orders', icon: ClipboardList },
+      { label: 'Import History', href: '/inventory-import/history', icon: Upload },
     ],
   },
   {
