@@ -13,6 +13,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import { toast } from 'sonner';
 
 function extractError(err: unknown): string {
   const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
@@ -36,14 +37,14 @@ export function AdjustmentsDialog({ record, onClose }: { record: MaterialInvento
 
   const createAdj = useMutation({
     mutationFn: () => materialAdjustmentsApi.create({ materialInventoryId: record!.id, type, value: parseFloat(value), notes: notes || undefined }),
-    onSuccess: () => { setValue(''); setNotes(''); setFormErr(''); qc.invalidateQueries({ queryKey: ['material-inventory'] }); },
-    onError: (e) => setFormErr(extractError(e)),
+    onSuccess: () => { setValue(''); setNotes(''); setFormErr(''); qc.invalidateQueries({ queryKey: ['material-inventory'] }); toast.success('Adjustment saved'); },
+    onError: (e) => { const text = extractError(e); setFormErr(text); toast.error(text); },
   });
 
   const deleteAdj = useMutation({
     mutationFn: (id: number) => materialAdjustmentsApi.delete(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['material-inventory'] }),
-    onError: (e) => setFormErr(extractError(e)),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['material-inventory'] }); toast.success('Adjustment deleted'); },
+    onError: (e) => { const text = extractError(e); setFormErr(text); toast.error(text); },
   });
 
   if (!record) return null;

@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { toast } from 'sonner';
 
 function extractError(err: unknown): string {
   const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
@@ -53,8 +54,8 @@ export function BulkSetDialog({ open, filterDate, materials, existingRows, onClo
       });
       return Promise.all(ops);
     },
-    onSuccess: () => { onSaved(); onClose(); },
-    onError: (e) => setErr(extractError(e)),
+    onSuccess: () => { onSaved(); onClose(); toast.success('Deliveries saved'); },
+    onError: (e) => { const text = extractError(e); setErr(text); toast.error(text); },
   });
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>, materialId: number) => {

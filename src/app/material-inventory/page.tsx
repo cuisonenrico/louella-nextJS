@@ -11,9 +11,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { toast } from 'sonner';
 import { AdjustmentsDialog } from './components/AdjustmentsDialog';
 import { StockCardDialog } from './components/StockCardDialog';
 import { BulkSetDialog } from './components/BulkSetDialog';
@@ -34,8 +34,6 @@ export default function MaterialInventoryPage() {
   const [bulkSetOpen, setBulkSetOpen] = useState(false);
   const [editRecord, setEditRecord] = useState<MaterialInventory | null>(null);
   const [adjRecord, setAdjRecord] = useState<MaterialInventory | null>(null);
-  const [snackMsg, setSnackMsg] = useState('');
-  const [snackErr, setSnackErr] = useState('');
 
   const { data: materials = [] } = useQuery<Material[]>({ queryKey: ['materials'], queryFn: () => materialsApi.list().then((r) => r.data) });
   const { data: suppliers = [] } = useQuery<Supplier[]>({ queryKey: ['suppliers'], queryFn: () => suppliersApi.list().then((r) => r.data) });
@@ -48,7 +46,7 @@ export default function MaterialInventoryPage() {
   const initMutation = useMutation({
     mutationFn: () => materialInventoryApi.initDate(filterDate).then((r) => r.data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['material-inventory', filterDate] }); },
-    onError: (e) => { setSnackErr(extractError(e)); setTimeout(() => setSnackErr(''), 4000); },
+    onError: (e) => toast.error(extractError(e)),
   });
 
   // Auto-initialize when the date has no records yet
@@ -61,8 +59,8 @@ export default function MaterialInventoryPage() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => materialInventoryApi.delete(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['material-inventory', filterDate] }),
-    onError: (e) => { setSnackErr(extractError(e)); setTimeout(() => setSnackErr(''), 4000); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['material-inventory', filterDate] }); toast.success('Record deleted'); },
+    onError: (e) => toast.error(extractError(e)),
   });
 
   const summary = useMemo(() => {
@@ -120,10 +118,10 @@ export default function MaterialInventoryPage() {
           )}
 
           {/* Grid */}
-          {isLoading ? (
+          {isLoading || initMutation.isPending ? (
             <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
           ) : rows.length === 0 ? (
-            <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
+            <div className="flex justify-center py-12 text-muted-foreground">No materials for this date.</div>
           ) : (
             <Card className="shadow-none overflow-hidden">
               <Table>
@@ -188,18 +186,6 @@ export default function MaterialInventoryPage() {
                 </TableBody>
               </Table>
             </Card>
-          )}
-
-          {/* Snackbars */}
-          {snackMsg && (
-            <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50">
-              <Alert className="shadow-lg bg-green-50 border-green-300"><AlertDescription>{snackMsg}</AlertDescription></Alert>
-            </div>
-          )}
-          {snackErr && (
-            <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50">
-              <Alert variant="destructive" className="shadow-lg"><AlertDescription>{snackErr}</AlertDescription></Alert>
-            </div>
           )}
 
           <StockCardDialog

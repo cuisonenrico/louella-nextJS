@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { toast } from 'sonner';
 
 function extractError(err: unknown): string {
   const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
@@ -78,8 +79,8 @@ export function StockCardDialog({ open, editRecord, filterDate, materials, suppl
       }
       return materialInventoryApi.create({ materialId: parseInt(form.materialId), date: form.date, ...meta, quantity: parseFloat(form.quantity) || 0, delivery: addDelivery } as Partial<MaterialInventory>);
     },
-    onSuccess: () => { onSaved(); onClose(); },
-    onError: (e) => setErr(extractError(e)),
+    onSuccess: () => { onSaved(); onClose(); toast.success('Stock card saved'); },
+    onError: (e) => { const text = extractError(e); setErr(text); toast.error(text); },
   });
 
   const set = (field: keyof StockForm) => (e: React.ChangeEvent<HTMLInputElement>) => setForm((prev) => ({ ...prev, [field]: e.target.value }));
