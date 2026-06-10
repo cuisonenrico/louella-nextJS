@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Pencil, Trash2, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
 import { suppliersApi } from '@/lib/apiServices';
@@ -36,17 +37,18 @@ export default function SuppliersPage() {
 
   const createMutation = useMutation({
     mutationFn: (data: Partial<Supplier>) => suppliersApi.create(data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['suppliers'] }); setDialogOpen(false); },
-    onError: (err) => setFormError(extractError(err)),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['suppliers'] }); setDialogOpen(false); toast.success('Supplier saved'); },
+    onError: (err) => { const text = extractError(err); setFormError(text); toast.error(text); },
   });
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<Supplier> }) => suppliersApi.update(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['suppliers'] }); setDialogOpen(false); },
-    onError: (err) => setFormError(extractError(err)),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['suppliers'] }); setDialogOpen(false); toast.success('Supplier saved'); },
+    onError: (err) => { const text = extractError(err); setFormError(text); toast.error(text); },
   });
   const deleteMutation = useMutation({
     mutationFn: (id: number) => suppliersApi.delete(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['suppliers'] }); setDeleteTarget(null); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['suppliers'] }); setDeleteTarget(null); toast.success('Supplier deleted'); },
+    onError: (err) => toast.error(extractError(err)),
   });
 
   const openCreate = () => { setEditTarget(null); setForm(defaultForm); setFormError(''); setDialogOpen(true); };
