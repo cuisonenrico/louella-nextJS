@@ -41,8 +41,7 @@ export const authApi = {
   register: (email: string, password: string) =>
     api.post<AuthResponse>('/auth/register', { email, password }),
   me: () => api.get<User>('/auth/me'),
-  logout: (refreshToken?: string) =>
-    api.post('/auth/logout', { refreshToken }),
+  logout: () => api.post('/auth/logout', {}),
 };
 
 // ─── Suppliers ───────────────────────────────────────────────────

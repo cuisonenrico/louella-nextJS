@@ -48,7 +48,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       })
       .catch(() => {
         localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
         setState({ user: null, accessToken: null, isLoading: false });
       });
   }, []);
@@ -56,24 +55,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     const { data } = await authApi.login(email, password);
     localStorage.setItem('accessToken', data.accessToken);
-    localStorage.setItem('refreshToken', data.refreshToken);
     setState({ user: data.user, accessToken: data.accessToken, isLoading: false });
   }, []);
 
   const register = useCallback(async (email: string, password: string) => {
     const { data } = await authApi.register(email, password);
     localStorage.setItem('accessToken', data.accessToken);
-    localStorage.setItem('refreshToken', data.refreshToken);
     setState({ user: data.user, accessToken: data.accessToken, isLoading: false });
   }, []);
 
   const logout = useCallback(async () => {
-    const refreshToken = localStorage.getItem('refreshToken') ?? undefined;
     try {
-      await authApi.logout(refreshToken);
+      await authApi.logout();
     } finally {
       localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
       setState({ user: null, accessToken: null, isLoading: false });
     }
   }, []);

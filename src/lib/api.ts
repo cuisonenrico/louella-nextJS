@@ -62,24 +62,13 @@ api.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const refreshToken = localStorage.getItem('refreshToken');
-        if (!refreshToken) {
-          processQueue(new Error('Missing refresh token'), null);
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('refreshToken');
-          if (typeof window !== 'undefined') {
-            window.location.href = '/login';
-          }
-          return Promise.reject(error);
-        }
         const { data } = await axios.post(
           `${BASE_URL}/auth/refresh`,
-          { refreshToken },
-          { withCredentials: true }
+          {},
+          { withCredentials: true },
         );
         const newAccessToken: string = data.accessToken;
         localStorage.setItem('accessToken', newAccessToken);
-        localStorage.setItem('refreshToken', data.refreshToken);
         processQueue(null, newAccessToken);
         if (originalRequest.headers) {
           originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
@@ -88,7 +77,6 @@ api.interceptors.response.use(
       } catch (refreshError) {
         processQueue(refreshError, null);
         localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
         if (typeof window !== 'undefined') {
           window.location.href = '/login';
         }

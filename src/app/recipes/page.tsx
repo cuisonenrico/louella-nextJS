@@ -246,7 +246,8 @@ export default function RecipesPage() {
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <div className="p-2 rounded bg-muted"><p className="text-muted-foreground">Batch Cost</p><p className="font-semibold">₱{costTarget.totalBatchCost.toFixed(2)}</p></div>
                   <div className="p-2 rounded bg-muted"><p className="text-muted-foreground">Cost / Unit</p><p className="font-semibold">₱{costTarget.costPerUnit.toFixed(2)}</p></div>
-                  <div className="p-2 rounded bg-muted col-span-2"><p className="text-muted-foreground">Gross Margin</p><p className="font-semibold">{(costTarget.grossMargin * 100).toFixed(1)}%</p></div>
+                  <div className="p-2 rounded bg-muted"><p className="text-muted-foreground">Gross Profit / Unit</p><p className="font-semibold">₱{costTarget.grossProfitPerUnit.toFixed(2)}</p></div>
+                  <div className="p-2 rounded bg-muted"><p className="text-muted-foreground">Gross Margin</p><p className="font-semibold">{(costTarget.grossMarginPercent * 100).toFixed(1)}%</p></div>
                 </div>
               </div>
             ) : <p className="text-muted-foreground text-center py-4">Unable to load cost data.</p>}

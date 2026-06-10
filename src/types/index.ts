@@ -159,17 +159,22 @@ export interface Recipe {
 
 export interface RecipeCost {
   recipeId: number;
+  productId: number;
   productName: string;
+  productPrice: number;
   recipeYield: number;
   totalBatchCost: number;
   costPerUnit: number;
-  productPrice: number;
-  grossMargin: number;
+  grossProfitPerUnit: number;
+  /** Decimal ratio 0–1 (e.g. 0.42 = 42%). Multiply by 100 to display as percent. */
+  grossMarginPercent: number;
   items: {
     materialId: number;
     materialName: string;
     quantity: number;
     unit: MeasurementUnit;
+    quantityInBaseUnit: number;
+    baseUnit: MeasurementUnit;
     pricePerUnit: number;
     cost: number;
   }[];
