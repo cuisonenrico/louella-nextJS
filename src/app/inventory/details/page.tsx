@@ -48,7 +48,6 @@ export default function InventoryDetailsPage() {
   const [pendingUpdates, setPendingUpdates] = useState<Map<number, Partial<Inventory>>>(new Map());
   const [cascadeWarning, setCascadeWarning] = useState<{ branchId: number; productId: number; fromDate: string } | null>(null);
   const [adjRow, setAdjRow] = useState<Inventory | null>(null);
-  const [snackError, setSnackError] = useState('');
 
   // Queries
   const { data: branches = [] } = useQuery<Branch[]>({ queryKey: ['branches'], queryFn: () => branchesApi.list().then((r) => r.data) });
@@ -129,7 +128,7 @@ export default function InventoryDetailsPage() {
       return inventoryApi.createBulk(payload);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory'] }),
-    onError: (err) => setSnackError(extractError(err)),
+    onError: (err) => toast.error(extractError(err)),
   });
 
   // Auto-sync missing product rows when branch is selected
@@ -160,7 +159,7 @@ export default function InventoryDetailsPage() {
       qc.invalidateQueries({ queryKey: ['inventory-summary'] });
       toast.success('Changes saved');
     },
-    onError: (err) => { const text = extractError(err); setSnackError(text); toast.error(text); },
+    onError: (err) => toast.error(extractError(err)),
   });
 
   const recascadeMutation = useMutation({
@@ -171,7 +170,7 @@ export default function InventoryDetailsPage() {
       qc.invalidateQueries({ queryKey: ['inventory'] });
       toast.success('Cascade applied');
     },
-    onError: (err) => { const text = extractError(err); setSnackError(text); toast.error(text); },
+    onError: (err) => toast.error(extractError(err)),
   });
 
   // Cell editing
@@ -250,18 +249,6 @@ export default function InventoryDetailsPage() {
               onAdjustmentsOpen={setAdjRow}
               onCellChange={handleCellChange}
             />
-          )}
-
-          {/* Error toast */}
-          {snackError && (
-            <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50">
-              <Alert variant="destructive" className="shadow-lg">
-                <AlertDescription className="flex items-center gap-2">
-                  {snackError}
-                  <Button variant="ghost" size="sm" onClick={() => setSnackError('')}>×</Button>
-                </AlertDescription>
-              </Alert>
-            </div>
           )}
 
           {/* Cascade warning dialog */}

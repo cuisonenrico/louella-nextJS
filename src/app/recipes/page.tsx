@@ -8,6 +8,7 @@ import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
 import { recipesApi, productsApi, materialsApi } from '@/lib/apiServices';
 import type { Recipe, RecipeCost, Product, Material, MeasurementUnit, RecipeItem } from '@/types';
+import { extractError } from '@/lib/errors';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -25,11 +26,6 @@ const UNITS: MeasurementUnit[] = ['KG', 'G', 'LITER', 'ML', 'PIECE', 'DOZEN', 'B
 
 interface IngredientRow { materialId: number; quantity: string; unit: MeasurementUnit; }
 type RecipeWithOptionalItems = Recipe & { recipeItems?: RecipeItem[] };
-
-function extractError(err: unknown): string {
-  const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
-  return Array.isArray(msg) ? msg.join(', ') : (msg ?? 'An error occurred');
-}
 
 function getRecipeItems(recipe: RecipeWithOptionalItems): RecipeItem[] {
   return recipe.items ?? recipe.recipeItems ?? [];

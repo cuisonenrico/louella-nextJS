@@ -6,8 +6,9 @@ import { Plus, Pencil, Trash2, Loader2, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
-import { materialsApi, suppliersApi } from '@/lib/apiServices';
+import { materialsApi } from '@/lib/apiServices';
 import type { Material, MaterialPriceHistory, MeasurementUnit } from '@/types';
+import { extractError } from '@/lib/errors';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -26,11 +27,6 @@ const UNITS: MeasurementUnit[] = ['KG', 'G', 'LITER', 'ML', 'PIECE', 'DOZEN', 'B
 
 interface MaterialForm { name: string; unit: MeasurementUnit; pricePerUnit: string; reorderLevel: string; }
 const defaultForm: MaterialForm = { name: '', unit: 'KG', pricePerUnit: '', reorderLevel: '0' };
-
-function extractError(err: unknown): string {
-  const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
-  return Array.isArray(msg) ? msg.join(', ') : (msg ?? 'An error occurred');
-}
 
 export default function MaterialsPage() {
   const qc = useQueryClient();
