@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { toast } from 'sonner';
 import dayjs from 'dayjs';
 import { Plus, Pencil, Trash2, Search, Loader2 } from 'lucide-react';
 import AppLayout from '@/components/layout/AppLayout';
@@ -85,25 +86,30 @@ export default function ProductsPage() {
 
   const createMutation = useMutation({
     mutationFn: (data: Partial<Product>) => productsApi.create(data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['products'] }); setDialogOpen(false); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['products'] }); setDialogOpen(false); toast.success('Product saved'); },
     onError: (err: unknown) => {
       const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
-      setFormError(Array.isArray(msg) ? msg.join(', ') : (msg ?? 'Failed to save.'));
+      const text = Array.isArray(msg) ? msg.join(', ') : (msg ?? 'Failed to save.');
+      setFormError(text);
+      toast.error(text);
     },
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<Product> }) => productsApi.update(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['products'] }); setDialogOpen(false); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['products'] }); setDialogOpen(false); toast.success('Product saved'); },
     onError: (err: unknown) => {
       const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
-      setFormError(Array.isArray(msg) ? msg.join(', ') : (msg ?? 'Failed to save.'));
+      const text = Array.isArray(msg) ? msg.join(', ') : (msg ?? 'Failed to save.');
+      setFormError(text);
+      toast.error(text);
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => productsApi.delete(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['products'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['products'] }); toast.success('Product deleted'); },
+    onError: () => toast.error('Failed to delete product'),
   });
 
   const openCreate = () => {
