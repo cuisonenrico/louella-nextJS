@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
 import type { Branch, Product, ProductionOrder, ProductType } from '@/types';
 import { productionOrdersApi } from '@/lib/apiServices';
@@ -80,15 +81,15 @@ export function ProductionOrderFormDialog({
   const createMutation = useMutation({
     mutationFn: (data: { branchId: number; date: string; notes?: string; items: { productId: number; yield: number }[] }) =>
       productionOrdersApi.create(data),
-    onSuccess: () => { invalidate(); onSaved(); onClose(); },
-    onError: (err) => setFormError(extractError(err)),
+    onSuccess: () => { invalidate(); onSaved(); onClose(); toast.success('Order saved'); },
+    onError: (err) => { const text = extractError(err); setFormError(text); toast.error(text); },
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: { branchId?: number; notes?: string; items?: { productId: number; yield: number }[] } }) =>
       productionOrdersApi.update(id, data),
-    onSuccess: () => { invalidate(); onSaved(); onClose(); },
-    onError: (err) => setFormError(extractError(err)),
+    onSuccess: () => { invalidate(); onSaved(); onClose(); toast.success('Order saved'); },
+    onError: (err) => { const text = extractError(err); setFormError(text); toast.error(text); },
   });
 
   const saving = createMutation.isPending || updateMutation.isPending;

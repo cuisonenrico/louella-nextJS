@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import dayjs from 'dayjs';
 import {
   Plus, Pencil, Trash2, Loader2, ChevronLeft, ChevronRight,
@@ -92,16 +93,20 @@ export default function ProductionOrdersPage() {
       invalidateProductionViews();
       if (variables.status === 'FINALIZED') {
         qc.invalidateQueries({ queryKey: ['inventory'] });
+        toast.success('Order finalized');
+      } else if (variables.status === 'CANCELLED') {
+        toast.success('Order cancelled');
       }
       setFinalizeTarget(null);
       setCancelTarget(null);
     },
-    onError: (err) => setActionError(extractError(err)),
+    onError: (err) => { const text = extractError(err); setActionError(text); toast.error(text); },
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => productionOrdersApi.delete(id),
-    onSuccess: () => { invalidateProductionViews(); setDeleteTarget(null); },
+    onSuccess: () => { invalidateProductionViews(); setDeleteTarget(null); toast.success('Order deleted'); },
+    onError: (err) => toast.error(extractError(err)),
   });
 
   // ── Dialog helpers ──
