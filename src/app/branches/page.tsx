@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { Plus, Pencil, Trash2, Search, Loader2 } from 'lucide-react';
 import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
@@ -38,25 +39,30 @@ export default function BranchesPage() {
 
   const createMutation = useMutation({
     mutationFn: (data: Partial<Branch>) => branchesApi.create(data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['branches'] }); setDialogOpen(false); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['branches'] }); setDialogOpen(false); toast.success('Branch saved'); },
     onError: (err: unknown) => {
       const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
-      setFormError(Array.isArray(msg) ? msg.join(', ') : (msg ?? 'Failed to save.'));
+      const text = Array.isArray(msg) ? msg.join(', ') : (msg ?? 'Failed to save.');
+      setFormError(text);
+      toast.error(text);
     },
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<Branch> }) => branchesApi.update(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['branches'] }); setDialogOpen(false); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['branches'] }); setDialogOpen(false); toast.success('Branch saved'); },
     onError: (err: unknown) => {
       const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
-      setFormError(Array.isArray(msg) ? msg.join(', ') : (msg ?? 'Failed to save.'));
+      const text = Array.isArray(msg) ? msg.join(', ') : (msg ?? 'Failed to save.');
+      setFormError(text);
+      toast.error(text);
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => branchesApi.delete(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['branches'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['branches'] }); toast.success('Branch deleted'); },
+    onError: () => toast.error('Failed to delete branch'),
   });
 
   const openCreate = () => { setEditTarget(null); setForm(defaultForm); setFormError(''); setDialogOpen(true); };
