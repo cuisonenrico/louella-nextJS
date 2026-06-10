@@ -1,6 +1,7 @@
 'use client';
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { inventoryApi, jobsApi, productionApi } from '@/lib/apiServices';
 import type { Branch, Product } from '@/types';
 import { extractError } from '@/lib/errors';
@@ -71,8 +72,9 @@ export function useProductionMutations({
       qc.invalidateQueries({ queryKey: ['production'] });
       qc.invalidateQueries({ queryKey: ['inventory'] });
       qc.invalidateQueries({ queryKey: ['inventory-for-production'] });
+      toast.success('Production saved');
     },
-    onError: (err) => onError(extractError(err)),
+    onError: (err) => { const text = extractError(err); onError(text); toast.error(text); },
   });
 
   return { initBranchMutation, initAllBranchesMutation, savePendingMutation };
