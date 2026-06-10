@@ -5,7 +5,7 @@ import { useMutation } from '@tanstack/react-query';
 import { Loader2, Upload, FileSpreadsheet, CheckCircle, AlertTriangle } from 'lucide-react';
 import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
-import { inventoryImportApi, branchesApi } from '@/lib/apiServices';
+import { inventoryImportApi, branchesApi, importLogsApi } from '@/lib/apiServices';
 import { useQuery } from '@tanstack/react-query';
 import type { Branch, ParsedWorkbook, InventoryImportResult } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -33,6 +33,13 @@ export default function InventoryImportPage() {
   const [error, setError] = useState('');
 
   const { data: branches = [] } = useQuery({ queryKey: ['branches'], queryFn: () => branchesApi.list().then((r) => r.data) });
+
+  const { data: branchLogs } = useQuery({
+    queryKey: ['import-logs', branchId],
+    queryFn: () =>
+      importLogsApi.list({ branchId: parseInt(branchId), limit: 5 }).then((r) => r.data.items),
+    enabled: !!branchId && step === 'branch',
+  });
 
   const previewMut = useMutation({
     mutationFn: (f: File) => inventoryImportApi.preview(f),
@@ -149,6 +156,16 @@ export default function InventoryImportPage() {
                   <SelectContent>{branches.map((b: Branch) => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
+              {branchLogs && branchLogs.length > 0 && (
+                <Alert>
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>
+                    This branch has {branchLogs.length} previous import
+                    {branchLogs.length > 1 ? 's' : ''}. If dates overlap, existing
+                    records will be updated. Uploading the exact same file will be rejected.
+                  </AlertDescription>
+                </Alert>
+              )}
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => setStep('preview')}>Back</Button>
                 <Button onClick={handleImport} disabled={!branchId || importMut.isPending}>
@@ -188,7 +205,12 @@ export default function InventoryImportPage() {
                 ))}
               </CardContent>
             </Card>
-            <Button onClick={reset}>Import Another</Button>
+            <div className="flex items-center gap-4">
+              <Button onClick={reset}>Import Another</Button>
+              <a href="/inventory-import/history" className="text-sm text-muted-foreground underline underline-offset-4">
+                View import history →
+              </a>
+            </div>
           </div>
         )}
       </AppLayout>
