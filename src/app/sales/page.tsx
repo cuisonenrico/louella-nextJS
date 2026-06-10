@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 function getDayStatus(sold: number, allSold: number[]): { label: string; className: string } {
   if (allSold.length === 0) return { label: 'STABLE', className: 'bg-muted text-muted-foreground' };
@@ -53,7 +54,7 @@ export default function SalesPage() {
 
   const { data: branches = [] } = useQuery({ queryKey: ['branches'], queryFn: () => branchesApi.list().then((r) => r.data) });
 
-  const { data: dashboard, isLoading } = useQuery({
+  const { data: dashboard, isLoading, isError } = useQuery({
     queryKey: ['inventory-dashboard', startDate, endDate, branchId],
     queryFn: () => inventoryApi.dashboard(startDate, endDate, branchId || undefined).then((r) => r.data),
   });
@@ -121,6 +122,10 @@ export default function SalesPage() {
       >
         {isLoading ? (
           <div className="flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
+        ) : isError ? (
+          <Alert variant="destructive" className="mt-4">
+            <AlertDescription>Failed to load sales data.</AlertDescription>
+          </Alert>
         ) : !dashboard ? (
           <p className="text-center text-muted-foreground py-20">No data for the selected range.</p>
         ) : (
