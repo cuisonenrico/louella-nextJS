@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Loader2, ChevronDown, ChevronRight, ChevronLeft, Plus } from 'lucide-react';
 import dayjs from 'dayjs';
+import { toast } from 'sonner';
 import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
 import { inventoryApi, inventoryAdjustmentsApi, branchesApi } from '@/lib/apiServices';
@@ -56,8 +57,9 @@ export default function InventoryAdjustmentsPage() {
       if (dialogTarget) {
         setAdjCache((prev) => { const n = { ...prev }; delete n[dialogTarget.id]; return n; });
       }
+      toast.success('Adjustment saved');
     },
-    onError: (err) => setFormError(extractError(err)),
+    onError: (err) => { const text = extractError(err); setFormError(text); toast.error(text); },
   });
 
   const toggleExpand = async (inv: Inventory) => {
