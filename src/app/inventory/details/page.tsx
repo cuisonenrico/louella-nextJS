@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, AlertTriangle, Info } from 'lucide-react';
 import dayjs from 'dayjs';
 import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
 import { branchesApi, inventoryApi, productsApi } from '@/lib/apiServices';
@@ -157,8 +158,9 @@ export default function InventoryDetailsPage() {
       setPendingUpdates(new Map());
       qc.invalidateQueries({ queryKey: ['inventory'] });
       qc.invalidateQueries({ queryKey: ['inventory-summary'] });
+      toast.success('Changes saved');
     },
-    onError: (err) => setSnackError(extractError(err)),
+    onError: (err) => { const text = extractError(err); setSnackError(text); toast.error(text); },
   });
 
   const recascadeMutation = useMutation({
@@ -167,8 +169,9 @@ export default function InventoryDetailsPage() {
     onSuccess: () => {
       setCascadeWarning(null);
       qc.invalidateQueries({ queryKey: ['inventory'] });
+      toast.success('Cascade applied');
     },
-    onError: (err) => setSnackError(extractError(err)),
+    onError: (err) => { const text = extractError(err); setSnackError(text); toast.error(text); },
   });
 
   // Cell editing
