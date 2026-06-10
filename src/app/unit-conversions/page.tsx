@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Pencil, Trash2, Loader2, ArrowRightLeft } from 'lucide-react';
+import { toast } from 'sonner';
 import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
 import { unitConversionsApi } from '@/lib/apiServices';
@@ -48,17 +49,18 @@ export default function UnitConversionsPage() {
 
   const createMut = useMutation({
     mutationFn: (data: Partial<UnitConversion>) => unitConversionsApi.create(data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['unit-conversions'] }); setDialogOpen(false); },
-    onError: (err) => setFormError(extractError(err)),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['unit-conversions'] }); setDialogOpen(false); toast.success('Conversion saved'); },
+    onError: (err) => { const text = extractError(err); setFormError(text); toast.error(text); },
   });
   const updateMut = useMutation({
     mutationFn: ({ id, factor }: { id: number; factor: number }) => unitConversionsApi.update(id, factor),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['unit-conversions'] }); setDialogOpen(false); },
-    onError: (err) => setFormError(extractError(err)),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['unit-conversions'] }); setDialogOpen(false); toast.success('Conversion saved'); },
+    onError: (err) => { const text = extractError(err); setFormError(text); toast.error(text); },
   });
   const deleteMut = useMutation({
     mutationFn: (id: number) => unitConversionsApi.delete(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['unit-conversions'] }); setDeleteTarget(null); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['unit-conversions'] }); setDeleteTarget(null); toast.success('Conversion deleted'); },
+    onError: (err) => toast.error(extractError(err)),
   });
 
   const openCreate = () => { setEditTarget(null); setForm(defaultForm); setFormError(''); setDialogOpen(true); };
