@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Pencil, Trash2, Loader2, Search } from 'lucide-react';
+import { toast } from 'sonner';
 import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
 import { materialsApi, suppliersApi } from '@/lib/apiServices';
@@ -49,17 +50,18 @@ export default function MaterialsPage() {
 
   const createMut = useMutation({
     mutationFn: (data: Partial<Material>) => materialsApi.create(data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['materials'] }); setDialogOpen(false); },
-    onError: (err) => setFormError(extractError(err)),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['materials'] }); setDialogOpen(false); toast.success('Material saved'); },
+    onError: (err) => { const text = extractError(err); setFormError(text); toast.error(text); },
   });
   const updateMut = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<Material> }) => materialsApi.update(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['materials'] }); setDialogOpen(false); },
-    onError: (err) => setFormError(extractError(err)),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['materials'] }); setDialogOpen(false); toast.success('Material saved'); },
+    onError: (err) => { const text = extractError(err); setFormError(text); toast.error(text); },
   });
   const deleteMut = useMutation({
     mutationFn: (id: number) => materialsApi.delete(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['materials'] }); setDeleteTarget(null); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['materials'] }); setDeleteTarget(null); toast.success('Material deleted'); },
+    onError: (err) => toast.error(extractError(err)),
   });
 
   const openCreate = () => { setEditTarget(null); setForm(defaultForm); setFormError(''); setDialogOpen(true); };
