@@ -11,6 +11,7 @@ import type {
   InventoryImportResult,
   InventorySummaryData,
   InventoryUpdateResult,
+  ImportLogsResponse,
   Material,
   MaterialAdjustment,
   MaterialConsumption,
@@ -147,6 +148,12 @@ export const inventoryImportApi = {
     form.append('branchId', String(branchId));
     return api.post<InventoryImportResult>('/inventory-import/import', form);
   },
+};
+
+export const importLogsApi = {
+  list: (params?: { branchId?: number; page?: number; limit?: number }) =>
+    api.get<ImportLogsResponse>('/inventory-import/logs', { params }),
+  delete: (id: number) => api.delete<void>(`/inventory-import/logs/${id}`),
 };
 
 // ─── Inventory Adjustments ───────────────────────────────────────

@@ -282,6 +282,29 @@ export interface InventoryImportResult {
   sheets: SheetImportResult[];
 }
 
+export interface ImportLog {
+  id: number;
+  branchId: number;
+  fileName: string;
+  fileHash: string;
+  importedBy: number | null;
+  importedAt: string;
+  sheetCount: number;
+  rowCount: number;
+  skippedCount: number;
+  status: 'SUCCESS' | 'PARTIAL';
+  notes: string | null;
+  branch: { name: string };
+  importedByUser: { email: string } | null;
+}
+
+export interface ImportLogsResponse {
+  total: number;
+  page: number;
+  limit: number;
+  items: ImportLog[];
+}
+
 // ────────────────────────────────────────────────────────────────
 // Price History
 // ────────────────────────────────────────────────────────────────
