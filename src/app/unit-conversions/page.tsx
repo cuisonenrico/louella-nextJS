@@ -17,18 +17,14 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { extractError } from '@/lib/errors';
 
 const UNITS: MeasurementUnit[] = ['KG', 'G', 'LITER', 'ML', 'PIECE', 'DOZEN', 'BAG', 'SACHET', 'CUP', 'TBSP', 'TSP'];
 
 interface ConvForm { fromUnit: MeasurementUnit; toUnit: MeasurementUnit; factor: string; }
 const defaultForm: ConvForm = { fromUnit: 'KG', toUnit: 'G', factor: '' };
-
-function extractError(err: unknown): string {
-  const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
-  return Array.isArray(msg) ? msg.join(', ') : (msg ?? 'An error occurred');
-}
 
 export default function UnitConversionsPage() {
   const qc = useQueryClient();
@@ -97,6 +93,7 @@ export default function UnitConversionsPage() {
   return (
     <AuthGuard>
       <AppLayout title="Unit Conversions">
+        <TooltipProvider>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Conversion Tool */}
           <Card className="lg:col-span-1">
@@ -202,6 +199,7 @@ export default function UnitConversionsPage() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+        </TooltipProvider>
       </AppLayout>
     </AuthGuard>
   );

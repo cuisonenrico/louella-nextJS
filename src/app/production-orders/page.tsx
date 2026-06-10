@@ -24,6 +24,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useAuth } from '@/contexts/AuthContext';
 import { ProductionOrderFormDialog } from './components/ProductionOrderFormDialog';
 import ProductionTabNav from '@/app/production/components/ProductionTabNav';
+import { extractError } from '@/lib/errors';
 
 const PRODUCT_TYPE_ORDER: ProductType[] = ['BREAD', 'CAKE', 'SPECIAL', 'MISCELLANEOUS'];
 
@@ -32,11 +33,6 @@ const STATUS_BADGE: Record<ProductionOrderStatus, { label: string; variant: 'def
   FINALIZED: { label: 'Finalized', variant: 'default' },
   CANCELLED: { label: 'Cancelled', variant: 'destructive' },
 };
-
-function extractError(err: unknown): string {
-  const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
-  return Array.isArray(msg) ? msg.join(', ') : (msg ?? 'An error occurred');
-}
 
 export default function ProductionOrdersPage() {
   const { user } = useAuth();
@@ -48,7 +44,6 @@ export default function ProductionOrdersPage() {
   const [deleteTarget, setDeleteTarget] = useState<ProductionOrder | null>(null);
   const [finalizeTarget, setFinalizeTarget] = useState<ProductionOrder | null>(null);
   const [cancelTarget, setCancelTarget] = useState<ProductionOrder | null>(null);
-  const [actionError, setActionError] = useState('');
 
   const isAdmin = user?.role === 'ADMIN';
 
@@ -100,7 +95,7 @@ export default function ProductionOrdersPage() {
       setFinalizeTarget(null);
       setCancelTarget(null);
     },
-    onError: (err) => { const text = extractError(err); setActionError(text); toast.error(text); },
+    onError: (err) => { toast.error(extractError(err)); },
   });
 
   const deleteMutation = useMutation({
@@ -111,7 +106,7 @@ export default function ProductionOrdersPage() {
 
   // ── Dialog helpers ──
   const openCreate = useCallback(() => {
-    if (!activeBranchId) { setActionError('Select a branch before creating a production order.'); return; }
+    if (!activeBranchId) { toast.error('Select a branch before creating a production order.'); return; }
     setEditTarget(null);
     setDialogOpen(true);
   }, [activeBranchId]);
@@ -473,17 +468,6 @@ export default function ProductionOrdersPage() {
             </AlertDialogContent>
           </AlertDialog>
 
-          {/* Error snackbar */}
-          {actionError && (
-            <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50">
-              <Alert variant="destructive" className="shadow-lg">
-                <AlertDescription className="flex items-center gap-2">
-                  {actionError}
-                  <Button variant="ghost" size="sm" onClick={() => setActionError('')}>×</Button>
-                </AlertDescription>
-              </Alert>
-            </div>
-          )}
         </TooltipProvider>
       </AppLayout>
     </AuthGuard>

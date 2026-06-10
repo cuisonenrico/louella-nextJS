@@ -18,13 +18,11 @@ import { AdjustmentsDialog } from './components/AdjustmentsDialog';
 import { StockCardDialog } from './components/StockCardDialog';
 import { BulkSetDialog } from './components/BulkSetDialog';
 
+import { extractError } from '@/lib/errors';
+
 function todayStr() { return new Date().toISOString().slice(0, 10); }
 function addDays(dateStr: string, days: number) { const d = new Date(dateStr); d.setDate(d.getDate() + days); return d.toISOString().slice(0, 10); }
 function fmt(n: number) { return n.toLocaleString(undefined, { maximumFractionDigits: 2 }); }
-function extractError(err: unknown): string {
-  const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
-  return Array.isArray(msg) ? msg.join(', ') : (msg ?? 'An error occurred');
-}
 
 // ── Main Page ──
 export default function MaterialInventoryPage() {

@@ -14,11 +14,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
-
-function extractError(err: unknown): string {
-  const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
-  return Array.isArray(msg) ? msg.join(', ') : (msg ?? 'An error occurred');
-}
+import { extractError } from '@/lib/errors';
 
 const ADJ_COLORS: Record<string, string> = {
   PULL_IN: 'bg-green-100 text-green-800 border-green-300',
@@ -44,7 +40,7 @@ export function AdjustmentsDialog({ record, onClose }: { record: MaterialInvento
   const deleteAdj = useMutation({
     mutationFn: (id: number) => materialAdjustmentsApi.delete(id),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['material-inventory'] }); toast.success('Adjustment deleted'); },
-    onError: (e) => { const text = extractError(e); setFormErr(text); toast.error(text); },
+    onError: (e) => { toast.error(extractError(e)); },
   });
 
   if (!record) return null;

@@ -12,11 +12,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from 'sonner';
-
-function extractError(err: unknown): string {
-  const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
-  return Array.isArray(msg) ? msg.join(', ') : (msg ?? 'An error occurred');
-}
+import { extractError } from '@/lib/errors';
 
 export function BulkSetDialog({ open, filterDate, materials, existingRows, onClose, onSaved }: {
   open: boolean;
@@ -38,7 +34,7 @@ export function BulkSetDialog({ open, filterDate, materials, existingRows, onClo
     activeMaterials.forEach((m) => { initial.set(m.id, '0'); });
     setDeliveries(initial);
     setErr('');
-  }, [open, activeMaterials, existingRows]);
+  }, [open, activeMaterials]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
