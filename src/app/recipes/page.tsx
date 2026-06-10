@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { Plus, Trash2, Loader2, Search, CookingPot, DollarSign, ChevronDown, ChevronUp } from 'lucide-react';
 import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
@@ -58,17 +59,18 @@ export default function RecipesPage() {
 
   const createMut = useMutation({
     mutationFn: (data: { productId: number; recipeYield?: number; notes?: string; items: { materialId: number; quantity: number; unit: string }[] }) => recipesApi.create(data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['recipes'] }); setDialogOpen(false); },
-    onError: (err) => setFormError(extractError(err)),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['recipes'] }); setDialogOpen(false); toast.success('Recipe saved'); },
+    onError: (err) => { const text = extractError(err); setFormError(text); toast.error(text); },
   });
   const updateMut = useMutation({
     mutationFn: ({ id, data }: { id: number; data: { recipeYield?: number; notes?: string; items?: { materialId: number; quantity: number; unit: string }[] } }) => recipesApi.update(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['recipes'] }); setDialogOpen(false); },
-    onError: (err) => setFormError(extractError(err)),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['recipes'] }); setDialogOpen(false); toast.success('Recipe saved'); },
+    onError: (err) => { const text = extractError(err); setFormError(text); toast.error(text); },
   });
   const deleteMut = useMutation({
     mutationFn: (id: number) => recipesApi.delete(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['recipes'] }); setDeleteTarget(null); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['recipes'] }); setDeleteTarget(null); toast.success('Recipe deleted'); },
+    onError: (err) => toast.error(extractError(err)),
   });
 
   const openCreate = () => {
