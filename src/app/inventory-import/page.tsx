@@ -34,7 +34,7 @@ export default function InventoryImportPage() {
 
   const { data: branches = [] } = useQuery({ queryKey: ['branches'], queryFn: () => branchesApi.list().then((r) => r.data) });
 
-  const { data: branchLogs } = useQuery({
+  const { data: branchLogs, isLoading: branchLogsLoading } = useQuery({
     queryKey: ['import-logs', branchId],
     queryFn: () =>
       importLogsApi.list({ branchId: parseInt(branchId), limit: 5 }).then((r) => r.data.items),
@@ -156,7 +156,12 @@ export default function InventoryImportPage() {
                   <SelectContent>{branches.map((b: Branch) => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-              {branchLogs && branchLogs.length > 0 && (
+              {branchLogsLoading && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />Checking import history…
+                </div>
+              )}
+              {!branchLogsLoading && branchLogs && branchLogs.length > 0 && (
                 <Alert>
                   <AlertTriangle className="h-4 w-4" />
                   <AlertDescription>
