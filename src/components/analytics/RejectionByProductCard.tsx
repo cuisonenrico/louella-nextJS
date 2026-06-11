@@ -46,11 +46,11 @@ export default function RejectionByProductCard({
   const today = dayjs().format('YYYY-MM-DD');
   const [internalFrom, setInternalFrom] = useState(today);
   const [internalTo, setInternalTo] = useState(today);
-  const [internalBranch, setInternalBranch] = useState('');
+  const [internalBranch, setInternalBranch] = useState('all');
 
   const startDate = showFilters ? internalFrom : externalFrom;
   const endDate = showFilters ? internalTo : externalTo;
-  const branchId = showFilters ? (internalBranch || undefined) : externalBranch;
+  const branchId = showFilters ? (internalBranch === 'all' ? undefined : internalBranch) : externalBranch;
 
   const { data = [], isLoading, isError } = useQuery<RejectionByProductItem[]>({
     queryKey: ['rejection-by-product', startDate, endDate, branchId, type],
@@ -95,7 +95,7 @@ export default function RejectionByProductCard({
                   <SelectValue placeholder="All branches" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All branches</SelectItem>
+                  <SelectItem value="all">All branches</SelectItem>
                   {branches.map((b) => (
                     <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>
                   ))}
