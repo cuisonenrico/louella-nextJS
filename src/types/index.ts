@@ -543,3 +543,12 @@ export interface MaterialGapsResult {
   missing: MaterialGapEntry[];
   total: number;
 }
+
+export interface RejectionByProductItem {
+  productId: number;
+  name: string;
+  type: ProductType;
+  totalDelivery: number;
+  totalReject: number;
+  rejectRate: number;
+}

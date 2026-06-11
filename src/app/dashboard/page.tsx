@@ -11,6 +11,7 @@ import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
 import { dashboardApi, productionOrdersApi, branchesApi, inventoryApi } from '@/lib/apiServices';
 import type { DashboardSummary, ProductionOrder, Branch, Inventory } from '@/types';
+import RejectionByProductCard from '@/components/analytics/RejectionByProductCard';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -281,6 +282,16 @@ export default function DashboardPage() {
                   )}
                 </CardContent>
               </Card>
+            </div>
+
+            {/* Rejection Analytics */}
+            <div className="mb-6">
+              <RejectionByProductCard
+                startDate={today}
+                endDate={today}
+                type="BREAD"
+                title="Today's Bread Wastage"
+              />
             </div>
 
             {/* Products & Branches */}

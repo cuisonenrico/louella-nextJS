@@ -33,6 +33,7 @@ import type {
   TransferResult,
   UnitConversion,
   User,
+  RejectionByProductItem,
 } from '@/types';
 
 // ─── Auth ────────────────────────────────────────────────────────
@@ -133,6 +134,10 @@ export const inventoryApi = {
     }),
   recascade: (branchId: number, productId: number, fromDate: string) =>
     api.post<{ updated: number }>('/inventory/recascade', { branchId, productId, fromDate }),
+  rejectionByProduct: (startDate?: string, endDate?: string, branchId?: string, type?: string) =>
+    api.get<RejectionByProductItem[]>('/inventory/rejection-by-product', {
+      params: { startDate, endDate, branchId, type },
+    }),
 };
 
 // ─── Inventory Import ────────────────────────────────────────────

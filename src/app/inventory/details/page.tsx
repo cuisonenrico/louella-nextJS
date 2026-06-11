@@ -22,6 +22,7 @@ import InventoryTypeTables from '../components/InventoryTypeTables';
 import InventoryAdjustmentsDialog from '../components/InventoryAdjustmentsDialog';
 import { useInventoryDisplayRows } from '../hooks/useInventoryDisplayRows';
 import { CardContent } from '@/components/ui/card';
+import RejectionByProductCard from '@/components/analytics/RejectionByProductCard';
 
 const PRODUCT_TYPE_ORDER: ProductType[] = ['BREAD', 'CAKE', 'SPECIAL', 'MISCELLANEOUS'];
 
@@ -216,6 +217,15 @@ export default function InventoryDetailsPage() {
             filterDateFrom={filterDateFrom}
             filterDateTo={filterDateTo}
           />
+
+          <div className="mb-4">
+            <RejectionByProductCard
+              startDate={filterDateFrom}
+              endDate={filterDateTo}
+              branchId={filterBranch || undefined}
+              title="Rejected vs Delivered by Product"
+            />
+          </div>
 
           <InventoryPendingChangesBar
             totalPending={totalPending}
