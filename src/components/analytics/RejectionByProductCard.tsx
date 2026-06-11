@@ -33,7 +33,7 @@ export default function RejectionByProductCard({
   type,
   title = 'Rejected vs Delivered by Product',
 }: Props) {
-  const { data = [], isLoading } = useQuery<RejectionByProductItem[]>({
+  const { data = [], isLoading, isError } = useQuery<RejectionByProductItem[]>({
     queryKey: ['rejection-by-product', startDate, endDate, branchId, type],
     queryFn: () =>
       inventoryApi
@@ -56,6 +56,10 @@ export default function RejectionByProductCard({
           <div className="flex justify-center py-8">
             <Loader2 className="h-6 w-6 animate-spin text-primary" />
           </div>
+        ) : isError ? (
+          <Alert variant="destructive">
+            <AlertDescription>Failed to load rejection data.</AlertDescription>
+          </Alert>
         ) : data.length === 0 ? (
           <Alert>
             <AlertDescription>No delivery data for this period.</AlertDescription>
