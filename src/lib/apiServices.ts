@@ -2,6 +2,8 @@ import api from './api';
 import type {
   AuthResponse,
   Branch,
+  PermissionsMatrixResponse,
+  UserRole,
   ConsumptionSummary,
   DashboardSummary,
   Inventory,
@@ -40,10 +42,44 @@ import type {
 export const authApi = {
   login: (email: string, password: string) =>
     api.post<AuthResponse>('/auth/login', { email, password }),
-  register: (email: string, password: string) =>
-    api.post<AuthResponse>('/auth/register', { email, password }),
   me: () => api.get<User>('/auth/me'),
   logout: () => api.post('/auth/logout', {}),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    api.patch<{ success: boolean }>('/auth/change-password', { currentPassword, newPassword }),
+};
+
+// ─── Users (Admin) ───────────────────────────────────────────────
+export const usersApi = {
+  list: (page = 1, limit = 20, search?: string) =>
+    api.get<PaginatedResponse<User>>('/users', { params: { page, limit, search } }),
+  get: (id: number) => api.get<User>(`/users/${id}`),
+  create: (data: {
+    email: string;
+    password: string;
+    role: UserRole;
+    branchId?: number;
+    mustChangePassword?: boolean;
+  }) => api.post<User>('/users', data),
+  updateRole: (id: number, role: UserRole) =>
+    api.patch<User>(`/users/${id}/role`, { role }),
+  updateBranch: (id: number, branchId: number | null) =>
+    api.patch<User>(`/users/${id}/branch`, { branchId }),
+  setActive: (id: number, isActive: boolean) =>
+    api.patch<User>(`/users/${id}/status`, { isActive }),
+  resetPassword: (id: number, newPassword: string) =>
+    api.post<{ success: boolean }>(`/users/${id}/reset-password`, { newPassword }),
+  myPermissions: () => api.get<{ features: string[] }>('/users/me/permissions'),
+};
+
+// ─── Permissions (Admin) ─────────────────────────────────────────
+export const permissionsApi = {
+  matrix: () => api.get<PermissionsMatrixResponse>('/permissions/matrix'),
+  setRolePermission: (role: UserRole, featureKey: string, enabled: boolean) =>
+    api.put(`/permissions/roles/${role}`, { featureKey, enabled }),
+  setUserPermission: (userId: number, featureKey: string, enabled: boolean) =>
+    api.put(`/permissions/users/${userId}`, { featureKey, enabled }),
+  resetUserPermission: (userId: number, featureKey: string) =>
+    api.delete(`/permissions/users/${userId}/${featureKey}`),
 };
 
 // ─── Suppliers ───────────────────────────────────────────────────

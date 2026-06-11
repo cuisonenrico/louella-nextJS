@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -88,10 +87,7 @@ export default function LoginPage() {
           </form>
 
           <p className="text-sm text-center mt-4 text-muted-foreground">
-            Don&apos;t have an account?{' '}
-            <Link href="/register" className="font-semibold hover:underline">
-              Register
-            </Link>
+            Contact your administrator to create an account.
           </p>
         </CardContent>
       </Card>

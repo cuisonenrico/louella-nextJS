@@ -26,6 +26,11 @@ export interface User {
   id: number;
   email: string;
   role: UserRole;
+  isActive: boolean;
+  mustChangePassword: boolean;
+  branchId: number | null;
+  managedBranch?: Pick<Branch, 'id' | 'name'> | null;
+  createdBy?: Pick<User, 'id' | 'email'> | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -63,6 +68,7 @@ export interface Branch {
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+  manager?: Pick<User, 'id' | 'email'> | null;
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -551,4 +557,40 @@ export interface RejectionByProductItem {
   totalDelivery: number;
   totalReject: number;
   rejectRate: number;
+}
+
+// ────────────────────────────────────────────────────────────────
+// Feature Permissions
+// ────────────────────────────────────────────────────────────────
+export interface Feature {
+  id: number;
+  key: string;
+  label: string;
+  description: string | null;
+  createdAt: string;
+}
+
+export interface RolePermissionState {
+  default: boolean;
+  effective: boolean;
+  overridden: boolean;
+}
+
+export interface PermissionsMatrixFeature {
+  key: string;
+  label: string;
+  description: string | null;
+  roles: Record<string, RolePermissionState>;
+}
+
+export interface PermissionsMatrixResponse {
+  features: PermissionsMatrixFeature[];
+}
+
+export interface UserFeaturePermission {
+  id: number;
+  userId: number;
+  featureKey: string;
+  enabled: boolean;
+  updatedAt: string;
 }

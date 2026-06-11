@@ -19,7 +19,6 @@ interface AuthState {
 
 interface AuthContextValue extends AuthState {
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   isAuthenticated: boolean;
 }
@@ -58,12 +57,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setState({ user: data.user, accessToken: data.accessToken, isLoading: false });
   }, []);
 
-  const register = useCallback(async (email: string, password: string) => {
-    const { data } = await authApi.register(email, password);
-    localStorage.setItem('accessToken', data.accessToken);
-    setState({ user: data.user, accessToken: data.accessToken, isLoading: false });
-  }, []);
-
   const logout = useCallback(async () => {
     try {
       await authApi.logout();
@@ -78,10 +71,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       ...state,
       isAuthenticated: !!state.user,
       login,
-      register,
       logout,
     }),
-    [state, login, register, logout]
+    [state, login, logout]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

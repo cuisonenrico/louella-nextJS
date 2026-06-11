@@ -6,11 +6,13 @@ import type { LucideIcon } from 'lucide-react';
 import {
   LayoutDashboard, Store, Package, Layers, BookOpen, TrendingUp,
   Warehouse, FlaskConical, Factory, ChevronLeft, Menu, ClipboardList, Settings, Upload,
+  Users, ShieldCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/contexts/AuthContext';
 
 export const DRAWER_WIDTH = 240;
 export const COLLAPSED_WIDTH = 64;
@@ -55,6 +57,11 @@ const configNavItems: NavItem[] = [
   { label: 'Product Order', href: '/config/product-order', icon: Layers },
 ];
 
+const settingsNavItems: NavItem[] = [
+  { label: 'Users', href: '/settings/users', icon: Users },
+  { label: 'Permissions', href: '/settings/permissions', icon: ShieldCheck },
+];
+
 export default function Sidebar({
   collapsed,
   onToggle,
@@ -64,6 +71,8 @@ export default function Sidebar({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'ADMIN';
   const width = collapsed ? COLLAPSED_WIDTH : DRAWER_WIDTH;
 
   function renderItem(item: NavItem) {
@@ -203,6 +212,25 @@ export default function Sidebar({
             })}
           </ul>
         </div>
+
+        {/* Settings section (Admin only) */}
+        {isAdmin && (
+          <div className="mt-1">
+            {collapsed
+              ? <Separator className="bg-white/15 mx-1 my-1.5" />
+              : (
+                <div className="mt-3 mb-1 px-2 flex items-center gap-1.5">
+                  <ShieldCheck className="h-3 w-3 text-white/50" />
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-white/50">Settings</span>
+                  <div className="flex-1 h-px bg-white/15" />
+                </div>
+              )
+            }
+            <ul className="space-y-0.5">
+              {settingsNavItems.map((item) => renderItem(item))}
+            </ul>
+          </div>
+        )}
       </nav>
     </aside>
   );
