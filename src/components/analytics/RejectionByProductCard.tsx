@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
@@ -34,6 +34,8 @@ function rejectRateBadge(rate: number) {
   return <Badge variant="destructive">{rate.toFixed(1)}%</Badge>;
 }
 
+const truncate = (v: string, max = 12) => v.length > max ? `${v.slice(0, max - 1)}…` : v;
+
 export default function RejectionByProductCard({
   startDate: externalFrom,
   endDate: externalTo,
@@ -43,10 +45,23 @@ export default function RejectionByProductCard({
   showFilters = false,
   branches = [],
 }: Props) {
-  const today = dayjs().format('YYYY-MM-DD');
+  // Fix 8: useState so today can be updated at midnight without remount
+  const [today, setToday] = useState(() => dayjs().format('YYYY-MM-DD'));
   const [internalFrom, setInternalFrom] = useState(today);
   const [internalTo, setInternalTo] = useState(today);
   const [internalBranch, setInternalBranch] = useState('all');
+
+  // Fix 8: reset today + internal dates when the calendar day rolls over
+  useEffect(() => {
+    const msUntilMidnight = dayjs().add(1, 'day').startOf('day').diff(dayjs());
+    const timer = setTimeout(() => {
+      const newToday = dayjs().format('YYYY-MM-DD');
+      setToday(newToday);
+      setInternalFrom(newToday);
+      setInternalTo(newToday);
+    }, msUntilMidnight);
+    return () => clearTimeout(timer);
+  }, [today]);
 
   const startDate = showFilters ? internalFrom : externalFrom;
   const endDate = showFilters ? internalTo : externalTo;
@@ -58,6 +73,7 @@ export default function RejectionByProductCard({
       inventoryApi
         .rejectionByProduct(startDate, endDate, branchId, type)
         .then((r) => r.data),
+    staleTime: 5 * 60 * 1000, // Fix 9: avoid re-fetching on every focus/remount
   });
 
   const chartData = data.map((item) => ({
@@ -78,7 +94,12 @@ export default function RejectionByProductCard({
                 type="date"
                 value={internalFrom}
                 max={internalTo}
-                onChange={(e) => setInternalFrom(e.target.value)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setInternalFrom(v);
+                  // Fix 7: keep range valid — clamp end date forward if needed
+                  if (v > internalTo) setInternalTo(v);
+                }}
                 className="w-36 h-8 text-xs"
               />
               <span className="text-xs text-muted-foreground">to</span>
@@ -87,7 +108,12 @@ export default function RejectionByProductCard({
                 value={internalTo}
                 min={internalFrom}
                 max={today}
-                onChange={(e) => setInternalTo(e.target.value)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setInternalTo(v);
+                  // Fix 7: keep range valid — clamp start date back if needed
+                  if (v < internalFrom) setInternalFrom(v);
+                }}
                 className="w-36 h-8 text-xs"
               />
               <Select value={internalBranch} onValueChange={setInternalBranch}>
@@ -122,7 +148,8 @@ export default function RejectionByProductCard({
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={chartData} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                {/* Fix 10: truncate long product names; full name visible in tooltip and table */}
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} tickFormatter={(v: string) => truncate(v)} />
                 <YAxis tick={{ fontSize: 11 }} />
                 <RechartsTooltip />
                 <Legend wrapperStyle={{ fontSize: 12 }} />

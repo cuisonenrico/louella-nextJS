@@ -288,7 +288,7 @@ export default function DashboardPage() {
             <div className="mb-6">
               <RejectionByProductCard
                 showFilters
-                branches={allBranches}
+                branches={activeBranches}
                 title="Wastage Analysis"
               />
             </div>
