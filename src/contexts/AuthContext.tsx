@@ -9,10 +9,11 @@ import {
   useState,
 } from 'react';
 import type { User } from '@/types';
-import { authApi } from '@/lib/apiServices';
+import { authApi, usersApi } from '@/lib/apiServices';
 
 interface AuthState {
   user: User | null;
+  permissions: string[];
   accessToken: string | null;
   isLoading: boolean;
 }
@@ -28,6 +29,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AuthState>({
     user: null,
+    permissions: [],
     accessToken: null,
     isLoading: true,
   });
@@ -40,21 +42,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     setState((s) => ({ ...s, accessToken: token }));
-    authApi
-      .me()
-      .then(({ data }) => {
-        setState({ user: data, accessToken: token, isLoading: false });
+    Promise.all([authApi.me(), usersApi.myPermissions()])
+      .then(([meRes, permRes]) => {
+        setState({ user: meRes.data, permissions: permRes.data.features, accessToken: token, isLoading: false });
       })
       .catch(() => {
         localStorage.removeItem('accessToken');
-        setState({ user: null, accessToken: null, isLoading: false });
+        setState({ user: null, permissions: [], accessToken: null, isLoading: false });
       });
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
     const { data } = await authApi.login(email, password);
     localStorage.setItem('accessToken', data.accessToken);
-    setState({ user: data.user, accessToken: data.accessToken, isLoading: false });
+    const { data: permData } = await usersApi.myPermissions();
+    setState({ user: data.user, permissions: permData.features, accessToken: data.accessToken, isLoading: false });
   }, []);
 
   const logout = useCallback(async () => {
@@ -62,7 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await authApi.logout();
     } finally {
       localStorage.removeItem('accessToken');
-      setState({ user: null, accessToken: null, isLoading: false });
+      setState({ user: null, permissions: [], accessToken: null, isLoading: false });
     }
   }, []);
 

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Sidebar, { COLLAPSED_WIDTH, DRAWER_WIDTH } from './Sidebar';
 import Header from './Header';
+import RouteGuard from './RouteGuard';
 
 export default function AppLayout({
   children,
@@ -40,7 +41,7 @@ export default function AppLayout({
         className="flex-1 p-6 bg-background min-h-screen pt-20 transition-all duration-200"
         style={{ marginLeft: sidebarWidth }}
       >
-        {children}
+        <RouteGuard>{children}</RouteGuard>
       </main>
     </div>
   );
