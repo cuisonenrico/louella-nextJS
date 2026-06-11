@@ -287,10 +287,9 @@ export default function DashboardPage() {
             {/* Rejection Analytics */}
             <div className="mb-6">
               <RejectionByProductCard
-                startDate={today}
-                endDate={today}
-                type="BREAD"
-                title="Today's Bread Wastage"
+                showFilters
+                branches={allBranches}
+                title="Wastage Analysis"
               />
             </div>
 

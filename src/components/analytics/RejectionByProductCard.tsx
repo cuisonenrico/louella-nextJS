@@ -1,16 +1,22 @@
 'use client';
 
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
   Legend, ResponsiveContainer,
 } from 'recharts';
 import { Loader2 } from 'lucide-react';
+import dayjs from 'dayjs';
 import { inventoryApi } from '@/lib/apiServices';
-import type { RejectionByProductItem, ProductType } from '@/types';
+import type { Branch, RejectionByProductItem, ProductType } from '@/types';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Input } from '@/components/ui/input';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 
 interface Props {
   startDate?: string;
@@ -18,6 +24,8 @@ interface Props {
   branchId?: string;
   type?: ProductType;
   title?: string;
+  showFilters?: boolean;
+  branches?: Branch[];
 }
 
 function rejectRateBadge(rate: number) {
@@ -27,12 +35,23 @@ function rejectRateBadge(rate: number) {
 }
 
 export default function RejectionByProductCard({
-  startDate,
-  endDate,
-  branchId,
+  startDate: externalFrom,
+  endDate: externalTo,
+  branchId: externalBranch,
   type,
   title = 'Rejected vs Delivered by Product',
+  showFilters = false,
+  branches = [],
 }: Props) {
+  const today = dayjs().format('YYYY-MM-DD');
+  const [internalFrom, setInternalFrom] = useState(today);
+  const [internalTo, setInternalTo] = useState(today);
+  const [internalBranch, setInternalBranch] = useState('');
+
+  const startDate = showFilters ? internalFrom : externalFrom;
+  const endDate = showFilters ? internalTo : externalTo;
+  const branchId = showFilters ? (internalBranch || undefined) : externalBranch;
+
   const { data = [], isLoading, isError } = useQuery<RejectionByProductItem[]>({
     queryKey: ['rejection-by-product', startDate, endDate, branchId, type],
     queryFn: () =>
@@ -50,7 +69,41 @@ export default function RejectionByProductCard({
   return (
     <Card>
       <CardContent className="p-6">
-        <h3 className="font-semibold text-lg mb-4">{title}</h3>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <h3 className="font-semibold text-lg">{title}</h3>
+
+          {showFilters && (
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                type="date"
+                value={internalFrom}
+                max={internalTo}
+                onChange={(e) => setInternalFrom(e.target.value)}
+                className="w-36 h-8 text-xs"
+              />
+              <span className="text-xs text-muted-foreground">to</span>
+              <Input
+                type="date"
+                value={internalTo}
+                min={internalFrom}
+                max={today}
+                onChange={(e) => setInternalTo(e.target.value)}
+                className="w-36 h-8 text-xs"
+              />
+              <Select value={internalBranch} onValueChange={setInternalBranch}>
+                <SelectTrigger className="w-36 h-8 text-xs">
+                  <SelectValue placeholder="All branches" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">All branches</SelectItem>
+                  {branches.map((b) => (
+                    <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+        </div>
 
         {isLoading ? (
           <div className="flex justify-center py-8">
