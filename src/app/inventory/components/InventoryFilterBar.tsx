@@ -55,7 +55,7 @@ export default function InventoryFilterBar({
         </ToggleGroup>
 
         <Tooltip><TooltipTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onStepDate(-1)}>
+          <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Previous period" onClick={() => onStepDate(-1)}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
         </TooltipTrigger><TooltipContent>Previous period</TooltipContent></Tooltip>
@@ -101,7 +101,7 @@ export default function InventoryFilterBar({
         )}
 
         <Tooltip><TooltipTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onStepDate(1)}>
+          <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Next period" onClick={() => onStepDate(1)}>
             <ChevronRight className="h-4 w-4" />
           </Button>
         </TooltipTrigger><TooltipContent>Next period</TooltipContent></Tooltip>

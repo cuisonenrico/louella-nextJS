@@ -168,7 +168,14 @@ export default function Sidebar({
             </div>
           </div>
         )}
-        <Button variant="ghost" size="icon" onClick={onToggle} className="text-white hover:bg-white/10 h-8 w-8">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onToggle}
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-expanded={!collapsed}
+          className="text-white hover:bg-white/10 h-8 w-8"
+        >
           {collapsed ? <Menu className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
         </Button>
       </div>

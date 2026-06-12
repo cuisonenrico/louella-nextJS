@@ -16,15 +16,14 @@ import { extractError } from '@/lib/errors';
 import { Button } from '@/components/ui/button';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import InventoryFilterBar from '../components/InventoryFilterBar';
 import InventorySummaryPanel from '../components/InventorySummaryPanel';
 import InventoryPendingChangesBar from '../components/InventoryPendingChangesBar';
 import InventoryTypeTables from '../components/InventoryTypeTables';
 import InventoryAdjustmentsDialog from '../components/InventoryAdjustmentsDialog';
 import { useInventoryDisplayRows } from '../hooks/useInventoryDisplayRows';
-import { CardContent } from '@/components/ui/card';
 import RejectionByProductCard from '@/components/analytics/RejectionByProductCard';
+import QueryError from '@/components/QueryError';
 
 const PRODUCT_TYPE_ORDER: ProductType[] = ['BREAD', 'CAKE', 'SPECIAL', 'MISCELLANEOUS'];
 
@@ -137,13 +136,9 @@ export default function InventoryDetailsPage() {
     onError: (err) => toast.error(extractError(err)),
   });
 
-  // Auto-sync missing product rows when branch is selected (write-capable users only)
-  useEffect(() => {
-    if (canWriteInventory && uninitializedCount > 0 && !invQuery.isLoading && !bulkCreateMutation.isPending) {
-      bulkCreateMutation.mutate();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uninitializedCount, invQuery.isLoading, canWriteInventory]);
+  // Missing product rows are created on an explicit user action (see the
+  // "Initialize" button below) rather than as a side effect of viewing a
+  // branch — navigation should never silently write to the database.
 
   const savePendingMutation = useMutation({
     mutationFn: async () => {
@@ -249,8 +244,34 @@ export default function InventoryDetailsPage() {
             </div>
           )}
 
+          {/* Explicit initialization — no longer an automatic write-on-view */}
+          {isEditable && uninitializedCount > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2 text-sm bg-muted/40 rounded-lg px-3 py-2 mb-3">
+              <span className="text-muted-foreground">
+                {uninitializedCount} product{uninitializedCount === 1 ? '' : 's'} not yet
+                started for this day.
+              </span>
+              <Button
+                size="sm"
+                onClick={() => bulkCreateMutation.mutate()}
+                disabled={bulkCreateMutation.isPending}
+              >
+                {bulkCreateMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                ) : null}
+                Initialize {uninitializedCount} row{uninitializedCount === 1 ? '' : 's'}
+              </Button>
+            </div>
+          )}
+
           {/* Per-type grids */}
-          {invQuery.isLoading ? (
+          {invQuery.isError ? (
+            <QueryError
+              error={invQuery.error}
+              onRetry={() => invQuery.refetch()}
+              className="my-6"
+            />
+          ) : invQuery.isLoading ? (
             <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
           ) : displayRows.length === 0 ? (
             <p className="text-center text-muted-foreground py-12">No inventory data. Select a branch and date.</p>
