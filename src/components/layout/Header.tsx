@@ -37,7 +37,7 @@ export default function Header({ title, sidebarWidth = DRAWER_WIDTH, headerConte
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="rounded-full">
+          <Button variant="ghost" size="icon" className="rounded-full" aria-label="Account menu">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-[0.8rem] font-bold text-primary-foreground">
               {initials}
             </div>

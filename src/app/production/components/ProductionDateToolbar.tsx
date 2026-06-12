@@ -25,7 +25,7 @@ export default function ProductionDateToolbar({
     <TooltipProvider>
       <div className="flex items-center gap-2 mb-4 flex-wrap">
         <Tooltip><TooltipTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onDateChange(dayjs(filterDate).subtract(1, 'day').format('YYYY-MM-DD'))}>
+          <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Previous day" onClick={() => onDateChange(dayjs(filterDate).subtract(1, 'day').format('YYYY-MM-DD'))}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
         </TooltipTrigger><TooltipContent>Previous day</TooltipContent></Tooltip>
@@ -38,7 +38,7 @@ export default function ProductionDateToolbar({
         />
 
         <Tooltip><TooltipTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onDateChange(dayjs(filterDate).add(1, 'day').format('YYYY-MM-DD'))}>
+          <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Next day" onClick={() => onDateChange(dayjs(filterDate).add(1, 'day').format('YYYY-MM-DD'))}>
             <ChevronRight className="h-4 w-4" />
           </Button>
         </TooltipTrigger><TooltipContent>Next day</TooltipContent></Tooltip>
