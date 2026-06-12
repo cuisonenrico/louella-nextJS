@@ -8,6 +8,8 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
+import { useAuth } from '@/contexts/AuthContext';
+import { meetsMinRole } from '@/lib/rbac';
 import { branchesApi, inventoryApi, productsApi } from '@/lib/apiServices';
 import type { Branch, Inventory, InventorySummaryData, Product, ProductType } from '@/types';
 import { extractError } from '@/lib/errors';
@@ -29,6 +31,9 @@ const PRODUCT_TYPE_ORDER: ProductType[] = ['BREAD', 'CAKE', 'SPECIAL', 'MISCELLA
 export default function InventoryDetailsPage() {
   const qc = useQueryClient();
   const router = useRouter();
+  const { user } = useAuth();
+  const canWriteInventory = meetsMinRole(user?.role, 'INVENTORY');
+  const canImport = meetsMinRole(user?.role, 'MANAGER');
   const today = dayjs().format('YYYY-MM-DD');
 
   // Filter state
@@ -132,13 +137,13 @@ export default function InventoryDetailsPage() {
     onError: (err) => toast.error(extractError(err)),
   });
 
-  // Auto-sync missing product rows when branch is selected
+  // Auto-sync missing product rows when branch is selected (write-capable users only)
   useEffect(() => {
-    if (uninitializedCount > 0 && !invQuery.isLoading && !bulkCreateMutation.isPending) {
+    if (canWriteInventory && uninitializedCount > 0 && !invQuery.isLoading && !bulkCreateMutation.isPending) {
       bulkCreateMutation.mutate();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uninitializedCount, invQuery.isLoading]);
+  }, [uninitializedCount, invQuery.isLoading, canWriteInventory]);
 
   const savePendingMutation = useMutation({
     mutationFn: async () => {
@@ -190,7 +195,7 @@ export default function InventoryDetailsPage() {
   }, [qc]);
 
   const totalPending = pendingUpdates.size;
-  const isEditable = !isRange && filterBranch !== '';
+  const isEditable = !isRange && filterBranch !== '' && canWriteInventory;
 
   return (
     <AuthGuard>
@@ -209,7 +214,7 @@ export default function InventoryDetailsPage() {
             onCommitDates={commitDates}
             onStepDate={stepDate}
             onBranchChange={setFilterBranch}
-            onImportOpen={() => router.push('/inventory-import')}
+            onImportOpen={canImport ? () => router.push('/inventory-import') : undefined}
           />
 
           <InventorySummaryPanel
@@ -256,6 +261,7 @@ export default function InventoryDetailsPage() {
               isRange={isRange}
               isEditable={isEditable}
               hasBranchFilter={filterBranch !== ''}
+              canAdjust={canWriteInventory}
               onAdjustmentsOpen={setAdjRow}
               onCellChange={handleCellChange}
             />

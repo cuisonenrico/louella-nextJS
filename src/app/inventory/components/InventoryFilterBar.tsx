@@ -20,7 +20,7 @@ interface InventoryFilterBarProps {
   onCommitDates: (from: string, to: string) => void;
   onStepDate: (delta: number) => void;
   onBranchChange: (branchId: string) => void;
-  onImportOpen: () => void;
+  onImportOpen?: () => void;
 }
 
 export default function InventoryFilterBar({
@@ -133,9 +133,11 @@ export default function InventoryFilterBar({
 
         <div className="flex-grow" />
 
-        <Button size="sm" variant="outline" onClick={onImportOpen}>
-          <Upload className="h-3.5 w-3.5 mr-1" /> Import XLSX
-        </Button>
+        {onImportOpen && (
+          <Button size="sm" variant="outline" onClick={onImportOpen}>
+            <Upload className="h-3.5 w-3.5 mr-1" /> Import XLSX
+          </Button>
+        )}
 
 
       </div>

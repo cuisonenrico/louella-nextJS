@@ -21,6 +21,7 @@ interface InventoryTypeTablesProps {
   isRange: boolean;
   isEditable: boolean;
   hasBranchFilter: boolean;
+  canAdjust: boolean;
   onAdjustmentsOpen: (inventory: Inventory) => void;
   onCellChange: (invId: number, field: 'delivery' | 'leftover' | 'reject', value: number) => void;
 }
@@ -32,6 +33,7 @@ export default function InventoryTypeTables({
   isRange,
   isEditable,
   hasBranchFilter,
+  canAdjust,
   onAdjustmentsOpen,
   onCellChange,
 }: InventoryTypeTablesProps) {
@@ -125,6 +127,7 @@ export default function InventoryTypeTables({
                       isEditable={isEditable}
                       isRange={isRange}
                       hasBranchFilter={hasBranchFilter}
+                      canAdjust={canAdjust}
                       productById={productById}
                       onAdjustmentsOpen={onAdjustmentsOpen}
                       onCellChange={onCellChange}

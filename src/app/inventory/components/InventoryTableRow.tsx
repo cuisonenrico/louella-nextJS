@@ -16,6 +16,7 @@ interface InventoryTableRowProps {
   isEditable: boolean;
   isRange: boolean;
   hasBranchFilter: boolean;
+  canAdjust: boolean;
   productById: Map<number, Product>;
   onAdjustmentsOpen: (inventory: Inventory) => void;
   onCellChange: (invId: number, field: EditableField, value: number) => void;
@@ -31,6 +32,7 @@ export function InventoryTableRow({
   isEditable,
   isRange,
   hasBranchFilter,
+  canAdjust,
   productById,
   onAdjustmentsOpen,
   onCellChange,
@@ -82,7 +84,7 @@ export function InventoryTableRow({
                 {adjSum > 0 ? `+${adjSum}` : adjSum}
               </span>
             )}
-            {!isRange && (
+            {!isRange && canAdjust && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onAdjustmentsOpen(inv)}>
