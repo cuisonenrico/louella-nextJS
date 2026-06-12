@@ -7,6 +7,7 @@ import dayjs from 'dayjs';
 import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
 import { materialInventoryApi, jobsApi } from '@/lib/apiServices';
+import { extractError } from '@/lib/errors';
 import type { MaterialGapEntry } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,11 +34,13 @@ export default function MaterialInventoryGapsPage() {
   const fillTodayMut = useMutation({
     mutationFn: () => jobsApi.autofillMaterialStock(today),
     onSuccess: (res) => { setMessage(`Created ${res.data.created} material stock records`); qc.invalidateQueries({ queryKey: ['material-inventory-gaps'] }); },
+    onError: (err) => setMessage(`Error: ${extractError(err)}`),
   });
 
   const backfillMut = useMutation({
     mutationFn: () => jobsApi.autofillMaterialStockRange(startDate, endDate),
     onSuccess: (res) => { setMessage(`Backfilled ${res.data.totalCreated} records across ${res.data.datesProcessed} days`); qc.invalidateQueries({ queryKey: ['material-inventory-gaps'] }); },
+    onError: (err) => setMessage(`Error: ${extractError(err)}`),
   });
 
   const gaps = gapsResult?.missing ?? [];

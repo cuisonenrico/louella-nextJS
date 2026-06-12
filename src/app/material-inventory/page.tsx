@@ -17,6 +17,11 @@ import { toast } from 'sonner';
 import { AdjustmentsDialog } from './components/AdjustmentsDialog';
 import { StockCardDialog } from './components/StockCardDialog';
 import { BulkSetDialog } from './components/BulkSetDialog';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 import { extractError } from '@/lib/errors';
 
@@ -32,6 +37,7 @@ export default function MaterialInventoryPage() {
   const [bulkSetOpen, setBulkSetOpen] = useState(false);
   const [editRecord, setEditRecord] = useState<MaterialInventory | null>(null);
   const [adjRecord, setAdjRecord] = useState<MaterialInventory | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<number | null>(null);
 
   const { data: materials = [] } = useQuery<Material[]>({ queryKey: ['materials'], queryFn: () => materialsApi.list().then((r) => r.data) });
   const { data: suppliers = [] } = useQuery<Supplier[]>({ queryKey: ['suppliers'], queryFn: () => suppliersApi.list().then((r) => r.data) });
@@ -172,7 +178,7 @@ export default function MaterialInventoryPage() {
                               </Button>
                             </TooltipTrigger><TooltipContent>Adjustments</TooltipContent></Tooltip>
                             <Tooltip><TooltipTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteMutation.mutate(r.id)} disabled={deleteMutation.isPending}>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteTarget(r.id)} disabled={deleteMutation.isPending}>
                                 <Trash2 className="h-3.5 w-3.5" />
                               </Button>
                             </TooltipTrigger><TooltipContent>Delete</TooltipContent></Tooltip>
@@ -205,6 +211,24 @@ export default function MaterialInventoryPage() {
             onSaved={() => qc.invalidateQueries({ queryKey: ['material-inventory', filterDate] })}
           />
           <AdjustmentsDialog record={adjRecord} onClose={() => setAdjRecord(null)} />
+
+          <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete material stock record?</AlertDialogTitle>
+                <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  onClick={() => { if (deleteTarget !== null) { deleteMutation.mutate(deleteTarget); setDeleteTarget(null); } }}
+                >
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </TooltipProvider>
       </AppLayout>
     </AuthGuard>

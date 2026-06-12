@@ -219,6 +219,7 @@ export default function InventoryDetailsPage() {
 
           <InventorySummaryPanel
             summary={summaryQuery.data ?? null}
+            isLoading={summaryQuery.isLoading || summaryQuery.isFetching}
             filterDateFrom={filterDateFrom}
             filterDateTo={filterDateTo}
           />

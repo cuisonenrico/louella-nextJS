@@ -27,7 +27,7 @@ export default function ProductionEfficiencyPage() {
 
   const { data: effItems = [], isLoading } = useQuery({
     queryKey: ['production-efficiency', startDate, endDate, branchId],
-    queryFn: () => productionApi.efficiency(startDate, endDate, branchId ? parseInt(branchId) : undefined).then((r) => r.data),
+    queryFn: () => productionApi.efficiency(startDate, endDate, branchId && branchId !== 'all' ? parseInt(branchId) : undefined).then((r) => r.data),
     enabled: !!startDate && !!endDate,
   });
 

@@ -79,11 +79,11 @@ export default function ProductionPage() {
 
   // Auto-init inventory for any branch that doesn't have records yet
   useEffect(() => {
-    if (!invQuery.isLoading && branchesWithNoInventory.size > 0 && !initAllBranchesMutation.isPending) {
+    if (!invQuery.isLoading && !invQuery.isFetching && branchesWithNoInventory.size > 0 && !initAllBranchesMutation.isPending) {
       initAllBranchesMutation.mutate();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [invQuery.isLoading, branchesWithNoInventory.size]);
+  }, [invQuery.isLoading, invQuery.isFetching, branchesWithNoInventory.size]);
 
   // Lookup maps
   const productionByProduct = useMemo(
@@ -229,7 +229,7 @@ export default function ProductionPage() {
                   handleTabToNextInput={handleTabToNextInput}
                   onConsumptionClick={(id, py) => { setConsumptionId(id); setConsumptionPlannedYield(py); }}
                   onInitBranch={(id) => initBranchMutation.mutate(id)}
-                  isInitBranchPending={(id) => initBranchMutation.isPending && initBranchMutation.variables === id}
+                  isInitBranchPending={(_id) => initBranchMutation.isPending || initAllBranchesMutation.isPending}
                 />
               );
             })

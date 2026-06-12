@@ -5,12 +5,18 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Trash2, Plus, Loader2 } from 'lucide-react';
 import { inventoryAdjustmentsApi, inventoryApi } from '@/lib/apiServices';
 import type { AdjustmentType, Branch, Inventory } from '@/types';
+import { extractError } from '@/lib/errors';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 
@@ -42,6 +48,7 @@ export default function InventoryAdjustmentsDialog({ inventory, productName, bra
     toBranchId: '',
   });
   const [formError, setFormError] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<number | null>(null);
 
   // All hooks must be called unconditionally before any early return.
   const destInventoryQuery = useQuery<Inventory[]>({
@@ -61,10 +68,7 @@ export default function InventoryAdjustmentsDialog({ inventory, productName, bra
       setForm((f) => ({ ...f, value: '', notes: '', toBranchId: '' }));
       setFormError('');
     },
-    onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
-      setFormError(Array.isArray(msg) ? msg.join(', ') : (msg ?? 'Failed to add adjustment.'));
-    },
+    onError: (err) => setFormError(extractError(err)),
   });
 
   const transferMutation = useMutation({
@@ -75,15 +79,13 @@ export default function InventoryAdjustmentsDialog({ inventory, productName, bra
       setForm((f) => ({ ...f, value: '', notes: '', toBranchId: '' }));
       setFormError('');
     },
-    onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
-      setFormError(Array.isArray(msg) ? msg.join(', ') : (msg ?? 'Transfer failed.'));
-    },
+    onError: (err) => setFormError(extractError(err)),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => inventoryAdjustmentsApi.delete(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory'] }),
+    onError: (err) => setFormError(extractError(err)),
   });
 
   if (!inventory) return null;
@@ -128,6 +130,7 @@ export default function InventoryAdjustmentsDialog({ inventory, productName, bra
   const otherBranches = branches.filter((b) => b.id !== inventory.branchId && b.isActive);
 
   return (
+    <>
     <Dialog open={!!inventory} onOpenChange={() => onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
@@ -152,7 +155,7 @@ export default function InventoryAdjustmentsDialog({ inventory, productName, bra
                   </span>
                   <span className="text-sm text-muted-foreground flex-grow">{adj.notes ?? '—'}</span>
                   {adj.linkedAdjustmentId && <Badge variant="outline" className="text-xs">Transfer</Badge>}
-                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" disabled={deleteMutation.isPending} onClick={() => deleteMutation.mutate(adj.id)}>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" disabled={deleteMutation.isPending} onClick={() => setDeleteTarget(adj.id)}>
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 </div>
@@ -223,5 +226,26 @@ export default function InventoryAdjustmentsDialog({ inventory, productName, bra
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete this adjustment?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This adjustment and any linked transfer pair will be removed. This cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            onClick={() => { if (deleteTarget !== null) { deleteMutation.mutate(deleteTarget); setDeleteTarget(null); } }}
+          >
+            Delete
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }

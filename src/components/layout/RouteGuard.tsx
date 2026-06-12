@@ -56,5 +56,16 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
     }
   }, [pathname, isLoading, isAuthenticated, permissions, role, router]);
 
+  if (isLoading) return null;
+
+  if (isAuthenticated) {
+    const matched = ROUTE_RULES.find(
+      ({ prefix }) => pathname === prefix || pathname.startsWith(prefix + '/'),
+    );
+    if (matched && !canAccess(matched.rule, permissions, role)) {
+      return null;
+    }
+  }
+
   return <>{children}</>;
 }

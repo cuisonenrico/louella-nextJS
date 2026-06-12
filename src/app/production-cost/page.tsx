@@ -24,7 +24,7 @@ export default function ProductionCostPage() {
 
   const { data: summary, isLoading } = useQuery({
     queryKey: ['production-cost', date, branchId],
-    queryFn: () => productionApi.consumptionSummary(date, branchId ? parseInt(branchId) : undefined).then((r) => r.data),
+    queryFn: () => productionApi.consumptionSummary(date, branchId && branchId !== 'all' ? parseInt(branchId) : undefined).then((r) => r.data),
     enabled: !!date,
   });
 

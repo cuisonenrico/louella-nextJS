@@ -5,23 +5,39 @@ import type { InventorySummaryData, ProductType } from '@/types';
 import dayjs from 'dayjs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@radix-ui/react-collapsible';
 import { useState } from 'react';
 
 interface InventorySummaryPanelProps {
   summary: InventorySummaryData | null;
+  isLoading?: boolean;
   filterDateFrom: string;
   filterDateTo: string;
 }
 
 export default function InventorySummaryPanel({
   summary,
+  isLoading = false,
   filterDateFrom,
   filterDateTo,
 }: InventorySummaryPanelProps) {
   const [open, setOpen] = useState(true);
 
-  if (!summary) return null;
+  if (!summary) {
+    if (!isLoading) return null;
+    return (
+      <div className="mb-4 border rounded-lg px-4 py-3">
+        <Skeleton className="h-4 w-32 mb-4" />
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mb-4">
+          {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-lg" />)}
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-16 rounded-lg" />)}
+        </div>
+      </div>
+    );
+  }
 
   const isRange = filterDateFrom !== filterDateTo;
   const dayCount = dayjs(filterDateTo).diff(dayjs(filterDateFrom), 'day') + 1;

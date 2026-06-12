@@ -46,7 +46,7 @@ export default function ChangePasswordPage() {
     try {
       await authApi.changePassword(current, next);
       setSuccess(true);
-      setTimeout(() => router.replace('/dashboard'), 1500);
+      setTimeout(() => logout(), 1500);
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;

@@ -22,6 +22,7 @@ type NavItem = {
   href: string;
   icon: LucideIcon;
   exact?: boolean;
+  activePrefix?: string;
   featureKey?: string;
   minRole?: string;
 };
@@ -47,7 +48,7 @@ const navGroups: { label: string | null; items: NavItem[] }[] = [
     label: 'Operations',
     items: [
       { label: 'Revenue', href: '/sales', icon: TrendingUp, featureKey: 'analytics' },
-      { label: 'Inventory', href: '/inventory/details', icon: Package, featureKey: 'inventory-history' },
+      { label: 'Inventory', href: '/inventory/details', icon: Package, featureKey: 'inventory-history', activePrefix: '/inventory' },
       { label: 'Production', href: '/production', icon: Factory, exact: true, minRole: 'MANAGER' },
       { label: 'Prod. Orders', href: '/production/orders', icon: ClipboardList, minRole: 'MANAGER' },
       { label: 'Import History', href: '/inventory-import/history', icon: Upload, minRole: 'MANAGER' },
@@ -94,7 +95,10 @@ export default function Sidebar({
   const width = collapsed ? COLLAPSED_WIDTH : DRAWER_WIDTH;
 
   function renderItem(item: NavItem) {
-    const active = pathname === item.href || (!item.exact && pathname.startsWith(item.href + '/'));
+    const matchBase = item.activePrefix ?? item.href;
+    const active = pathname === item.href
+      || (!item.exact && pathname === matchBase)
+      || (!item.exact && pathname.startsWith(matchBase + '/'));
     const Icon = item.icon;
     const btn = (
       <li key={item.href}>
