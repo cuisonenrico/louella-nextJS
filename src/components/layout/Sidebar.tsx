@@ -6,7 +6,7 @@ import type { LucideIcon } from 'lucide-react';
 import {
   LayoutDashboard, Store, Package, Layers, BookOpen, TrendingUp,
   Warehouse, FlaskConical, Factory, ChevronLeft, Menu, ClipboardList, Settings, Upload,
-  Users, ShieldCheck,
+  Users, ShieldCheck, Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -78,6 +78,7 @@ const configNavItems: NavItem[] = [
 const settingsNavItems: NavItem[] = [
   { label: 'Users', href: '/settings/users', icon: Users },
   { label: 'Permissions', href: '/settings/permissions', icon: ShieldCheck },
+  { label: 'Jobs', href: '/settings/jobs', icon: Activity, minRole: 'MANAGER' },
 ];
 
 export default function Sidebar({
