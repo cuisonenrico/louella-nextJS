@@ -6,7 +6,7 @@ import type { LucideIcon } from 'lucide-react';
 import {
   LayoutDashboard, Store, Package, Layers, BookOpen, TrendingUp,
   Warehouse, FlaskConical, Factory, ChevronLeft, Menu, ClipboardList, Settings, Upload,
-  Users, ShieldCheck,
+  Users, ShieldCheck, Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -76,8 +76,9 @@ const configNavItems: NavItem[] = [
 ];
 
 const settingsNavItems: NavItem[] = [
-  { label: 'Users', href: '/settings/users', icon: Users },
-  { label: 'Permissions', href: '/settings/permissions', icon: ShieldCheck },
+  { label: 'Users', href: '/settings/users', icon: Users, minRole: 'ADMIN' },
+  { label: 'Permissions', href: '/settings/permissions', icon: ShieldCheck, minRole: 'ADMIN' },
+  { label: 'Jobs', href: '/settings/jobs', icon: Activity, minRole: 'MANAGER' },
 ];
 
 export default function Sidebar({
@@ -91,7 +92,6 @@ export default function Sidebar({
   const router = useRouter();
   const { user, permissions } = useAuth();
   const role = user?.role ?? '';
-  const isAdmin = role === 'ADMIN';
   const width = collapsed ? COLLAPSED_WIDTH : DRAWER_WIDTH;
 
   function renderItem(item: NavItem) {
@@ -137,6 +137,7 @@ export default function Sidebar({
     .filter((group) => group.items.length > 0);
 
   const visibleConfig = configNavItems.filter((item) => canSee(item, permissions, role));
+  const visibleSettings = settingsNavItems.filter((item) => canSee(item, permissions, role));
 
   return (
     <aside
@@ -253,8 +254,8 @@ export default function Sidebar({
           </div>
         )}
 
-        {/* Settings section (Admin only) */}
-        {isAdmin && (
+        {/* Settings section — per-item role gating (Jobs is MANAGER+, others ADMIN) */}
+        {visibleSettings.length > 0 && (
           <div className="mt-1">
             {collapsed
               ? <Separator className="bg-white/15 mx-1 my-1.5" />
@@ -267,7 +268,7 @@ export default function Sidebar({
               )
             }
             <ul className="space-y-0.5">
-              {settingsNavItems.map((item) => renderItem(item))}
+              {visibleSettings.map((item) => renderItem(item))}
             </ul>
           </div>
         )}

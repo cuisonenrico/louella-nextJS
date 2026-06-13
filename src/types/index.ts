@@ -594,3 +594,42 @@ export interface UserFeaturePermission {
   enabled: boolean;
   updatedAt: string;
 }
+
+// ────────────────────────────────────────────────────────────────
+// Production suggestions
+// ────────────────────────────────────────────────────────────────
+export type SuggestionPeriod = 'prev-day' | '7d' | '30d';
+
+export interface ProductionSuggestion {
+  productId: number;
+  avgSold: number;
+  suggestedQty: number;
+  daysWithData: number;
+}
+
+export interface ProductionSuggestionsResponse {
+  branchId: number;
+  period: SuggestionPeriod;
+  window: { startDate: string; endDate: string };
+  suggestions: ProductionSuggestion[];
+}
+
+// ────────────────────────────────────────────────────────────────
+// Background job runs
+// ────────────────────────────────────────────────────────────────
+export interface JobRun {
+  id: number;
+  jobName: string;
+  trigger: 'cron' | 'manual' | 'boot';
+  targetDate: string | null;
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+  startedAt: string;
+  finishedAt: string | null;
+  result: Record<string, unknown> | null;
+  error: string | null;
+}
+
+export interface JobRunsResponse {
+  runs: JobRun[];
+  latest: JobRun[];
+}

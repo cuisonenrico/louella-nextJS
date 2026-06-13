@@ -1,10 +1,12 @@
 'use client';
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Loader2 } from 'lucide-react';
-import type { Branch, Product, ProductionOrder, ProductType } from '@/types';
+import { Loader2, Sparkles } from 'lucide-react';
+import type { Branch, Product, ProductionOrder, ProductionSuggestion, ProductType, SuggestionPeriod } from '@/types';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { applyAllSuggestions } from '../lib/applySuggestions';
 import { productionOrdersApi } from '@/lib/apiServices';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -45,7 +47,33 @@ export function ProductionOrderFormDialog({
   const [formBranchId, setFormBranchId] = useState<number | null>(null);
   const [formItems, setFormItems] = useState<Map<number, number>>(new Map());
   const [formError, setFormError] = useState('');
+  const [suggestPeriod, setSuggestPeriod] = useState<SuggestionPeriod>('7d');
   const inputRefs = useRef<Map<number, HTMLInputElement>>(new Map());
+
+  const suggestionsQuery = useQuery({
+    queryKey: ['production-suggestions', formBranchId, suggestPeriod, filterDate],
+    queryFn: () =>
+      productionOrdersApi
+        .suggestions(formBranchId!, suggestPeriod, filterDate)
+        .then((r) => r.data),
+    enabled: open && formBranchId != null,
+  });
+
+  const suggestionByProduct = useMemo(() => {
+    const map = new Map<number, ProductionSuggestion>();
+    for (const s of suggestionsQuery.data?.suggestions ?? []) {
+      map.set(s.productId, s);
+    }
+    return map;
+  }, [suggestionsQuery.data]);
+
+  const handleApplyAll = useCallback(() => {
+    const qtyMap = new Map<number, number>();
+    for (const [productId, s] of suggestionByProduct) {
+      qtyMap.set(productId, s.suggestedQty);
+    }
+    setFormItems((prev) => applyAllSuggestions(prev, qtyMap));
+  }, [suggestionByProduct]);
 
   // Reset form whenever the dialog opens
   useEffect(() => {
@@ -149,12 +177,43 @@ export function ProductionOrderFormDialog({
           <Textarea placeholder="Order notes..." value={formNotes} onChange={(e) => setFormNotes(e.target.value)} className="h-14 resize-none" />
         </div>
 
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+            <span className="text-xs text-muted-foreground">Suggestions from</span>
+            <Select value={suggestPeriod} onValueChange={(v) => setSuggestPeriod(v as SuggestionPeriod)}>
+              <SelectTrigger className="h-8 w-[150px] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="prev-day">Yesterday</SelectItem>
+                <SelectItem value="7d">Last 7 days</SelectItem>
+                <SelectItem value="30d">Last 30 days</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleApplyAll}
+            disabled={suggestionByProduct.size === 0 || suggestionsQuery.isLoading}
+          >
+            Apply all suggestions
+          </Button>
+        </div>
+        {suggestionsQuery.isError && (
+          <p role="alert" className="text-xs text-destructive">
+            Could not load suggestions — you can still enter quantities manually.
+          </p>
+        )}
+
         <div className="overflow-y-auto flex-1 rounded-md border">
           <Table>
             <TableHeader className="sticky top-0 bg-muted z-10">
               <TableRow>
                 <TableHead className="w-8 text-center">#</TableHead>
                 <TableHead>Product</TableHead>
+                <TableHead className="w-28 text-right">Suggested</TableHead>
                 <TableHead className="w-36 text-right">Yield</TableHead>
               </TableRow>
             </TableHeader>
@@ -165,7 +224,7 @@ export function ProductionOrderFormDialog({
                 return (
                   <Fragment key={type}>
                     <TableRow className="bg-muted/60 hover:bg-muted/60">
-                      <TableCell colSpan={3} className="py-1.5 px-3">
+                      <TableCell colSpan={4} className="py-1.5 px-3">
                         <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{TYPE_LABELS[type]}</span>
                       </TableCell>
                     </TableRow>
@@ -173,6 +232,36 @@ export function ProductionOrderFormDialog({
                       <TableRow key={p.id}>
                         <TableCell className="text-center text-xs text-muted-foreground">{idx + 1}</TableCell>
                         <TableCell className="font-medium">{p.name}</TableCell>
+                        <TableCell className="text-right">
+                          {(() => {
+                            const s = suggestionByProduct.get(p.id);
+                            if (!s) return <span className="text-muted-foreground/50 text-xs">—</span>;
+                            return (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 px-2 text-xs font-mono text-primary"
+                                    aria-label={`Apply suggested ${s.suggestedQty} for ${p.name}`}
+                                    onClick={() =>
+                                      setFormItems((prev) => {
+                                        const next = new Map(prev);
+                                        next.set(p.id, s.suggestedQty);
+                                        return next;
+                                      })
+                                    }
+                                  >
+                                    ↑ {s.suggestedQty}
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  avg {s.avgSold.toFixed(1)}/day · {s.daysWithData} day{s.daysWithData === 1 ? '' : 's'} of data
+                                </TooltipContent>
+                              </Tooltip>
+                            );
+                          })()}
+                        </TableCell>
                         <TableCell className="text-right">
                           <Input
                             ref={(el) => { if (el) inputRefs.current.set(p.id, el); else inputRefs.current.delete(p.id); }}
