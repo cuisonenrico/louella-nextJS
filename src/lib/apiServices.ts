@@ -14,6 +14,7 @@ import type {
   InventorySummaryData,
   InventoryUpdateResult,
   ImportLogsResponse,
+  JobRunsResponse,
   Material,
   MaterialAdjustment,
   MaterialConsumption,
@@ -27,11 +28,13 @@ import type {
   Production,
   ProductionEfficiencyItem,
   ProductionOrder,
+  ProductionSuggestionsResponse,
   Recipe,
   RecipeCost,
   SaleRecord,
   SaleSummary,
   Supplier,
+  SuggestionPeriod,
   TransferResult,
   UnitConversion,
   User,
@@ -368,6 +371,10 @@ export const productionOrdersApi = {
     api.get<PlannedYield[]>('/production-orders/planned-yield', {
       params: branchId ? { date, branchId } : { date },
     }),
+  suggestions: (branchId: number, period: SuggestionPeriod = '7d', date?: string) =>
+    api.get<ProductionSuggestionsResponse>('/production-orders/suggestions', {
+      params: { branchId, period, ...(date ? { date } : {}) },
+    }),
   get: (id: number) =>
     api.get<ProductionOrder>(`/production-orders/${id}`),
   create: (data: { branchId: number; date: string; notes?: string; items: { productId: number; yield?: number }[] }) =>
@@ -419,6 +426,10 @@ export const jobsApi = {
       '/jobs/autofill-material-stock-range',
       { startDate, ...(endDate ? { endDate } : {}) },
     ),
+  runs: (jobName?: string, limit = 20) =>
+    api.get<JobRunsResponse>('/jobs/runs', {
+      params: { limit, ...(jobName ? { jobName } : {}) },
+    }),
 };
 
 // ─── Notifications ────────────────────────────────────────────────
