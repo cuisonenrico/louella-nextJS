@@ -79,9 +79,14 @@ describe('getAdjSum', () => {
 // ---------------------------------------------------------------------------
 
 describe('getSold', () => {
-  it('calculates sold = quantity + delivery + adjSum - leftover', () => {
+  it('calculates sold = quantity + delivery + adjSum - leftover - reject', () => {
     const inv = makeInventory({ quantity: 100, delivery: 20, leftover: 10, adjustments: [] });
     expect(getSold(inv, makeProductMap())).toBe(110);
+  });
+
+  it('subtracts rejects — spoiled units are never sold', () => {
+    const inv = makeInventory({ quantity: 100, delivery: 20, leftover: 10, reject: 8, adjustments: [] });
+    expect(getSold(inv, makeProductMap())).toBe(102);
   });
 
   it('includes PULL_IN adjustments positively in sold count', () => {
