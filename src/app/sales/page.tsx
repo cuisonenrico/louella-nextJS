@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Loader2, TrendingUp, ShoppingCart, Truck, AlertTriangle, Calendar, MapPin, BarChart3, Download } from 'lucide-react';
+import { Loader2, TrendingUp, ShoppingCart, Truck, AlertTriangle, Calendar, MapPin, BarChart3, Download, Trophy } from 'lucide-react';
 import dayjs from 'dayjs';
 import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
@@ -15,14 +15,20 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { PRODUCT_TYPE_COLORS } from '@/lib/productTypeColors';
+import type { ProductType } from '@/types';
+import {
+  Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer,
+  Tooltip as RechartsTooltip, XAxis, YAxis,
+} from 'recharts';
 
 function getDayStatus(sold: number, allSold: number[]): { label: string; className: string } {
   if (allSold.length === 0) return { label: 'STABLE', className: 'bg-muted text-muted-foreground' };
   const max = Math.max(...allSold);
   const avg = allSold.reduce((a, b) => a + b, 0) / allSold.length;
-  if (sold >= max) return { label: 'RECORD', className: 'bg-orange-500 text-white' };
-  if (sold >= avg * 1.1) return { label: 'PEAK', className: 'bg-teal-500 text-white' };
-  if (sold >= avg * 0.9) return { label: 'HIGH', className: 'bg-amber-400 text-white' };
+  if (sold >= max) return { label: 'RECORD', className: 'bg-primary text-primary-foreground' };
+  if (sold >= avg * 1.1) return { label: 'PEAK', className: 'bg-secondary text-secondary-foreground' };
+  if (sold >= avg * 0.9) return { label: 'HIGH', className: 'bg-accent text-accent-foreground' };
   return { label: 'STABLE', className: 'bg-muted text-muted-foreground' };
 }
 
@@ -65,6 +71,7 @@ export default function SalesPage() {
     if (!dashboard || dashboard.totalDelivery === 0) return 0;
     return Math.round((dashboard.totalSold / dashboard.totalDelivery) * 100);
   }, [dashboard]);
+  const rangeDays = useMemo(() => dayjs(endDate).diff(dayjs(startDate), 'day') + 1, [startDate, endDate]);
   const allSold = useMemo(() => dashboard?.dailyBreakdown.map((d) => d.sold) ?? [], [dashboard]);
   const filteredBreakdown = useMemo(() => {
     if (!dashboard) return [];
@@ -192,7 +199,7 @@ export default function SalesPage() {
                   <div className="flex gap-6">
                     <div>
                       <p className="text-2xl font-bold text-destructive">{dashboard.totalReject.toLocaleString()}</p>
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Critical Threshold</p>
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Rejected</p>
                     </div>
                     <div>
                       <p className="text-2xl font-bold">{dashboard.totalLeftover.toLocaleString()}</p>
@@ -211,7 +218,7 @@ export default function SalesPage() {
                     <BarChart3 className="h-4 w-4 text-muted-foreground" />
                     <CardTitle className="text-sm uppercase tracking-wide">Revenue by Product Category</CardTitle>
                   </div>
-                  <span className="text-xs text-muted-foreground uppercase tracking-widest">Weekly Breakdown</span>
+                  <span className="text-xs text-muted-foreground uppercase tracking-widest">{rangeDays}-day range</span>
                 </CardHeader>
                 <CardContent>
                   {typeEntries.length === 0 ? (
@@ -220,16 +227,21 @@ export default function SalesPage() {
                     <div className="space-y-4">
                       {typeEntries.map(([type, revenue]) => {
                         const pct = totalTypeRevenue > 0 ? (Number(revenue) / totalTypeRevenue) * 100 : 0;
+                        const color = PRODUCT_TYPE_COLORS[type as ProductType] ?? '#8B7355';
                         return (
                           <div key={type}>
                             <div className="flex justify-between items-center mb-1.5">
-                              <Badge variant="secondary" className="text-xs font-semibold">{type}</Badge>
+                              <div className="flex items-center gap-2">
+                                <div className="w-2.5 h-2.5 rounded-full" style={{ background: color }} />
+                                <span className="text-xs font-semibold">{type}</span>
+                                <span className="text-xs text-muted-foreground">{pct.toFixed(0)}%</span>
+                              </div>
                               <span className="text-sm font-semibold">
                                 ₱{Number(revenue).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                               </span>
                             </div>
                             <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                              <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${pct}%` }} />
+                              <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: color }} />
                             </div>
                           </div>
                         );
@@ -241,7 +253,7 @@ export default function SalesPage() {
 
               <Card>
                 <CardHeader className="pb-2 flex flex-row items-center gap-2 space-y-0">
-                  <span>🏆</span>
+                  <Trophy className="h-4 w-4 text-primary" />
                   <CardTitle className="text-sm uppercase tracking-wide">Top Performer</CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -268,6 +280,51 @@ export default function SalesPage() {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Daily Revenue Chart */}
+            {dashboard.dailyBreakdown.length >= 2 && (
+              <Card className="mb-6">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Daily Revenue</CardTitle>
+                  <p className="text-xs text-muted-foreground">
+                    Revenue bars with sold units, {dayjs(startDate).format('MMM D')} – {dayjs(endDate).format('MMM D, YYYY')}.
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={260}>
+                    <ComposedChart
+                      data={dashboard.dailyBreakdown.map((d) => ({
+                        ...d,
+                        revenue: Number(d.revenue),
+                        label: dayjs(d.date).format('MMM D'),
+                      }))}
+                      margin={{ top: 4, right: 8, left: 8, bottom: 0 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(33 30% 88%)" />
+                      <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 11 }} />
+                      <YAxis
+                        yAxisId="rev"
+                        tickLine={false}
+                        axisLine={false}
+                        tick={{ fontSize: 11 }}
+                        width={52}
+                        tickFormatter={(v: number) => `₱${v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}`}
+                      />
+                      <YAxis yAxisId="sold" orientation="right" tickLine={false} axisLine={false} tick={{ fontSize: 11 }} width={40} />
+                      <RechartsTooltip
+                        formatter={(value, name) =>
+                          name === 'Revenue'
+                            ? [`₱${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, name]
+                            : [Number(value).toLocaleString(), name]
+                        }
+                      />
+                      <Bar yAxisId="rev" dataKey="revenue" name="Revenue" fill="#F4780B" radius={[4, 4, 0, 0]} maxBarSize={36} />
+                      <Line yAxisId="sold" type="monotone" dataKey="sold" name="Sold" stroke="#6B3FA0" strokeWidth={2} dot={false} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Daily Performance Breakdown */}
             {dashboard.dailyBreakdown.length > 0 && (
