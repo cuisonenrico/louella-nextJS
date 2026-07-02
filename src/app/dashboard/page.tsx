@@ -4,44 +4,38 @@ import { useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import Link from 'next/link';
 import {
-  Layers, Store, FlaskConical, BookOpen, AlertTriangle, Factory, Loader2, ArrowRight,
-  ClipboardList, CheckCircle2, FileEdit,
+  Store, Loader2, ArrowRight, ClipboardList, CheckCircle2, FileEdit, Factory,
 } from 'lucide-react';
 import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
 import { dashboardApi, productionOrdersApi, branchesApi, inventoryApi } from '@/lib/apiServices';
-import type { DashboardSummary, ProductionOrder, Branch, Inventory } from '@/types';
+import type { DashboardSummary, InventoryDashboardData, ProductionOrder, Branch, Inventory } from '@/types';
 import RejectionByProductCard from '@/components/analytics/RejectionByProductCard';
+import KpiRow from './components/KpiRow';
+import RevenueTrendCard, { type TrendDay } from './components/RevenueTrendCard';
+import LowStockCard from './components/LowStockCard';
+import { PRODUCT_TYPE_COLORS, PRODUCT_TYPE_LABELS } from '@/lib/productTypeColors';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table';
-import {
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip as RechartsTooltip,
 } from 'recharts';
 
-const TYPE_LABELS: Record<string, string> = {
-  BREAD: 'Bread',
-  CAKE: 'Cake',
-  SPECIAL: 'Special',
-  MISCELLANEOUS: 'Misc',
-};
-
-const TYPE_COLORS: Record<string, string> = {
-  BREAD: '#F4A261',
-  CAKE: '#6B3FA0',
-  SPECIAL: '#2e7d32',
-  MISCELLANEOUS: '#64748b',
-};
-
 export default function DashboardPage() {
   const today = dayjs().format('YYYY-MM-DD');
+  const weekAgo = dayjs().subtract(6, 'day').format('YYYY-MM-DD');
 
   const { data, isLoading, isError } = useQuery<DashboardSummary>({
     queryKey: ['dashboard-summary', today],
     queryFn: () => dashboardApi.summary(today).then((r) => r.data),
+  });
+
+  // Revenue KPIs + trend; some roles may lack access — degrade quietly.
+  const { data: revenueData, isError: revenueError } = useQuery<InventoryDashboardData>({
+    queryKey: ['dashboard-revenue', weekAgo, today],
+    queryFn: () => inventoryApi.dashboard(weekAgo, today).then((r) => r.data),
+    retry: false,
   });
 
   const { data: todayOrders = [] } = useQuery<ProductionOrder[]>({
@@ -69,11 +63,21 @@ export default function DashboardPage() {
   const branchesWithInventory = new Set(todayInventory.map((inv) => inv.branchId));
   const branchesMissingInventory = activeBranches.filter((b) => !branchesWithInventory.has(b.id));
 
+  const trendDays: TrendDay[] = (revenueData?.dailyBreakdown ?? []).map((d) => ({
+    date: d.date,
+    revenue: Number(d.revenue),
+    sold: d.sold,
+    delivery: d.delivery,
+    leftover: d.leftover,
+  }));
+  const todayEntry = trendDays.find((d) => dayjs(d.date).format('YYYY-MM-DD') === today);
+  const revenueUnavailable = revenueError || !revenueData;
+
   return (
     <AuthGuard>
       <AppLayout title="Dashboard">
         <div className="mb-6">
-          <h2 className="text-xl font-bold">Welcome back 👋</h2>
+          <h2 className="font-display text-2xl font-semibold tracking-tight">Welcome back</h2>
           <p className="text-muted-foreground">{dayjs().format('dddd, MMMM D, YYYY')}</p>
         </div>
 
@@ -87,22 +91,86 @@ export default function DashboardPage() {
           </Alert>
         ) : (
           <>
-            {/* Stat Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-              <StatCard title="Total Products" value={data.stats.products.total} icon={<Layers className="h-5 w-5" />} color="#6B3FA0" subtitle={`${data.stats.products.active} active`} />
-              <StatCard title="Branches" value={data.stats.branches.total} icon={<Store className="h-5 w-5" />} color="#F4A261" subtitle={`${data.stats.branches.active} active`} />
-              <StatCard title="Materials" value={data.stats.materials.total} icon={<FlaskConical className="h-5 w-5" />} color="#2e7d32" subtitle="in inventory" />
-              <StatCard title="Recipes" value={data.stats.recipes.total} icon={<BookOpen className="h-5 w-5" />} color="#d32f2f" subtitle="configured" />
+            <KpiRow
+              revenue={revenueUnavailable ? null : (todayEntry?.revenue ?? 0)}
+              sold={revenueUnavailable ? null : (todayEntry?.sold ?? 0)}
+              productionYield={data.production.totalYield}
+              lowStockCount={data.lowStock.length}
+            />
+
+            {/* Charts row */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+              {!revenueUnavailable && trendDays.length >= 2 && (
+                <RevenueTrendCard days={trendDays} />
+              )}
+
+              {/* Production mix */}
+              <Card className={revenueUnavailable || trendDays.length < 2 ? 'lg:col-span-3' : ''}>
+                <CardContent className="p-6">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Factory className="h-5 w-5 text-primary" />
+                    <h3 className="font-semibold text-lg">Today&apos;s Production</h3>
+                    <Link href="/production" className="ml-auto flex items-center gap-1 text-xs text-primary hover:underline">
+                      Open board <ArrowRight className="h-3 w-3" />
+                    </Link>
+                  </div>
+                  {data.production.totalYield === 0 ? (
+                    <Alert>
+                      <AlertDescription>No production records found for today.</AlertDescription>
+                    </Alert>
+                  ) : (
+                    <>
+                      <ResponsiveContainer width="100%" height={180}>
+                        <PieChart>
+                          <Pie
+                            data={data.production.byType
+                              .filter((x) => x.totalYield > 0)
+                              .map((x) => ({
+                                name: PRODUCT_TYPE_LABELS[x.type] ?? x.type,
+                                value: x.totalYield,
+                              }))}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={50}
+                            outerRadius={75}
+                            dataKey="value"
+                            paddingAngle={4}
+                          >
+                            {data.production.byType
+                              .filter((x) => x.totalYield > 0)
+                              .map(({ type }) => (
+                                <Cell key={type} fill={PRODUCT_TYPE_COLORS[type] ?? '#8B7355'} />
+                              ))}
+                          </Pie>
+                          <RechartsTooltip formatter={(v) => [`${(v as number).toLocaleString()} pcs`, '']} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div className="flex flex-wrap justify-center gap-3 mt-1 mb-2">
+                        {data.production.byType.filter((x) => x.totalYield > 0).map(({ type, totalYield }) => (
+                          <div key={type} className="flex items-center gap-1.5 text-xs">
+                            <div className="w-2.5 h-2.5 rounded-full" style={{ background: PRODUCT_TYPE_COLORS[type] ?? '#8B7355' }} />
+                            <span>{PRODUCT_TYPE_LABELS[type] ?? type}</span>
+                            <span className="font-semibold">{totalYield.toLocaleString()}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="text-center text-sm text-muted-foreground">
+                        Total: <span className="font-bold text-foreground">{data.production.totalYield.toLocaleString()} pcs</span>
+                      </div>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
             </div>
 
-            {/* Today's Operations */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-              {/* Production Orders Status */}
+            {/* Operations row */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+              {/* Branch Orders Today */}
               <Card>
                 <CardContent className="p-6">
                   <div className="flex items-center gap-2 mb-4">
                     <ClipboardList className="h-5 w-5 text-primary" />
-                    <h3 className="font-semibold text-lg">Branch Orders Today</h3>
+                    <h3 className="font-semibold text-lg">Branch Orders</h3>
                     <Link href="/production/orders" className="ml-auto flex items-center gap-1 text-xs text-primary hover:underline">
                       Manage <ArrowRight className="h-3 w-3" />
                     </Link>
@@ -113,6 +181,16 @@ export default function DashboardPage() {
                     </Alert>
                   ) : (
                     <div className="space-y-3">
+                      <div className="h-2 rounded-full bg-muted overflow-hidden flex">
+                        <div
+                          className="h-full bg-success"
+                          style={{ width: `${(orderStats.finalized / orderStats.total) * 100}%` }}
+                        />
+                        <div
+                          className="h-full bg-warning/70"
+                          style={{ width: `${(orderStats.drafts / orderStats.total) * 100}%` }}
+                        />
+                      </div>
                       <div className="flex items-center justify-between text-sm">
                         <span className="flex items-center gap-2 text-muted-foreground">
                           <FileEdit className="h-4 w-4" /> Draft
@@ -139,8 +217,8 @@ export default function DashboardPage() {
                 </CardContent>
               </Card>
 
-              {/* Branches Missing Inventory */}
-              <Card className={branchesMissingInventory.length > 0 ? 'border-amber-400 border-2' : ''}>
+              {/* Inventory Coverage */}
+              <Card className={branchesMissingInventory.length > 0 ? 'border-amber-400' : ''}>
                 <CardContent className="p-6">
                   <div className="flex items-center gap-2 mb-4">
                     <Store className={`h-5 w-5 ${branchesMissingInventory.length > 0 ? 'text-amber-600' : 'text-muted-foreground'}`} />
@@ -168,123 +246,11 @@ export default function DashboardPage() {
                   )}
                 </CardContent>
               </Card>
-            </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-              {/* Low Stock */}
-              <Card className={data.lowStock.length > 0 ? 'border-destructive border-2' : ''}>
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-2 mb-4">
-                    <AlertTriangle className={`h-5 w-5 ${data.lowStock.length > 0 ? 'text-destructive' : 'text-muted-foreground'}`} />
-                    <h3 className="font-semibold text-lg">Low Stock Alerts</h3>
-                    {data.lowStock.length > 0 && (
-                      <Badge variant="destructive">{data.lowStock.length}</Badge>
-                    )}
-                    <Link href="/material-inventory" className="ml-auto flex items-center gap-1 text-xs text-primary hover:underline">
-                      View stock <ArrowRight className="h-3 w-3" />
-                    </Link>
-                  </div>
-                  {data.lowStock.length === 0 ? (
-                    <Alert>
-                      <AlertDescription>All materials are above their reorder levels.</AlertDescription>
-                    </Alert>
-                  ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Material</TableHead>
-                          <TableHead className="text-right">Stock</TableHead>
-                          <TableHead className="text-right">Reorder At</TableHead>
-                          <TableHead>Unit</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {data.lowStock.map((m) => {
-                          const pct = m.reorderLevel > 0
-                            ? Math.round(Math.min(100, (m.currentStock / m.reorderLevel) * 100))
-                            : 0;
-                          return (
-                            <TableRow key={m.id} className="cursor-pointer hover:bg-muted/60" onClick={() => { window.location.href = '/material-inventory'; }}>
-                              <TableCell className="font-medium">
-                                <div>{m.name}</div>
-                                <div className="mt-1 h-1 bg-muted rounded-full w-full overflow-hidden">
-                                  <div className="h-full bg-destructive rounded-full" style={{ width: `${pct}%` }} />
-                                </div>
-                              </TableCell>
-                              <TableCell className="text-right text-destructive font-bold">{m.currentStock}</TableCell>
-                              <TableCell className="text-right">{m.reorderLevel}</TableCell>
-                              <TableCell>{m.unit}</TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  )}
-                </CardContent>
-              </Card>
 
-              {/* Today's Production */}
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-2 mb-4">
-                    <Factory className="h-5 w-5 text-primary" />
-                    <h3 className="font-semibold text-lg">Today&apos;s Production</h3>
-                    <span className="text-xs text-muted-foreground">{today}</span>
-                    <Link href="/production" className="ml-auto flex items-center gap-1 text-xs text-primary hover:underline">
-                      Open board <ArrowRight className="h-3 w-3" />
-                    </Link>
-                  </div>
-                  {data.production.totalYield === 0 ? (
-                    <Alert>
-                      <AlertDescription>No production records found for today.</AlertDescription>
-                    </Alert>
-                  ) : (
-                    <>
-                      <ResponsiveContainer width="100%" height={200}>
-                        <PieChart>
-                          <Pie
-                            data={data.production.byType
-                              .filter((x) => x.totalYield > 0)
-                              .map((x) => ({
-                                name: TYPE_LABELS[x.type] ?? x.type,
-                                value: x.totalYield,
-                              }))}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={55}
-                            outerRadius={82}
-                            dataKey="value"
-                            paddingAngle={4}
-                          >
-                            {data.production.byType
-                              .filter((x) => x.totalYield > 0)
-                              .map(({ type }) => (
-                                <Cell key={type} fill={TYPE_COLORS[type] ?? '#64748b'} />
-                              ))}
-                          </Pie>
-                          <RechartsTooltip
-                            formatter={(v) => [`${(v as number).toLocaleString()} pcs`, '']}
-                          />
-                        </PieChart>
-                      </ResponsiveContainer>
-                      <div className="flex flex-wrap justify-center gap-3 mt-1 mb-3">
-                        {data.production.byType.filter((x) => x.totalYield > 0).map(({ type, totalYield }) => (
-                          <div key={type} className="flex items-center gap-1.5 text-xs">
-                            <div className="w-2.5 h-2.5 rounded-full" style={{ background: TYPE_COLORS[type] ?? '#64748b' }} />
-                            <span>{TYPE_LABELS[type] ?? type}</span>
-                            <span className="font-semibold">{totalYield.toLocaleString()}</span>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="text-center text-sm text-muted-foreground">
-                        Total: <span className="font-bold text-foreground">{data.production.totalYield.toLocaleString()} pcs</span>
-                      </div>
-                    </>
-                  )}
-                </CardContent>
-              </Card>
+              <LowStockCard items={data.lowStock} />
             </div>
 
-            {/* Rejection Analytics */}
+            {/* Wastage Analysis */}
             <div className="mb-6">
               <RejectionByProductCard
                 showFilters
@@ -292,80 +258,9 @@ export default function DashboardPage() {
                 title="Wastage Analysis"
               />
             </div>
-
-            {/* Products & Branches */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <Card>
-                <CardContent className="p-6">
-                  <h3 className="font-semibold text-lg mb-4">Products</h3>
-                  <div className="space-y-0">
-                    {data.products.map((p) => (
-                      <div key={p.id} className="flex justify-between items-center py-2 border-b last:border-0">
-                        <div>
-                          <p className="text-sm font-semibold">{p.name}</p>
-                          <Badge variant="secondary" className="text-[0.65rem] h-[18px] mt-0.5">{p.type}</Badge>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm font-bold">₱{p.price.toFixed(2)}</p>
-                          <Badge variant={p.isActive ? 'default' : 'secondary'} className="text-[0.65rem] h-[18px]">
-                            {p.isActive ? 'Active' : 'Inactive'}
-                          </Badge>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="p-6">
-                  <h3 className="font-semibold text-lg mb-4">Branches</h3>
-                  <div className="space-y-0">
-                    {data.branches.map((b) => (
-                      <div key={b.id} className="flex justify-between items-center py-2 border-b last:border-0">
-                        <div>
-                          <p className="text-sm font-semibold">{b.name}</p>
-                          <p className="text-xs text-muted-foreground">{b.address ?? 'No address'}</p>
-                        </div>
-                        <Badge variant={b.isActive ? 'default' : 'secondary'} className="text-[0.7rem]">
-                          {b.isActive ? 'Active' : 'Inactive'}
-                        </Badge>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
           </>
         )}
       </AppLayout>
     </AuthGuard>
-  );
-}
-
-interface StatCardProps {
-  title: string;
-  value: number | string;
-  icon: React.ReactNode;
-  color: string;
-  subtitle?: string;
-}
-
-function StatCard({ title, value, icon, color, subtitle }: StatCardProps) {
-  return (
-    <Card>
-      <CardContent className="p-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm text-muted-foreground mb-1">{title}</p>
-            <p className="text-3xl font-extrabold">{value}</p>
-            {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
-          </div>
-          <div className="rounded-xl p-3 flex items-center" style={{ backgroundColor: `${color}18`, color }}>
-            {icon}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
   );
 }
