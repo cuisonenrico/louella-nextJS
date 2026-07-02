@@ -59,7 +59,7 @@ export default function LoginPage() {
             href="/"
             className="text-sm text-background/60 underline-offset-4 transition-colors hover:text-background hover:underline"
           >
-            ← Back to louellabakery
+            ← Back to the bakery
           </Link>
         </div>
 
