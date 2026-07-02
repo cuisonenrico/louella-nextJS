@@ -108,11 +108,11 @@ export default function Sidebar({
             'flex w-full items-center rounded-lg text-sm transition-colors',
             collapsed ? 'justify-center px-2 py-2' : 'px-3 py-2 gap-3',
             active
-              ? 'bg-white/20 text-white font-bold'
-              : 'text-white/75 hover:bg-white/10 hover:text-white'
+              ? 'bg-primary text-primary-foreground font-semibold shadow-sm'
+              : 'text-white/70 hover:bg-white/10 hover:text-white'
           )}
         >
-          <Icon className={cn('h-[18px] w-[18px] shrink-0', active ? 'text-white' : 'text-white/70')} />
+          <Icon className={cn('h-[18px] w-[18px] shrink-0', active ? 'text-primary-foreground' : 'text-white/60')} />
           {!collapsed && <span>{item.label}</span>}
         </button>
       </li>
@@ -144,7 +144,7 @@ export default function Sidebar({
       className="fixed inset-y-0 left-0 z-40 flex flex-col overflow-hidden border-r-0 text-white transition-all duration-200"
       style={{
         width,
-        background: 'linear-gradient(180deg, #c25500 0%, #FA8128 100%)',
+        background: 'linear-gradient(180deg, #33200F 0%, #241407 100%)',
       }}
     >
       {/* Header */}
@@ -164,8 +164,8 @@ export default function Sidebar({
               <Image src="/favicon.png" alt="Louella" width={32} height={32} style={{ objectFit: 'contain' }} />
             </div>
             <div>
-              <h1 className="text-lg font-extrabold leading-tight text-white">Louella</h1>
-              <span className="text-xs text-white/70">Bakery Management</span>
+              <h1 className="font-display text-xl font-semibold italic leading-tight text-white">Louella</h1>
+              <span className="text-[11px] uppercase tracking-[0.18em] text-white/50">Panaderya</span>
             </div>
           </div>
         )}
@@ -234,7 +234,7 @@ export default function Sidebar({
                           : 'text-white/75 hover:bg-white/10 hover:text-white'
                       )}
                     >
-                      <Icon className={cn('h-[18px] w-[18px] shrink-0', active ? 'text-white' : 'text-white/70')} />
+                      <Icon className={cn('h-[18px] w-[18px] shrink-0', active ? 'text-primary-foreground' : 'text-white/60')} />
                       {!collapsed && <span>{item.label}</span>}
                     </button>
                   </li>
