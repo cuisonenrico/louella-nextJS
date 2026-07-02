@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, AlertTriangle, Info } from 'lucide-react';
 import dayjs from 'dayjs';
@@ -16,9 +16,10 @@ import { extractError } from '@/lib/errors';
 import { Button } from '@/components/ui/button';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { useSaveShortcut } from '@/components/sheet/useSaveShortcut';
 import InventoryFilterBar from '../components/InventoryFilterBar';
 import InventorySummaryPanel from '../components/InventorySummaryPanel';
-import InventoryPendingChangesBar from '../components/InventoryPendingChangesBar';
+import SheetPendingBar from '@/components/sheet/SheetPendingBar';
 import InventoryTypeTables from '../components/InventoryTypeTables';
 import InventoryAdjustmentsDialog from '../components/InventoryAdjustmentsDialog';
 import { useInventoryDisplayRows } from '../hooks/useInventoryDisplayRows';
@@ -96,8 +97,15 @@ export default function InventoryDetailsPage() {
     return products.filter((p) => p.isActive && !existingProductIds.has(p.id)).length;
   }, [isRange, filterBranch, rows, products]);
 
-  // Reset pending on filter change
-  useEffect(() => { setPendingUpdates(new Map()); }, [filterDateFrom, filterDateTo, filterBranch]);
+  // Reset pending edits when the filters change. Done as a render-time state
+  // adjustment (React's "adjust state when props change" pattern) rather than
+  // an effect, so it doesn't trigger a cascading second render.
+  const filterKey = `${filterDateFrom}|${filterDateTo}|${filterBranch}`;
+  const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
+  if (prevFilterKey !== filterKey) {
+    setPrevFilterKey(filterKey);
+    setPendingUpdates(new Map());
+  }
 
   // Date helpers
   const commitDates = useCallback((from: string, to: string) => {
@@ -192,6 +200,9 @@ export default function InventoryDetailsPage() {
   const totalPending = pendingUpdates.size;
   const isEditable = !isRange && filterBranch !== '' && canWriteInventory;
 
+  // Ctrl+S / Cmd+S saves pending edits, matching the Excel workflow the grid emulates.
+  useSaveShortcut(totalPending > 0 && !savePendingMutation.isPending, () => savePendingMutation.mutate());
+
   return (
     <AuthGuard>
       <AppLayout title="Inventory Details">
@@ -224,11 +235,10 @@ export default function InventoryDetailsPage() {
               startDate={filterDateFrom}
               endDate={filterDateTo}
               branchId={filterBranch || undefined}
-              title="Rejected vs Delivered by Product"
             />
           </div>
 
-          <InventoryPendingChangesBar
+          <SheetPendingBar
             totalPending={totalPending}
             isSaving={savePendingMutation.isPending}
             onDiscard={discardPending}

@@ -1,17 +1,15 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
-  Legend, ResponsiveContainer,
-} from 'recharts';
-import { Loader2 } from 'lucide-react';
+import { ArrowRight, Loader2 } from 'lucide-react';
 import dayjs from 'dayjs';
 import { inventoryApi } from '@/lib/apiServices';
 import type { Branch, RejectionByProductItem, ProductType } from '@/types';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
 import {
@@ -28,30 +26,40 @@ interface Props {
   branches?: Branch[];
 }
 
-function rejectRateBadge(rate: number) {
+const TOP_COUNT = 5;
+
+export function rejectRateBadge(rate: number) {
   if (rate < 5) return <Badge className="bg-green-600 text-white">{rate.toFixed(1)}%</Badge>;
   if (rate <= 15) return <Badge className="bg-amber-500 text-white">{rate.toFixed(1)}%</Badge>;
   return <Badge variant="destructive">{rate.toFixed(1)}%</Badge>;
 }
 
-const truncate = (v: string, max = 12) => v.length > max ? `${v.slice(0, max - 1)}…` : v;
+/** Worst offenders first: highest reject rate, then most rejected units. */
+export function rankByRejection(items: RejectionByProductItem[]): RejectionByProductItem[] {
+  return [...items].sort((a, b) => b.rejectRate - a.rejectRate || b.totalReject - a.totalReject);
+}
 
+/**
+ * Compact dashboard-analytic card: the top rejected products for the period,
+ * with a "See more" link to the full paginated report at
+ * /inventory/rejections.
+ */
 export default function RejectionByProductCard({
   startDate: externalFrom,
   endDate: externalTo,
   branchId: externalBranch,
   type,
-  title = 'Rejected vs Delivered by Product',
+  title = 'Top Rejected Products',
   showFilters = false,
   branches = [],
 }: Props) {
-  // Fix 8: useState so today can be updated at midnight without remount
+  // useState so today can be updated at midnight without remount
   const [today, setToday] = useState(() => dayjs().format('YYYY-MM-DD'));
   const [internalFrom, setInternalFrom] = useState(today);
   const [internalTo, setInternalTo] = useState(today);
   const [internalBranch, setInternalBranch] = useState('all');
 
-  // Fix 8: reset today + internal dates when the calendar day rolls over
+  // reset today + internal dates when the calendar day rolls over
   useEffect(() => {
     const msUntilMidnight = dayjs().add(1, 'day').startOf('day').diff(dayjs());
     const timer = setTimeout(() => {
@@ -73,14 +81,18 @@ export default function RejectionByProductCard({
       inventoryApi
         .rejectionByProduct(startDate, endDate, branchId, type)
         .then((r) => r.data),
-    staleTime: 5 * 60 * 1000, // Fix 9: avoid re-fetching on every focus/remount
+    staleTime: 5 * 60 * 1000, // avoid re-fetching on every focus/remount
   });
 
-  const chartData = data.map((item) => ({
-    name: item.name,
-    Delivered: item.totalDelivery,
-    Rejected: item.totalReject,
-  }));
+  const rejected = rankByRejection(data.filter((item) => item.totalReject > 0));
+  const top = rejected.slice(0, TOP_COUNT);
+
+  const seeMoreParams = new URLSearchParams();
+  if (startDate) seeMoreParams.set('startDate', startDate);
+  if (endDate) seeMoreParams.set('endDate', endDate);
+  if (branchId) seeMoreParams.set('branchId', branchId);
+  const seeMoreQuery = seeMoreParams.toString();
+  const seeMoreHref = `/inventory/rejections${seeMoreQuery ? `?${seeMoreQuery}` : ''}`;
 
   return (
     <Card>
@@ -97,7 +109,7 @@ export default function RejectionByProductCard({
                 onChange={(e) => {
                   const v = e.target.value;
                   setInternalFrom(v);
-                  // Fix 7: keep range valid — clamp end date forward if needed
+                  // keep range valid — clamp end date forward if needed
                   if (v > internalTo) setInternalTo(v);
                 }}
                 className="w-36 h-8 text-xs"
@@ -111,7 +123,7 @@ export default function RejectionByProductCard({
                 onChange={(e) => {
                   const v = e.target.value;
                   setInternalTo(v);
-                  // Fix 7: keep range valid — clamp start date back if needed
+                  // keep range valid — clamp start date back if needed
                   if (v < internalFrom) setInternalFrom(v);
                 }}
                 className="w-36 h-8 text-xs"
@@ -143,42 +155,40 @@ export default function RejectionByProductCard({
           <Alert>
             <AlertDescription>No delivery data for this period.</AlertDescription>
           </Alert>
+        ) : top.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-2">
+            No rejections in this period — nothing wasted. 🎉
+          </p>
         ) : (
-          <>
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={chartData} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                {/* Fix 10: truncate long product names; full name visible in tooltip and table */}
-                <XAxis dataKey="name" tick={{ fontSize: 11 }} tickFormatter={(v: string) => truncate(v)} />
-                <YAxis tick={{ fontSize: 11 }} />
-                <RechartsTooltip />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="Delivered" fill="#6B3FA0" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="Rejected" fill="#d32f2f" radius={[3, 3, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-
-            <div className="mt-4 space-y-0">
-              {data.map((item) => (
-                <div key={item.productId} className="flex items-center justify-between py-2 border-b last:border-0">
-                  <div>
-                    <span className="text-sm font-medium">{item.name}</span>
-                    <Badge variant="secondary" className="ml-2 text-[0.65rem] h-[18px]">{item.type}</Badge>
-                  </div>
-                  <div className="flex items-center gap-3 text-sm text-right">
-                    <span className="text-muted-foreground">
-                      {item.totalDelivery.toLocaleString()} delivered
-                    </span>
-                    <span className="text-destructive font-medium">
-                      {item.totalReject.toLocaleString()} rejected
-                    </span>
-                    {rejectRateBadge(item.rejectRate)}
-                  </div>
+          <div>
+            {top.map((item) => (
+              <div key={item.productId} className="flex items-center justify-between py-2 border-b last:border-0">
+                <div>
+                  <span className="text-sm font-medium">{item.name}</span>
+                  <Badge variant="secondary" className="ml-2 text-[0.65rem] h-[18px]">{item.type}</Badge>
                 </div>
-              ))}
-            </div>
-          </>
+                <div className="flex items-center gap-3 text-sm text-right">
+                  <span className="text-muted-foreground">
+                    {item.totalDelivery.toLocaleString()} delivered
+                  </span>
+                  <span className="text-destructive font-medium">
+                    {item.totalReject.toLocaleString()} rejected
+                  </span>
+                  {rejectRateBadge(item.rejectRate)}
+                </div>
+              </div>
+            ))}
+          </div>
         )}
+
+        <div className="flex justify-end mt-3">
+          <Button asChild variant="ghost" size="sm">
+            <Link href={seeMoreHref}>
+              See more
+              <ArrowRight data-icon="inline-end" />
+            </Link>
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );

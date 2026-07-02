@@ -410,7 +410,7 @@ export default function ProductionOrdersPage() {
                   This will record the production yield and automatically add the quantities as{' '}
                   <strong>delivery</strong> to{' '}
                   <strong>{finalizeTarget?.branch?.name ?? 'the destination branch'}</strong>
-                  's inventory. This cannot be undone.
+                  &apos;s inventory. This cannot be undone.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>

@@ -1,7 +1,9 @@
-import { useCallback, useMemo } from 'react';
+import { Fragment, useCallback, useMemo } from 'react';
 import type { Inventory, Product, ProductType } from '@/types';
-import { Card } from '@/components/ui/card';
-import { Table, TableBody, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { cn } from '@/lib/utils';
+import { useSheetNavigation } from '@/components/sheet/useSheetNavigation';
+import { SHEET_BANNER, SHEET_CONTAINER, SHEET_HEAD, SHEET_TABLE } from '@/components/sheet/styles';
 import { InventoryTableRow } from './InventoryTableRow';
 
 const PRODUCT_TYPE_ORDER: ProductType[] = ['BREAD', 'CAKE', 'SPECIAL', 'MISCELLANEOUS'];
@@ -37,11 +39,10 @@ export default function InventoryTypeTables({
   onAdjustmentsOpen,
   onCellChange,
 }: InventoryTypeTablesProps) {
+  // Row order spans every type group, so the cursor flows straight through
+  // the section banners as if it were one continuous sheet.
   const orderedRowIds = useMemo(
-    () =>
-      PRODUCT_TYPE_ORDER.flatMap((type) =>
-        (rowsByType.get(type) ?? []).map((row) => row.id),
-      ),
+    () => PRODUCT_TYPE_ORDER.flatMap((type) => (rowsByType.get(type) ?? []).map((row) => row.id)),
     [rowsByType],
   );
 
@@ -50,98 +51,68 @@ export default function InventoryTypeTables({
     [],
   );
 
-  const linearInputIds = useMemo(
-    () =>
-      orderedRowIds.flatMap((invId) =>
-        EDITABLE_FIELDS.map((field) => getInputId(invId, field)),
-      ),
-    [orderedRowIds, getInputId],
-  );
+  const { moveInColumn, moveLinear } = useSheetNavigation(orderedRowIds, EDITABLE_FIELDS, getInputId);
 
-  const focusInputById = useCallback((inputId: string) => {
-    const el = document.getElementById(inputId) as HTMLInputElement | null;
-    if (!el) return false;
-    el.focus();
-    el.select();
-    return true;
-  }, []);
-
-  const handleEnterNextInColumn = useCallback(
-    (invId: number, field: EditableField) => {
-      const currentRowIndex = orderedRowIds.indexOf(invId);
-      if (currentRowIndex === -1) return;
-
-      for (let i = currentRowIndex + 1; i < orderedRowIds.length; i += 1) {
-        if (focusInputById(getInputId(orderedRowIds[i], field))) {
-          return;
-        }
-      }
-    },
-    [orderedRowIds, getInputId, focusInputById],
-  );
-
-  const handleTabNextInput = useCallback(
-    (currentInputId: string): boolean => {
-      const currentIndex = linearInputIds.indexOf(currentInputId);
-      if (currentIndex < 0 || currentIndex >= linearInputIds.length - 1) {
-        return false;
-      }
-      return focusInputById(linearInputIds[currentIndex + 1]);
-    },
-    [linearInputIds, focusInputById],
-  );
+  const columnCount =
+    1 + // Product
+    (!isRange ? 1 : 0) + // Prev. Leftover
+    1 + // Delivery
+    (hasBranchFilter ? 1 : 0) + // Adjustments
+    (!isRange ? 1 : 0) + // Total Stock
+    1 + // Leftover
+    1 + // Reject
+    1 + // Sold
+    1; // Revenue
 
   return (
-    <>
-      {PRODUCT_TYPE_ORDER.map((type) => {
-        const typeRows = rowsByType.get(type) ?? [];
-        if (typeRows.length === 0) return null;
+    <Table containerClassName={SHEET_CONTAINER} className={SHEET_TABLE}>
+      <TableHeader>
+        <TableRow className="hover:bg-transparent">
+          <TableHead className={cn(SHEET_HEAD, 'text-left min-w-[140px]')}>Product</TableHead>
+          {!isRange && <TableHead className={cn(SHEET_HEAD, 'text-right w-[100px]')}>Prev. Leftover</TableHead>}
+          <TableHead className={cn(SHEET_HEAD, 'text-right w-[90px]')}>Delivery</TableHead>
+          {hasBranchFilter && <TableHead className={cn(SHEET_HEAD, 'text-center w-[110px]')}>Adjustments</TableHead>}
+          {!isRange && <TableHead className={cn(SHEET_HEAD, 'text-right w-[100px]')}>Total Stock</TableHead>}
+          <TableHead className={cn(SHEET_HEAD, 'text-right w-[90px]')}>Leftover</TableHead>
+          <TableHead className={cn(SHEET_HEAD, 'text-right w-[80px]')}>Reject</TableHead>
+          <TableHead className={cn(SHEET_HEAD, 'text-center w-[80px]')}>Sold</TableHead>
+          <TableHead className={cn(SHEET_HEAD, 'text-right w-[110px]')}>Revenue</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {PRODUCT_TYPE_ORDER.map((type) => {
+          const typeRows = rowsByType.get(type) ?? [];
+          if (typeRows.length === 0) return null;
 
-        return (
-          <div key={type} className="mb-4">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground border-b-2 pb-1 mb-2">
-              {TYPE_LABELS[type]}
-            </h3>
-            <Card className="shadow-none overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted/50">
-                    <TableHead className="min-w-[120px]">Product</TableHead>
-                    {!isRange && <TableHead className="text-center w-[100px]">Prev. Leftover</TableHead>}
-                    <TableHead className="text-center w-[90px]">Delivery</TableHead>
-                    {hasBranchFilter && <TableHead className="text-center w-[110px]">Adjustments</TableHead>}
-                    {!isRange && <TableHead className="text-center w-[100px]">Total Stock</TableHead>}
-                    <TableHead className="text-center w-[90px]">Leftover</TableHead>
-                    <TableHead className="text-center w-[80px]">Reject</TableHead>
-                    <TableHead className="text-center w-[80px]">Sold</TableHead>
-                    <TableHead className="text-right w-[110px]">Revenue</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {typeRows.map((inv) => (
-                    <InventoryTableRow
-                      key={inv.id}
-                      inv={inv}
-                      product={productById.get(inv.productId)}
-                      pending={pendingUpdates.get(inv.id)}
-                      isEditable={isEditable}
-                      isRange={isRange}
-                      hasBranchFilter={hasBranchFilter}
-                      canAdjust={canAdjust}
-                      productById={productById}
-                      onAdjustmentsOpen={onAdjustmentsOpen}
-                      onCellChange={onCellChange}
-                      getInputId={getInputId}
-                      onEnterNextInColumn={handleEnterNextInColumn}
-                      onTabNextInput={handleTabNextInput}
-                    />
-                  ))}
-                </TableBody>
-              </Table>
-            </Card>
-          </div>
-        );
-      })}
-    </>
+          return (
+            <Fragment key={type}>
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={columnCount} className={SHEET_BANNER}>
+                  {TYPE_LABELS[type]}
+                </TableCell>
+              </TableRow>
+              {typeRows.map((inv) => (
+                <InventoryTableRow
+                  key={inv.id}
+                  inv={inv}
+                  product={productById.get(inv.productId)}
+                  pending={pendingUpdates.get(inv.id)}
+                  isEditable={isEditable}
+                  isRange={isRange}
+                  hasBranchFilter={hasBranchFilter}
+                  canAdjust={canAdjust}
+                  productById={productById}
+                  onAdjustmentsOpen={onAdjustmentsOpen}
+                  onCellChange={onCellChange}
+                  getInputId={getInputId}
+                  onMoveInColumn={moveInColumn}
+                  onMoveLinear={moveLinear}
+                />
+              ))}
+            </Fragment>
+          );
+        })}
+      </TableBody>
+    </Table>
   );
 }

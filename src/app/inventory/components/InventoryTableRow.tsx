@@ -1,10 +1,12 @@
 import { Settings2 } from 'lucide-react';
 import type { Inventory, Product } from '@/types';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { TableCell, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { cn } from '@/lib/utils';
+import { SheetInput } from '@/components/sheet/SheetInput';
+import { SHEET_CELL as CELL } from '@/components/sheet/styles';
 import { getAdjSum, getRevenue, getSold, getTotalStock } from '../hooks/useInventoryColumns';
 
 type EditableField = 'delivery' | 'leftover' | 'reject';
@@ -21,8 +23,10 @@ interface InventoryTableRowProps {
   onAdjustmentsOpen: (inventory: Inventory) => void;
   onCellChange: (invId: number, field: EditableField, value: number) => void;
   getInputId: (invId: number, field: EditableField) => string;
-  onEnterNextInColumn: (invId: number, field: EditableField) => void;
-  onTabNextInput: (currentInputId: string) => boolean;
+  /** Move focus to the same field one row away (+1 down, -1 up). */
+  onMoveInColumn: (invId: number, field: EditableField, dir: 1 | -1) => void;
+  /** Move focus to the next/previous editable cell in linear order; returns whether it moved. */
+  onMoveLinear: (currentInputId: string, dir: 1 | -1) => boolean;
 }
 
 export function InventoryTableRow({
@@ -37,8 +41,8 @@ export function InventoryTableRow({
   onAdjustmentsOpen,
   onCellChange,
   getInputId,
-  onEnterNextInColumn,
-  onTabNextInput,
+  onMoveInColumn,
+  onMoveLinear,
 }: InventoryTableRowProps) {
   const effectiveInv = pending ? { ...inv, ...pending } : inv;
   const adjSum = getAdjSum(effectiveInv);
@@ -47,40 +51,43 @@ export function InventoryTableRow({
   const revenue = getRevenue(effectiveInv, productById);
   const hasPending = !!pending;
 
-  const makeKeyDown = (field: EditableField) => (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      onEnterNextInColumn(inv.id, field);
-    } else if (e.key === 'Tab' && !e.shiftKey) {
-      const moved = onTabNextInput(getInputId(inv.id, field));
-      if (moved) e.preventDefault();
-    }
-  };
+  const editCell = (field: EditableField) => (
+    <SheetInput
+      id={getInputId(inv.id, field)}
+      value={pending?.[field] ?? inv[field]}
+      onValueChange={(value) => onCellChange(inv.id, field, value)}
+      onColumnMove={(dir) => onMoveInColumn(inv.id, field, dir)}
+      onLinearMove={(dir) => onMoveLinear(getInputId(inv.id, field), dir)}
+    />
+  );
+
+  const numberCell = (field: EditableField) => (
+    <TableCell className={cn(CELL, 'p-0')}>
+      {isEditable ? editCell(field) : <div className="px-2 text-right tabular-nums">{effectiveInv[field]}</div>}
+    </TableCell>
+  );
 
   return (
     <TableRow className={hasPending ? 'bg-amber-50/50' : ''}>
-      <TableCell className="font-medium">{product?.name ?? `Product #${inv.productId}`}</TableCell>
-      {!isRange && <TableCell className="text-center">{inv.quantity}</TableCell>}
-      <TableCell className="text-center">
-        {isEditable ? (
-          <Input
-            id={getInputId(inv.id, 'delivery')}
-            type="number"
-            className="w-[70px] h-7 text-center mx-auto"
-            value={String(pending?.delivery ?? inv.delivery)}
-            onChange={(e) => onCellChange(inv.id, 'delivery', Number.parseInt(e.target.value, 10) || 0)}
-            onKeyDown={makeKeyDown('delivery')}
-            min={0}
-          />
-        ) : (
-          effectiveInv.delivery
-        )}
+      <TableCell className={cn(CELL, 'px-2 font-medium')}>
+        {product?.name ?? `Product #${inv.productId}`}
       </TableCell>
+      {!isRange && (
+        <TableCell className={cn(CELL, 'px-2 text-right tabular-nums text-muted-foreground')}>
+          {inv.quantity}
+        </TableCell>
+      )}
+      {numberCell('delivery')}
       {hasBranchFilter && (
-        <TableCell className="text-center">
+        <TableCell className={cn(CELL, 'px-2')}>
           <div className="flex items-center justify-center gap-1">
             {(inv.adjustments ?? []).length > 0 && (
-              <span className={`text-xs font-bold ${adjSum > 0 ? 'text-green-600' : adjSum < 0 ? 'text-red-600' : 'text-muted-foreground'}`}>
+              <span
+                className={cn(
+                  'text-xs font-bold tabular-nums',
+                  adjSum > 0 ? 'text-green-600' : adjSum < 0 ? 'text-red-600' : 'text-muted-foreground',
+                )}
+              >
                 {adjSum > 0 ? `+${adjSum}` : adjSum}
               </span>
             )}
@@ -98,45 +105,19 @@ export function InventoryTableRow({
         </TableCell>
       )}
       {!isRange && (
-        <TableCell className="text-center font-semibold text-primary">{totalStock}</TableCell>
+        <TableCell className={cn(CELL, 'px-2 text-right font-semibold tabular-nums text-primary')}>
+          {totalStock}
+        </TableCell>
       )}
-      <TableCell className="text-center">
-        {isEditable ? (
-          <Input
-            id={getInputId(inv.id, 'leftover')}
-            type="number"
-            className="w-[70px] h-7 text-center mx-auto"
-            value={String(pending?.leftover ?? inv.leftover)}
-            onChange={(e) => onCellChange(inv.id, 'leftover', Number.parseInt(e.target.value, 10) || 0)}
-            onKeyDown={makeKeyDown('leftover')}
-            min={0}
-          />
-        ) : (
-          effectiveInv.leftover
-        )}
-      </TableCell>
-      <TableCell className="text-center">
-        {isEditable ? (
-          <Input
-            id={getInputId(inv.id, 'reject')}
-            type="number"
-            className="w-[70px] h-7 text-center mx-auto"
-            value={String(pending?.reject ?? inv.reject)}
-            onChange={(e) => onCellChange(inv.id, 'reject', Number.parseInt(e.target.value, 10) || 0)}
-            onKeyDown={makeKeyDown('reject')}
-            min={0}
-          />
-        ) : (
-          effectiveInv.reject
-        )}
-      </TableCell>
-      <TableCell className="text-center">
+      {numberCell('leftover')}
+      {numberCell('reject')}
+      <TableCell className={cn(CELL, 'px-2 text-center')}>
         <Badge variant={sold > 0 ? 'default' : 'secondary'} className={sold > 0 ? 'bg-green-500' : ''}>
           {sold}
         </Badge>
       </TableCell>
-      <TableCell className="text-right">
-        <span className={`font-semibold ${revenue > 0 ? 'text-green-600' : 'text-muted-foreground'}`}>
+      <TableCell className={cn(CELL, 'px-2 text-right')}>
+        <span className={cn('font-semibold tabular-nums', revenue > 0 ? 'text-green-600' : 'text-muted-foreground')}>
           ₱{revenue.toLocaleString()}
         </span>
       </TableCell>

@@ -7,7 +7,7 @@ import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
 import { inventoryImportApi, branchesApi, importLogsApi } from '@/lib/apiServices';
 import { useQuery } from '@tanstack/react-query';
-import type { Branch, ParsedWorkbook, InventoryImportResult } from '@/types';
+import type { Branch, DryRunResult, InventoryImportResult } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,7 +16,7 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-type Step = 'upload' | 'preview' | 'branch' | 'result';
+type Step = 'upload' | 'branch' | 'preview' | 'result';
 
 function extractError(err: unknown): string {
   const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
@@ -27,7 +27,7 @@ export default function InventoryImportPage() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<Step>('upload');
   const [file, setFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<ParsedWorkbook | null>(null);
+  const [preview, setPreview] = useState<DryRunResult | null>(null);
   const [branchId, setBranchId] = useState('');
   const [result, setResult] = useState<InventoryImportResult | null>(null);
   const [error, setError] = useState('');
@@ -42,7 +42,7 @@ export default function InventoryImportPage() {
   });
 
   const previewMut = useMutation({
-    mutationFn: (f: File) => inventoryImportApi.preview(f),
+    mutationFn: ({ f, bid }: { f: File; bid: number }) => inventoryImportApi.preview(f, bid),
     onSuccess: (res) => { setPreview(res.data); setStep('preview'); setError(''); },
     onError: (err) => setError(extractError(err)),
   });
@@ -57,7 +57,12 @@ export default function InventoryImportPage() {
     const f = e.target.files?.[0];
     if (!f) return;
     setFile(f); setError('');
-    previewMut.mutate(f);
+    setStep('branch');
+  };
+
+  const handlePreview = () => {
+    if (!file || !branchId) return;
+    previewMut.mutate({ f: file, bid: parseInt(branchId) });
   };
 
   const handleImport = () => {
@@ -75,7 +80,7 @@ export default function InventoryImportPage() {
       <AppLayout title="Inventory Import">
         {/* Step indicator */}
         <div className="flex items-center gap-2 mb-6 text-sm">
-          {(['upload', 'preview', 'branch', 'result'] as Step[]).map((s, i) => (
+          {(['upload', 'branch', 'preview', 'result'] as Step[]).map((s, i) => (
             <div key={s} className="flex items-center gap-2">
               {i > 0 && <span className="text-muted-foreground">→</span>}
               <Badge variant={step === s ? 'default' : 'outline'} className="capitalize">{s}</Badge>
@@ -108,38 +113,85 @@ export default function InventoryImportPage() {
           </Card>
         )}
 
-        {/* Step 2: Preview */}
+        {/* Step 2: Preview (dry-run) */}
         {step === 'preview' && preview && (
           <div className="space-y-4">
             <Card>
-              <CardHeader><CardTitle className="text-base">Preview: {file?.name}</CardTitle></CardHeader>
+              <CardHeader>
+                <CardTitle className="text-base">
+                  Preview: {preview.fileName}
+                  {preview.branch && <span className="text-muted-foreground font-normal"> → {preview.branch.name}</span>}
+                </CardTitle>
+              </CardHeader>
               <CardContent>
-                <p className="text-sm text-muted-foreground mb-4">{preview.sheetNames.length} sheet(s): {preview.sheetNames.join(', ')}</p>
-                {preview.sheets.map((sheet) => (
-                  <div key={sheet.name} className="mb-4">
-                    <h4 className="font-semibold text-sm mb-2">{sheet.name} ({sheet.rows.length} rows)</h4>
-                    {sheet.rows.length > 0 && (
-                      <div className="overflow-x-auto max-h-64">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>{Object.keys(sheet.rows[0]).map((key) => <TableHead key={key}>{key}</TableHead>)}</TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {sheet.rows.slice(0, 5).map((row, i) => (
-                              <TableRow key={i}>{Object.values(row).map((val, j) => <TableCell key={j}>{String(val ?? '')}</TableCell>)}</TableRow>
-                            ))}
-                            {sheet.rows.length > 5 && <TableRow><TableCell colSpan={Object.keys(sheet.rows[0]).length} className="text-center text-muted-foreground">…and {sheet.rows.length - 5} more rows</TableCell></TableRow>}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                {preview.alreadyImported && (
+                  <Alert variant="destructive" className="mb-4">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription>
+                      This exact file was already imported for {preview.branch?.name ?? 'this branch'} on{' '}
+                      {preview.alreadyImported.importedAt} (log #{preview.alreadyImported.logId}). Importing again will be rejected — delete that log first or use a corrected file.
+                    </AlertDescription>
+                  </Alert>
+                )}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+                  <div className="text-center"><p className="text-2xl font-bold">{preview.summary.totalSheets}</p><p className="text-xs text-muted-foreground">Day sheets</p></div>
+                  <div className="text-center"><p className="text-2xl font-bold text-primary">{preview.summary.totalMatched}</p><p className="text-xs text-muted-foreground">Products matched</p></div>
+                  <div className="text-center"><p className="text-2xl font-bold text-destructive">{preview.summary.totalUnmatched}</p><p className="text-xs text-muted-foreground">Unmatched</p></div>
+                  <div className="text-center"><p className="text-2xl font-bold">{preview.summary.datesDetected.length}</p><p className="text-xs text-muted-foreground">Dates</p></div>
+                </div>
+                {preview.summary.datesDetected.length > 0 && (
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Date range: {preview.summary.datesDetected[0]} → {preview.summary.datesDetected[preview.summary.datesDetected.length - 1]}
+                  </p>
+                )}
+                {preview.summary.totalSheets === 0 && (
+                  <Alert variant="destructive" className="mb-4">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription>No recognizable “Day” sheets found in this file. Nothing would be imported.</AlertDescription>
+                  </Alert>
+                )}
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Sheet</TableHead>
+                        <TableHead>Date</TableHead>
+                        <TableHead className="text-right">Matched</TableHead>
+                        <TableHead className="text-right">Unmatched</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {preview.sheets.map((sheet) => (
+                        <TableRow key={sheet.sheetName}>
+                          <TableCell className="font-medium">{sheet.sheetName}</TableCell>
+                          <TableCell>{sheet.error ? <span className="text-destructive">{sheet.error}</span> : sheet.date}</TableCell>
+                          <TableCell className="text-right">{sheet.matched}</TableCell>
+                          <TableCell className="text-right">{sheet.unmatchedCount > 0 ? <span className="text-destructive">{sheet.unmatchedCount}</span> : 0}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+                {preview.summary.totalUnmatched > 0 && (
+                  <Alert variant="destructive" className="mt-4">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription>
+                      <p className="font-medium mb-1">These names did not match any product and will be skipped:</p>
+                      <p className="text-xs">{[...new Set(preview.sheets.flatMap((s) => s.unmatched))].join(', ')}</p>
+                      <p className="text-xs mt-1">Add them to the product catalog first if they should be imported.</p>
+                    </AlertDescription>
+                  </Alert>
+                )}
               </CardContent>
             </Card>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={reset}>Back</Button>
-              <Button onClick={() => setStep('branch')}>Continue</Button>
+              <Button variant="outline" onClick={() => setStep('branch')}>Back</Button>
+              <Button
+                onClick={handleImport}
+                disabled={preview.summary.totalSheets === 0 || !!preview.alreadyImported || importMut.isPending}
+              >
+                {importMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}Import
+              </Button>
             </div>
           </div>
         )}
@@ -172,9 +224,9 @@ export default function InventoryImportPage() {
                 </Alert>
               )}
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setStep('preview')}>Back</Button>
-                <Button onClick={handleImport} disabled={!branchId || importMut.isPending}>
-                  {importMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}Import
+                <Button variant="outline" onClick={reset}>Back</Button>
+                <Button onClick={handlePreview} disabled={!branchId || previewMut.isPending}>
+                  {previewMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Preview
                 </Button>
               </div>
             </CardContent>

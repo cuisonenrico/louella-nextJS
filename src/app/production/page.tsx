@@ -3,12 +3,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, Calculator, AlertTriangle } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import dayjs from 'dayjs';
 import AppLayout from '@/components/layout/AppLayout';
 import AuthGuard from '@/components/AuthGuard';
 import { branchesApi, inventoryApi, productionApi, productionOrdersApi, productsApi } from '@/lib/apiServices';
-import type { Branch, Inventory, PlannedYield, Product, Production, ProductionOrder, ProductType } from '@/types';
+import type { Branch, Inventory, Product, Production, ProductionOrder, ProductType } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -16,20 +16,15 @@ import MaterialConsumptionDrawer from './components/MaterialConsumptionDrawer';
 import ProductionDateToolbar from './components/ProductionDateToolbar';
 import ProductionPendingBar from './components/ProductionPendingBar';
 import ProductionSummaryAccordion from './components/ProductionSummaryAccordion';
-import { ProductionTypeTable } from './components/ProductionTypeTable';
+import { ProductionSheet } from './components/ProductionSheet';
 import { useProductionRowUpdate, type ProdRow } from './hooks/useProductionRowUpdate';
 import { useProductionMutations } from './hooks/useProductionMutations';
 import { useProductionSummary } from './hooks/useProductionSummary';
 import ProductionTabNav from './components/ProductionTabNav';
-import {
-  buildFinalizedPlannedYields,
-  useProductionTabNavigation,
-  useYieldAutoSync,
-  useYieldEnterNavigation,
-} from './hooks/useProductionPlannedYield';
+import { useSaveShortcut } from '@/components/sheet/useSaveShortcut';
+import { buildFinalizedPlannedYields, useYieldAutoSync } from './hooks/useProductionPlannedYield';
 
 const PRODUCT_TYPE_ORDER: ProductType[] = ['BREAD', 'CAKE', 'SPECIAL', 'MISCELLANEOUS'];
-const TYPE_LABELS: Record<ProductType, string> = { BREAD: 'Bread', CAKE: 'Cake', SPECIAL: 'Special', MISCELLANEOUS: 'Miscellaneous' };
 
 export default function ProductionPage() {
   const qc = useQueryClient();
@@ -119,10 +114,6 @@ export default function ProductionPage() {
     return map;
   }, [allRows]);
 
-  const branchIds = useMemo(() => branches.map((b) => b.id), [branches]);
-  const handleYieldEnter = useYieldEnterNavigation(rowsByType);
-  const handleTabToNextInput = useProductionTabNavigation(rowsByType, branchIds);
-
   const discardPending = useCallback(() => {
     resetPending();
     qc.invalidateQueries({ queryKey: ['production'] });
@@ -156,6 +147,16 @@ export default function ProductionPage() {
   }, [allRows, branches, pendingProduction, pendingInventory]);
 
   const hasOverAllocation = overAllocatedByProduct.size > 0;
+
+  const savePending = useCallback(() => {
+    savePendingMutation.mutate(
+      { production: pendingProduction, inventory: pendingInventory },
+      { onSuccess: resetPending },
+    );
+  }, [savePendingMutation, pendingProduction, pendingInventory, resetPending]);
+
+  // Ctrl+S / Cmd+S saves pending edits, matching the Excel workflow the sheet emulates.
+  useSaveShortcut(totalPending > 0 && !hasOverAllocation && !savePendingMutation.isPending, savePending);
 
   return (
     <AuthGuard>
@@ -192,47 +193,31 @@ export default function ProductionPage() {
                 : undefined
             }
             onDiscard={discardPending}
-            onSave={() => {
-              savePendingMutation.mutate(
-                { production: pendingProduction, inventory: pendingInventory },
-                { onSuccess: resetPending },
-              );
-            }}
+            onSave={savePending}
           />
 
           <ProductionSummaryAccordion summary={summary} branches={branches} />
 
-          {/* Per-type grids */}
+          {/* Continuous production sheet */}
           {isLoading ? (
             <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
           ) : allRows.length === 0 ? (
             <p className="text-center text-muted-foreground py-12">No active products found.</p>
           ) : (
-            PRODUCT_TYPE_ORDER.map((type) => {
-              const typeRows = rowsByType.get(type) ?? [];
-              if (typeRows.length === 0) return null;
-              return (
-                <ProductionTypeTable
-                  key={type}
-                  type={type}
-                  label={TYPE_LABELS[type]}
-                  rows={typeRows}
-                  branches={branches}
-                  branchesWithNoInventory={branchesWithNoInventory}
-                  overAllocatedByProduct={overAllocatedByProduct}
-                  plannedByProduct={plannedByProduct}
-                  productById={productById}
-                  getEffectiveValue={getEffectiveValue}
-                  isRowDirty={isRowDirty}
-                  handleFieldChange={handleFieldChange}
-                  handleYieldEnter={handleYieldEnter}
-                  handleTabToNextInput={handleTabToNextInput}
-                  onConsumptionClick={(id, py) => { setConsumptionId(id); setConsumptionPlannedYield(py); }}
-                  onInitBranch={(id) => initBranchMutation.mutate(id)}
-                  isInitBranchPending={(_id) => initBranchMutation.isPending || initAllBranchesMutation.isPending}
-                />
-              );
-            })
+            <ProductionSheet
+              rowsByType={rowsByType}
+              branches={branches}
+              branchesWithNoInventory={branchesWithNoInventory}
+              overAllocatedByProduct={overAllocatedByProduct}
+              plannedByProduct={plannedByProduct}
+              productById={productById}
+              getEffectiveValue={getEffectiveValue}
+              isRowDirty={isRowDirty}
+              handleFieldChange={handleFieldChange}
+              onConsumptionClick={(id, py) => { setConsumptionId(id); setConsumptionPlannedYield(py); }}
+              onInitBranch={(id) => initBranchMutation.mutate(id)}
+              isInitBranchPending={(_id) => initBranchMutation.isPending || initAllBranchesMutation.isPending}
+            />
           )}
 
           {/* Error snackbar */}
