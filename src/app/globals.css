@@ -29,33 +29,35 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-fraunces), Georgia, "Times New Roman", serif;
 }
 
 /* ── shadcn/ui CSS variables ─────────────────────────────────────────────── */
 :root {
-  --background: 30 100% 97%;        /* #FFF8F2 warm white */
-  --foreground: 20 14% 15%;         /* dark brown text    */
-  --card: 0 0% 100%;
-  --card-foreground: 20 14% 15%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 20 14% 15%;
-  --primary: 27 96% 57%;            /* #FA8128 orange     */
+  --background: 36 56% 96%;         /* flour       */
+  --foreground: 22 48% 12%;         /* ink (brown) */
+  --card: 40 60% 99%;
+  --card-foreground: 22 48% 12%;
+  --popover: 40 60% 99%;
+  --popover-foreground: 22 48% 12%;
+  --primary: 26 92% 51%;            /* crust       */
   --primary-foreground: 0 0% 100%;
-  --secondary: 267 43% 44%;         /* #6B3FA0 purple     */
+  --secondary: 267 43% 44%;         /* ube         */
   --secondary-foreground: 0 0% 100%;
-  --muted: 30 20% 94%;
-  --muted-foreground: 20 10% 45%;
-  --accent: 30 80% 93%;             /* light orange tint  */
-  --accent-foreground: 27 96% 30%;
-  --destructive: 0 72% 51%;
+  --muted: 36 33% 91%;
+  --muted-foreground: 25 18% 40%;
+  --accent: 39 77% 90%;             /* butter      */
+  --accent-foreground: 26 60% 28%;
+  --destructive: 0 72% 45%;
   --destructive-foreground: 0 0% 100%;
   --success: 120 40% 34%;
   --success-foreground: 0 0% 100%;
   --warning: 25 95% 47%;
   --warning-foreground: 0 0% 100%;
-  --border: 30 15% 88%;
-  --input: 30 15% 88%;
-  --ring: 27 96% 57%;
+  --border: 33 30% 85%;
+  --input: 33 30% 85%;
+  --ring: 26 92% 51%;
   --radius: 0.625rem;               /* 10px global radius */
 }
 
@@ -71,7 +73,31 @@ body {
   background-color: hsl(var(--background));
   color: hsl(var(--foreground));
   margin: 0;
-  font-family: "Inter", "Roboto", "Helvetica", "Arial", sans-serif;
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Display typography ──────────────────────────────────────────────────── */
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+/* ── Landing marquee ─────────────────────────────────────────────────────── */
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+.animate-marquee {
+  animation: marquee 45s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee {
+    animation: none;
+  }
 }
