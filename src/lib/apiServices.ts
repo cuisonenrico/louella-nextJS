@@ -21,7 +21,7 @@ import type {
   MaterialInventory,
   MaterialPriceHistory,
   PaginatedResponse,
-  ParsedWorkbook,
+  DryRunResult,
   PlannedYield,
   Product,
   ProductPriceHistory,
@@ -183,10 +183,11 @@ export const inventoryApi = {
 
 // ─── Inventory Import ────────────────────────────────────────────
 export const inventoryImportApi = {
-  preview: (file: File) => {
+  preview: (file: File, branchId?: number) => {
     const form = new FormData();
     form.append('file', file);
-    return api.post<ParsedWorkbook>('/inventory-import/preview', form);
+    if (branchId !== undefined) form.append('branchId', String(branchId));
+    return api.post<DryRunResult>('/inventory-import/preview', form);
   },
   importFile: (file: File, branchId: number) => {
     const form = new FormData();

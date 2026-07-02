@@ -391,14 +391,26 @@ export interface ProductionEfficiencyItem {
 // ────────────────────────────────────────────────────────────────
 // Inventory Import Preview
 // ────────────────────────────────────────────────────────────────
-export interface ParsedSheet {
-  name: string;
-  rows: Record<string, unknown>[];
+export interface DryRunSheet {
+  sheetName: string;
+  date: string; // '' when the date could not be determined
+  matched: number; // distinct products found in the catalog
+  unmatchedCount: number; // distinct names that did not match a product
+  unmatched: string[]; // distinct unmatched names
+  error?: string; // sheet-level problem (e.g. no date header)
 }
 
-export interface ParsedWorkbook {
-  sheetNames: string[];
-  sheets: ParsedSheet[];
+export interface DryRunResult {
+  fileName: string;
+  branch: { id: number; name: string } | null;
+  alreadyImported: { logId: number; importedAt: string } | null;
+  summary: {
+    totalSheets: number;
+    totalMatched: number;
+    totalUnmatched: number;
+    datesDetected: string[];
+  };
+  sheets: DryRunSheet[];
 }
 
 // ────────────────────────────────────────────────────────────────

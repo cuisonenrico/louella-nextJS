@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 import { materialInventoryApi } from '@/lib/apiServices';
@@ -28,13 +28,20 @@ export function BulkSetDialog({ open, filterDate, materials, existingRows, onClo
 
   const activeMaterials = useMemo(() => materials.filter((m) => !m.deletedAt), [materials]);
 
-  useEffect(() => {
-    if (!open) return;
-    const initial = new Map<number, string>();
-    activeMaterials.forEach((m) => { initial.set(m.id, '0'); });
-    setDeliveries(initial);
-    setErr('');
-  }, [open, activeMaterials]);
+  // Reset the entry grid whenever the dialog opens. Done as a render-time
+  // state adjustment (React's "adjust state when props change" pattern) rather
+  // than an effect — and keyed only on `open`, so a materials refetch while
+  // the dialog is open no longer wipes values the user has already typed.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) {
+      const initial = new Map<number, string>();
+      activeMaterials.forEach((m) => { initial.set(m.id, '0'); });
+      setDeliveries(initial);
+      setErr('');
+    }
+  }
 
   const saveMutation = useMutation({
     mutationFn: async () => {

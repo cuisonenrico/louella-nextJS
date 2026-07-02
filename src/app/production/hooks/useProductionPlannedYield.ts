@@ -1,8 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
-import type { PlannedYield, ProductionOrder, ProductType } from '@/types';
+import { useEffect, useRef } from 'react';
+import type { PlannedYield, ProductionOrder } from '@/types';
 import type { ProdRow } from './useProductionRowUpdate';
-
-const PRODUCT_TYPE_ORDER: ProductType[] = ['BREAD', 'CAKE', 'SPECIAL', 'MISCELLANEOUS'];
 
 export function buildFinalizedPlannedYields(orders: ProductionOrder[]): PlannedYield[] {
   const totals = new Map<number, number>();
@@ -92,66 +90,5 @@ export function useYieldAutoSync({
   }, [filterDate]);
 }
 
-export function useYieldEnterNavigation(rowsByType: Map<ProductType, ProdRow[]>) {
-  const yieldInputOrder = useMemo(() => {
-    return PRODUCT_TYPE_ORDER.flatMap((type) =>
-      (rowsByType.get(type) ?? [])
-        .filter((row) => row._productionId != null)
-        .map((row) => row.productId),
-    );
-  }, [rowsByType]);
-
-  return useCallback((productId: number) => {
-    const index = yieldInputOrder.indexOf(productId);
-    if (index < 0) return;
-    const nextProductId = yieldInputOrder[index + 1];
-    if (nextProductId == null) return;
-    const el = document.getElementById(`yield-input-${nextProductId}`) as HTMLInputElement | null;
-    if (el) {
-      el.focus();
-      el.select();
-    }
-  }, [yieldInputOrder]);
-}
-
-export function useProductionTabNavigation(
-  rowsByType: Map<ProductType, ProdRow[]>,
-  branchIds: number[],
-) {
-  const inputOrder = useMemo(() => {
-    const order: string[] = [];
-
-    for (const type of PRODUCT_TYPE_ORDER) {
-      const rows = rowsByType.get(type) ?? [];
-      for (const row of rows) {
-        if (row._productionId != null) {
-          order.push(`yield-input-${row.productId}`);
-        }
-
-        for (const branchId of branchIds) {
-          const hasRecord = (row[`_inv_${branchId}`] as number | null) != null;
-          if (hasRecord) {
-            order.push(`branch-input-${row.productId}-${branchId}`);
-          }
-        }
-      }
-    }
-
-    return order;
-  }, [rowsByType, branchIds]);
-
-  return useCallback((currentInputId: string): boolean => {
-    const index = inputOrder.indexOf(currentInputId);
-    if (index < 0) return false;
-
-    const nextInputId = inputOrder[index + 1];
-    if (!nextInputId) return false;
-
-    const el = document.getElementById(nextInputId) as HTMLInputElement | null;
-    if (!el) return false;
-
-    el.focus();
-    el.select();
-    return true;
-  }, [inputOrder]);
-}
+// Enter/Tab/arrow navigation for the production sheet lives in the shared
+// grid model: components/sheet/useSheetNavigation (wired up in ProductionSheet).

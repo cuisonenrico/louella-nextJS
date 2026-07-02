@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Loader2, Sparkles } from 'lucide-react';
@@ -75,25 +75,27 @@ export function ProductionOrderFormDialog({
     setFormItems((prev) => applyAllSuggestions(prev, qtyMap));
   }, [suggestionByProduct]);
 
-  // Reset form whenever the dialog opens
-  useEffect(() => {
-    if (!open) return;
-    if (editTarget) {
-      setFormNotes(editTarget.notes ?? '');
-      setFormBranchId(editTarget.branchId ?? activeBranchId);
+  // Reset the form whenever the dialog opens. Done as a render-time state
+  // adjustment (React's "adjust state when props change" pattern) rather than
+  // an effect, so it doesn't trigger a cascading second render.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) {
       const items = new Map<number, number>();
       activeProducts.forEach((p) => items.set(p.id, 0));
-      editTarget.items.forEach((i) => items.set(i.productId, i.yield));
+      if (editTarget) {
+        editTarget.items.forEach((i) => items.set(i.productId, i.yield));
+        setFormNotes(editTarget.notes ?? '');
+        setFormBranchId(editTarget.branchId ?? activeBranchId);
+      } else {
+        setFormNotes('');
+        setFormBranchId(activeBranchId);
+      }
       setFormItems(items);
-    } else {
-      setFormNotes('');
-      setFormBranchId(activeBranchId);
-      const defaultItems = new Map<number, number>();
-      activeProducts.forEach((p) => defaultItems.set(p.id, 0));
-      setFormItems(defaultItems);
+      setFormError('');
     }
-    setFormError('');
-  }, [open, editTarget, activeBranchId, activeProducts]);
+  }
 
   const invalidate = useCallback(() => {
     qc.invalidateQueries({ queryKey: ['production-orders'] });

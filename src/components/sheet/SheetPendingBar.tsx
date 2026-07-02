@@ -1,19 +1,20 @@
 import { Loader2, Save, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-interface InventoryPendingChangesBarProps {
+interface SheetPendingBarProps {
   totalPending: number;
   isSaving: boolean;
   onDiscard: () => void;
   onSave: () => void;
 }
 
-export default function InventoryPendingChangesBar({
+/** The amber unsaved-changes bar shared by every spreadsheet-style grid. */
+export default function SheetPendingBar({
   totalPending,
   isSaving,
   onDiscard,
   onSave,
-}: InventoryPendingChangesBarProps) {
+}: SheetPendingBarProps) {
   if (totalPending <= 0) return null;
 
   return (
