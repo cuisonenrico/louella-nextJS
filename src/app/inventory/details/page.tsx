@@ -23,7 +23,7 @@ import SheetPendingBar from '@/components/sheet/SheetPendingBar';
 import InventoryTypeTables from '../components/InventoryTypeTables';
 import InventoryAdjustmentsDialog from '../components/InventoryAdjustmentsDialog';
 import { useInventoryDisplayRows } from '../hooks/useInventoryDisplayRows';
-import RejectionByProductCard from '@/components/analytics/RejectionByProductCard';
+// import RejectionByProductCard from '@/components/analytics/RejectionByProductCard';
 import QueryError from '@/components/QueryError';
 
 const PRODUCT_TYPE_ORDER: ProductType[] = ['BREAD', 'CAKE', 'SPECIAL', 'MISCELLANEOUS'];
@@ -230,6 +230,7 @@ export default function InventoryDetailsPage() {
             filterDateTo={filterDateTo}
           />
 
+          {/* Reject products card temporarily removed to keep the page focused on the table.
           <div className="mb-4">
             <RejectionByProductCard
               startDate={filterDateFrom}
@@ -237,6 +238,7 @@ export default function InventoryDetailsPage() {
               branchId={filterBranch || undefined}
             />
           </div>
+          */}
 
           <SheetPendingBar
             totalPending={totalPending}

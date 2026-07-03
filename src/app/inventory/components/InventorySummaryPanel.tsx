@@ -22,7 +22,7 @@ export default function InventorySummaryPanel({
   filterDateFrom,
   filterDateTo,
 }: InventorySummaryPanelProps) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
 
   if (!summary) {
     if (!isLoading) return null;
