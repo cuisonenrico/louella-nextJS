@@ -56,9 +56,11 @@ npm run lint      # ESLint
 | Route | Description |
 |---|---|
 | `/login` | Email + password login form |
-| `/register` | Account registration |
+| `/register` | Dead stub — immediately redirects to `/login`. No self-service signup flow is wired up. |
 
-Session is managed via `AuthContext`. Access tokens are stored in `localStorage`; the Axios instance in `src/lib/api.ts` automatically calls `POST /auth/refresh` on 401 and retries the original request.
+Accounts are provisioned admin-only from the backend (`POST /users`) — an intentional access-control decision for this internal, multi-branch tool, not an oversight.
+
+Session is managed via `AuthContext`. Access tokens live in memory only (`src/lib/tokenStore.ts`) — never in `localStorage` — so an XSS payload can't read a live bearer token off the page. The refresh token stays in an HttpOnly cookie; the Axios instance in `src/lib/api.ts` calls `POST /auth/refresh` on mount and on 401 to (re)mint an access token, retrying the original request once.
 
 ---
 
@@ -203,7 +205,7 @@ The Axios instance (`src/lib/api.ts`):
 
 ### Auth
 
-`AuthContext` (`src/contexts/AuthContext.tsx`) wraps the entire app and exposes `useAuth()`. Tokens survive page refresh via `localStorage`. Protected routes are wrapped in `AuthGuard` which redirects unauthenticated users to `/login`.
+`AuthContext` (`src/contexts/AuthContext.tsx`) wraps the entire app and exposes `useAuth()`. The access token does not survive a page refresh by design — on mount, `AuthContext` silently exchanges the HttpOnly refresh cookie for a new access token via `refreshAccessToken()` (`src/lib/api.ts`) and re-hydrates the session from `/auth/me`. Protected routes are wrapped in `AuthGuard` which redirects unauthenticated users to `/login`.
 
 ### Component Structure
 
