@@ -19,6 +19,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { extractError } from '@/lib/errors';
+import QueryError from '@/components/QueryError';
+import { TableRowsSkeleton } from '@/components/loading/Skeletons';
 
 const UNITS: MeasurementUnit[] = ['KG', 'G', 'LITER', 'ML', 'PIECE', 'DOZEN', 'BAG', 'SACHET', 'CUP', 'TBSP', 'TSP'];
 
@@ -41,7 +43,7 @@ export default function UnitConversionsPage() {
   const [convResult, setConvResult] = useState<string | null>(null);
   const [convError, setConvError] = useState('');
 
-  const { data: conversions = [], isLoading } = useQuery({ queryKey: ['unit-conversions'], queryFn: () => unitConversionsApi.list().then((r) => r.data) });
+  const { data: conversions = [], isLoading, isError, error, refetch } = useQuery({ queryKey: ['unit-conversions'], queryFn: () => unitConversionsApi.list().then((r) => r.data) });
 
   const createMut = useMutation({
     mutationFn: (data: Partial<UnitConversion>) => unitConversionsApi.create(data),
@@ -136,7 +138,9 @@ export default function UnitConversionsPage() {
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  <TableRow><TableCell colSpan={4} className="text-center py-8"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></TableCell></TableRow>
+                  <TableRowsSkeleton rows={6} columns={4} />
+                ) : isError ? (
+                  <TableRow><TableCell colSpan={4} className="p-0"><QueryError error={error} onRetry={() => refetch()} /></TableCell></TableRow>
                 ) : conversions.length === 0 ? (
                   <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No conversions defined.</TableCell></TableRow>
                 ) : conversions.map((c: UnitConversion) => (

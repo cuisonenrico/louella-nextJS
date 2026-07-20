@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { usePageHeader } from '@/components/layout/usePageHeader';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -14,6 +14,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import QueryError from '@/components/QueryError';
+import { TableSkeleton } from '@/components/loading/Skeletons';
 
 const DISPLAY_ROLES: UserRole[] = ['VIEWER', 'INVENTORY', 'MANAGER', 'ADMIN'];
 const ROLE_LABELS: Record<string, string> = {
@@ -78,7 +80,7 @@ function FeatureHintTooltip({ featureKey }: { featureKey: string }) {
 function RoleMatrixTab() {
   const qc = useQueryClient();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['permissions-matrix'],
     queryFn: () => permissionsApi.matrix().then((r) => r.data),
   });
@@ -94,7 +96,11 @@ function RoleMatrixTab() {
   });
 
   if (isLoading) {
-    return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin" /></div>;
+    return <TableSkeleton rows={8} columns={5} className="py-4" />;
+  }
+
+  if (isError) {
+    return <QueryError error={error} onRetry={() => refetch()} />;
   }
 
   const features = data?.features ?? [];
@@ -162,10 +168,11 @@ function UserOverridesTab() {
   });
 
   // Per-user query — uses userId in the key so each user gets fresh data
-  const { data: userMatrix, isLoading: matrixLoading } = useQuery({
+  const { data: userMatrix, isLoading: matrixLoading, isError: matrixError, error: matrixErrorObj, refetch: refetchMatrix } = useQuery({
     queryKey: ['user-matrix', selectedUserId],
     queryFn: () => permissionsApi.userMatrix(selectedUserId!).then((r) => r.data),
     enabled: selectedUserId !== null,
+    placeholderData: keepPreviousData,
   });
 
   const invalidateUserMatrix = () =>
@@ -237,6 +244,8 @@ function UserOverridesTab() {
             <div className="p-4 space-y-2">
               {matrixLoading ? (
                 <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin" /></div>
+              ) : matrixError ? (
+                <QueryError error={matrixErrorObj} onRetry={() => refetchMatrix()} />
               ) : (
                 <UserFeatureList
                   features={features}

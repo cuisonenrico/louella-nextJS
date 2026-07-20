@@ -11,6 +11,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import QueryError from '@/components/QueryError';
+import { CardGridSkeleton } from '@/components/loading/Skeletons';
 
 const PRODUCT_TYPE_ORDER: ProductType[] = ['BREAD', 'CAKE', 'SPECIAL', 'MISCELLANEOUS'];
 const TYPE_LABELS: Record<ProductType, string> = {
@@ -69,7 +71,7 @@ export default function ProductOrderPage() {
   const [dragState, setDragState] = useState<{ type: ProductType; productId: number } | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
 
-  const { data: products = [], isLoading } = useQuery<Product[]>({
+  const { data: products = [], isLoading, isError, error, refetch } = useQuery<Product[]>({
     queryKey: ['products'],
     queryFn: () => productsApi.list().then((r) => r.data),
   });
@@ -164,9 +166,9 @@ export default function ProductOrderPage() {
         )}
 
         {isLoading ? (
-          <div className="flex justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          </div>
+          <CardGridSkeleton count={4} height="h-48" className="sm:grid-cols-1 xl:grid-cols-2" />
+        ) : isError ? (
+          <QueryError error={error} onRetry={() => refetch()} />
         ) : (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
             {PRODUCT_TYPE_ORDER.map((type) => {

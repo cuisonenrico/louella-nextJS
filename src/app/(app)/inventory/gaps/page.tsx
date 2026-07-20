@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { usePageHeader } from '@/components/layout/usePageHeader';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Loader2, AlertTriangle, CheckCircle } from 'lucide-react';
 import dayjs from 'dayjs';
 import { inventoryApi, branchesApi, jobsApi } from '@/lib/apiServices';
@@ -16,6 +16,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
+import QueryError from '@/components/QueryError';
+import { TableRowsSkeleton } from '@/components/loading/Skeletons';
 
 export default function InventoryGapsPage() {
   usePageHeader({ title: 'Inventory Gaps' });
@@ -29,10 +31,11 @@ export default function InventoryGapsPage() {
 
   const { data: branches = [] } = useQuery({ queryKey: ['branches'], queryFn: () => branchesApi.list().then((r) => r.data) });
 
-  const { data: gapsResult, isLoading } = useQuery({
+  const { data: gapsResult, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['inventory-gaps', startDate, endDate, branchId],
     queryFn: () => inventoryApi.gaps(startDate, endDate, branchId ? parseInt(branchId) : undefined).then((r) => r.data),
     enabled: !!startDate && !!endDate,
+    placeholderData: keepPreviousData,
   });
 
   const fillTodayMut = useMutation({
@@ -93,7 +96,9 @@ export default function InventoryGapsPage() {
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={3} className="text-center py-8"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></TableCell></TableRow>
+                <TableRowsSkeleton rows={6} columns={3} />
+              ) : isError ? (
+                <TableRow><TableCell colSpan={3} className="p-0"><QueryError error={error} onRetry={() => refetch()} /></TableCell></TableRow>
               ) : gaps.length === 0 ? (
                 <TableRow><TableCell colSpan={3} className="text-center py-8 text-muted-foreground">All entries present. No gaps found.</TableCell></TableRow>
               ) : gaps.map((g: GapEntry, i: number) => (

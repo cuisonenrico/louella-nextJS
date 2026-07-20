@@ -5,7 +5,7 @@ import { usePageHeader } from '@/components/layout/usePageHeader';
 import dayjs from 'dayjs';
 import Link from 'next/link';
 import {
-  Store, Loader2, ArrowRight, ClipboardList, CheckCircle2, FileEdit, Factory,
+  Store, ArrowRight, ClipboardList, CheckCircle2, FileEdit, Factory,
 } from 'lucide-react';
 import { dashboardApi, productionOrdersApi, branchesApi, inventoryApi } from '@/lib/apiServices';
 import type { DashboardSummary, InventoryDashboardData, ProductionOrder, Branch, Inventory } from '@/types';
@@ -17,6 +17,8 @@ import { PRODUCT_TYPE_COLORS, PRODUCT_TYPE_LABELS } from '@/lib/productTypeColor
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import QueryError from '@/components/QueryError';
+import { DashboardSkeleton } from '@/components/loading/Skeletons';
 import {
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip as RechartsTooltip,
 } from 'recharts';
@@ -26,7 +28,7 @@ export default function DashboardPage() {
   const today = dayjs().format('YYYY-MM-DD');
   const weekAgo = dayjs().subtract(6, 'day').format('YYYY-MM-DD');
 
-  const { data, isLoading, isError } = useQuery<DashboardSummary>({
+  const { data, isLoading, isError, error, refetch } = useQuery<DashboardSummary>({
     queryKey: ['dashboard-summary', today],
     queryFn: () => dashboardApi.summary(today).then((r) => r.data),
   });
@@ -81,13 +83,13 @@ export default function DashboardPage() {
         </div>
 
         {isLoading ? (
-          <div className="flex justify-center mt-16">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          </div>
+          <DashboardSkeleton />
         ) : isError || !data ? (
-          <Alert variant="destructive">
-            <AlertDescription>Failed to load dashboard data.</AlertDescription>
-          </Alert>
+          <QueryError
+            error={error ?? new Error('Failed to load dashboard data.')}
+            onRetry={() => refetch()}
+            className="mt-4"
+          />
         ) : (
           <>
             <KpiRow

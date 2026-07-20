@@ -18,6 +18,8 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import QueryError from '@/components/QueryError';
+import { TableRowsSkeleton } from '@/components/loading/Skeletons';
 
 interface BranchForm { name: string; address: string; phone: string; isActive: boolean; }
 const defaultForm: BranchForm = { name: '', address: '', phone: '', isActive: true };
@@ -32,7 +34,7 @@ export default function BranchesPage() {
   const [deleteTarget, setDeleteTarget] = useState<Branch | null>(null);
   const [formError, setFormError] = useState('');
 
-  const { data: branches = [], isLoading } = useQuery<Branch[]>({
+  const { data: branches = [], isLoading, isError, error, refetch } = useQuery<Branch[]>({
     queryKey: ['branches'],
     queryFn: () => branchesApi.list().then((r) => r.data),
   });
@@ -106,7 +108,9 @@ export default function BranchesPage() {
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={6} className="text-center py-8"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></TableCell></TableRow>
+                <TableRowsSkeleton rows={6} columns={6} />
+              ) : isError ? (
+                <TableRow><TableCell colSpan={6} className="p-0"><QueryError error={error} onRetry={() => refetch()} /></TableCell></TableRow>
               ) : filtered.length === 0 ? (
                 <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No branches found.</TableCell></TableRow>
               ) : filtered.map((b) => (

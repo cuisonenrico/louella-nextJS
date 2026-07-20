@@ -2,8 +2,8 @@
 
 import { useState, useMemo } from 'react';
 import { usePageHeader } from '@/components/layout/usePageHeader';
-import { useQuery } from '@tanstack/react-query';
-import { Loader2, DollarSign } from 'lucide-react';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { DollarSign } from 'lucide-react';
 import dayjs from 'dayjs';
 import { productionApi, branchesApi } from '@/lib/apiServices';
 import type { Branch, ConsumptionSummary } from '@/types';
@@ -13,6 +13,8 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
+import QueryError from '@/components/QueryError';
+import { CardGridSkeleton } from '@/components/loading/Skeletons';
 
 export default function ProductionCostPage() {
   usePageHeader({ title: 'Production Cost' });
@@ -22,10 +24,11 @@ export default function ProductionCostPage() {
 
   const { data: branches = [] } = useQuery({ queryKey: ['branches'], queryFn: () => branchesApi.list().then((r) => r.data) });
 
-  const { data: summary, isLoading } = useQuery({
+  const { data: summary, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['production-cost', date, branchId],
     queryFn: () => productionApi.consumptionSummary(date, branchId && branchId !== 'all' ? parseInt(branchId) : undefined).then((r) => r.data),
     enabled: !!date,
+    placeholderData: keepPreviousData,
   });
 
   const maxCost = useMemo(() => {
@@ -50,7 +53,9 @@ export default function ProductionCostPage() {
         </div>
 
         {isLoading ? (
-          <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
+          <CardGridSkeleton count={4} height="h-24" />
+        ) : isError ? (
+          <QueryError error={error} onRetry={() => refetch()} />
         ) : !summary ? (
           <p className="text-center text-muted-foreground py-12">No cost data for this date.</p>
         ) : (

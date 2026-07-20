@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { usePageHeader } from '@/components/layout/usePageHeader';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Loader2, ChevronDown, ChevronRight, ChevronLeft, Plus } from 'lucide-react';
 import dayjs from 'dayjs';
 import { toast } from 'sonner';
@@ -19,6 +19,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import QueryError from '@/components/QueryError';
+import { TableRowsSkeleton } from '@/components/loading/Skeletons';
 
 const ADJ_TYPES: AdjustmentType[] = ['PULL_IN', 'PULL_OUT', 'ANOMALY'];
 
@@ -42,10 +44,11 @@ export default function InventoryAdjustmentsPage() {
   const { data: branches = [] } = useQuery({ queryKey: ['branches'], queryFn: () => branchesApi.list().then((r) => r.data) });
   const bid = branchId ? parseInt(branchId) : (branches.length > 0 ? branches[0].id : 0);
 
-  const { data: inventory = [], isLoading } = useQuery({
+  const { data: inventory = [], isLoading, isError, error, refetch } = useQuery({
     queryKey: ['inv-adj', bid, date],
     queryFn: () => inventoryApi.byBranchDate(bid, date).then((r) => r.data),
     enabled: bid > 0,
+    placeholderData: keepPreviousData,
   });
 
   const createAdjMut = useMutation({
@@ -126,7 +129,9 @@ export default function InventoryAdjustmentsPage() {
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={7} className="text-center py-8"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></TableCell></TableRow>
+                <TableRowsSkeleton rows={6} columns={7} />
+              ) : isError ? (
+                <TableRow><TableCell colSpan={7} className="p-0"><QueryError error={error} onRetry={() => refetch()} /></TableCell></TableRow>
               ) : inventory.length === 0 ? (
                 <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No inventory for this date.</TableCell></TableRow>
               ) : inventory.map((inv: Inventory) => {

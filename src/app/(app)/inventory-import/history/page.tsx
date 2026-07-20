@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { usePageHeader } from '@/components/layout/usePageHeader';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Trash2, Loader2, History } from 'lucide-react';
 import { importLogsApi, branchesApi } from '@/lib/apiServices';
 import { useAuth } from '@/contexts/AuthContext';
@@ -13,6 +13,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import QueryError from '@/components/QueryError';
+import { TableSkeleton } from '@/components/loading/Skeletons';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,12 +47,13 @@ export default function ImportHistoryPage() {
     queryFn: () => branchesApi.list().then((r) => r.data),
   });
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error: logsError, refetch } = useQuery({
     queryKey: ['import-logs', branchId, page],
     queryFn: () =>
       importLogsApi
         .list({ branchId: branchId ? parseInt(branchId) : undefined, page, limit })
         .then((r) => r.data),
+    placeholderData: keepPreviousData,
   });
 
   const deleteMut = useMutation({
@@ -100,9 +103,9 @@ export default function ImportHistoryPage() {
           </CardHeader>
           <CardContent className="p-0">
             {isLoading ? (
-              <div className="flex justify-center py-12">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
+              <TableSkeleton rows={6} columns={5} className="p-4" />
+            ) : isError ? (
+              <QueryError error={logsError} onRetry={() => refetch()} />
             ) : !data || data.items.length === 0 ? (
               <p className="text-center text-sm text-muted-foreground py-12">No imports found.</p>
             ) : (

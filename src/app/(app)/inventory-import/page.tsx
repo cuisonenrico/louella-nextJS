@@ -5,7 +5,7 @@ import { usePageHeader } from '@/components/layout/usePageHeader';
 import { useMutation } from '@tanstack/react-query';
 import { Loader2, Upload, FileSpreadsheet, CheckCircle, AlertTriangle } from 'lucide-react';
 import { inventoryImportApi, branchesApi, importLogsApi } from '@/lib/apiServices';
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import type { Branch, DryRunResult, InventoryImportResult } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -39,6 +39,7 @@ export default function InventoryImportPage() {
     queryFn: () =>
       importLogsApi.list({ branchId: parseInt(branchId), limit: 5 }).then((r) => r.data.items),
     enabled: !!branchId && step === 'branch',
+    placeholderData: keepPreviousData,
   });
 
   const previewMut = useMutation({

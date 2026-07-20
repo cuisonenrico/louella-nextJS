@@ -20,6 +20,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import QueryError from '@/components/QueryError';
+import { TableRowsSkeleton } from '@/components/loading/Skeletons';
 
 const PRODUCT_TYPES: ProductType[] = ['BREAD', 'CAKE', 'SPECIAL', 'MISCELLANEOUS'];
 
@@ -40,12 +42,13 @@ const defaultForm: ProductFormData = {
 };
 
 function ProductPriceHistoryTab({ productId }: { productId: number }) {
-  const { data: history = [], isLoading } = useQuery<ProductPriceHistory[]>({
+  const { data: history = [], isLoading, isError, error, refetch } = useQuery<ProductPriceHistory[]>({
     queryKey: ['product-price-history', productId],
     queryFn: () => productsApi.priceHistory(productId).then((r) => r.data),
   });
 
   if (isLoading) return <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin" /></div>;
+  if (isError) return <QueryError error={error} onRetry={() => refetch()} />;
   if (history.length === 0) return <p className="text-muted-foreground py-2">No price changes recorded yet.</p>;
 
   return (
@@ -79,7 +82,7 @@ export default function ProductsPage() {
   const [formError, setFormError] = useState('');
   const [activeTab, setActiveTab] = useState('details');
 
-  const { data: products = [], isLoading } = useQuery<Product[]>({
+  const { data: products = [], isLoading, isError, error, refetch } = useQuery<Product[]>({
     queryKey: ['products'],
     queryFn: () => productsApi.list().then((r) => r.data),
   });
@@ -178,7 +181,9 @@ export default function ProductsPage() {
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={6} className="text-center py-8"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></TableCell></TableRow>
+                <TableRowsSkeleton rows={6} columns={6} />
+              ) : isError ? (
+                <TableRow><TableCell colSpan={6} className="p-0"><QueryError error={error} onRetry={() => refetch()} /></TableCell></TableRow>
               ) : filtered.length === 0 ? (
                 <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No products found.</TableCell></TableRow>
               ) : (

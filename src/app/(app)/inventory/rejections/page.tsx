@@ -3,12 +3,12 @@
 import { Suspense, useState } from 'react';
 import { usePageHeader } from '@/components/layout/usePageHeader';
 import { useSearchParams } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
   Legend, ResponsiveContainer,
 } from 'recharts';
-import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import dayjs from 'dayjs';
 import { branchesApi, inventoryApi } from '@/lib/apiServices';
 import type { Branch, RejectionByProductItem } from '@/types';
@@ -21,6 +21,8 @@ import { Input } from '@/components/ui/input';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import QueryError from '@/components/QueryError';
+import { DashboardSkeleton } from '@/components/loading/Skeletons';
 
 const PAGE_SIZE = 15;
 
@@ -41,10 +43,11 @@ function RejectionsReport() {
   });
 
   const branchId = branch === 'all' ? undefined : branch;
-  const { data = [], isLoading, isError } = useQuery<RejectionByProductItem[]>({
+  const { data = [], isLoading, isError, error, refetch } = useQuery<RejectionByProductItem[]>({
     queryKey: ['rejection-by-product', from, to, branchId, undefined],
     queryFn: () => inventoryApi.rejectionByProduct(from, to, branchId).then((r) => r.data),
     staleTime: 5 * 60 * 1000,
+    placeholderData: keepPreviousData,
   });
 
   const ranked = rankByRejection(data);
@@ -105,13 +108,9 @@ function RejectionsReport() {
       </div>
 
       {isLoading ? (
-        <div className="flex justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
+        <DashboardSkeleton />
       ) : isError ? (
-        <Alert variant="destructive">
-          <AlertDescription>Failed to load rejection data.</AlertDescription>
-        </Alert>
+        <QueryError error={error} onRetry={() => refetch()} />
       ) : ranked.length === 0 ? (
         <Alert>
           <AlertDescription>No delivery data for this period.</AlertDescription>
@@ -191,13 +190,7 @@ export default function RejectionsPage() {
   return (
     <>
         {/* useSearchParams must sit under a Suspense boundary for the static build */}
-        <Suspense
-          fallback={
-            <div className="flex justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
-          }
-        >
+        <Suspense fallback={<DashboardSkeleton />}>
           <RejectionsReport />
         </Suspense>
       </>

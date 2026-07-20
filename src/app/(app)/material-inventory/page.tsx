@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { usePageHeader } from '@/components/layout/usePageHeader';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, Loader2, Plus, Trash2, Pencil, Settings2 } from 'lucide-react';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ChevronLeft, ChevronRight, Plus, Trash2, Pencil, Settings2 } from 'lucide-react';
+import QueryError from '@/components/QueryError';
+import { TableSkeleton } from '@/components/loading/Skeletons';
 import { materialInventoryApi, materialsApi, suppliersApi } from '@/lib/apiServices';
 import type { Material, MaterialInventory, Supplier } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -47,10 +49,11 @@ export default function MaterialInventoryPage() {
 
   const { data: materials = [] } = useQuery<Material[]>({ queryKey: ['materials'], queryFn: () => materialsApi.list().then((r) => r.data) });
   const { data: suppliers = [] } = useQuery<Supplier[]>({ queryKey: ['suppliers'], queryFn: () => suppliersApi.list().then((r) => r.data) });
-  const { data: rows = [], isLoading } = useQuery<MaterialInventory[]>({
+  const { data: rows = [], isLoading, isError, error, refetch } = useQuery<MaterialInventory[]>({
     queryKey: ['material-inventory', filterDate],
     queryFn: () => materialInventoryApi.byDate(filterDate).then((r) => r.data),
     enabled: !!filterDate,
+    placeholderData: keepPreviousData,
   });
 
   const initMutation = useMutation({
@@ -184,7 +187,9 @@ export default function MaterialInventoryPage() {
 
           {/* Sheet */}
           {isLoading || initMutation.isPending ? (
-            <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
+            <TableSkeleton rows={8} columns={5} className="py-4" />
+          ) : isError ? (
+            <QueryError error={error} onRetry={() => refetch()} />
           ) : rows.length === 0 ? (
             <div className="flex justify-center py-12 text-muted-foreground">No materials for this date.</div>
           ) : (

@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { usePageHeader } from '@/components/layout/usePageHeader';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import dayjs from 'dayjs';
 import {
@@ -24,6 +24,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { ProductionOrderFormDialog } from './components/ProductionOrderFormDialog';
 import ProductionTabNav from '@/app/(app)/production/components/ProductionTabNav';
 import { extractError } from '@/lib/errors';
+import { TableSkeleton } from '@/components/loading/Skeletons';
+import QueryError from '@/components/QueryError';
 
 const PRODUCT_TYPE_ORDER: ProductType[] = ['BREAD', 'CAKE', 'SPECIAL', 'MISCELLANEOUS'];
 
@@ -74,10 +76,11 @@ export default function ProductionOrdersPage() {
   const activeProducts = useMemo(() => products.filter((p) => p.isActive), [products]);
   const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
 
-  const { data: orders = [], isLoading } = useQuery<ProductionOrder[]>({
+  const { data: orders = [], isLoading, isError, error, refetch } = useQuery<ProductionOrder[]>({
     queryKey: ['production-orders', filterDate, activeBranchId],
     queryFn: () => productionOrdersApi.byDate(filterDate, activeBranchId ?? undefined).then((r) => r.data),
     enabled: activeBranches.length > 0,
+    placeholderData: keepPreviousData,
   });
 
   // ── Status & Delete Mutations ──
@@ -261,7 +264,9 @@ export default function ProductionOrdersPage() {
 
           {/* ── Orders List ── */}
           {isLoading ? (
-            <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
+            <TableSkeleton rows={6} columns={5} className="py-4" />
+          ) : isError ? (
+            <QueryError error={error} onRetry={() => refetch()} />
           ) : orders.length === 0 ? (
             <Card className="shadow-none">
               <CardContent className="py-12 text-center text-muted-foreground">

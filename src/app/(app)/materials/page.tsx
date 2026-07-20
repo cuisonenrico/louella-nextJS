@@ -20,6 +20,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import QueryError from '@/components/QueryError';
+import { TableRowsSkeleton } from '@/components/loading/Skeletons';
 import dayjs from 'dayjs';
 
 const UNITS: MeasurementUnit[] = ['KG', 'G', 'LITER', 'ML', 'PIECE', 'DOZEN', 'BAG', 'SACHET', 'CUP', 'TBSP', 'TSP'];
@@ -37,7 +39,7 @@ export default function MaterialsPage() {
   const [deleteTarget, setDeleteTarget] = useState<Material | null>(null);
   const [formError, setFormError] = useState('');
 
-  const { data: materials = [], isLoading } = useQuery({ queryKey: ['materials'], queryFn: () => materialsApi.list().then((r) => r.data) });
+  const { data: materials = [], isLoading, isError, error, refetch } = useQuery({ queryKey: ['materials'], queryFn: () => materialsApi.list().then((r) => r.data) });
   const { data: priceHistory = [] } = useQuery({
     queryKey: ['materialPriceHistory', editTarget?.id],
     queryFn: () => materialsApi.priceHistory(editTarget!.id).then((r) => r.data),
@@ -102,7 +104,9 @@ export default function MaterialsPage() {
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={5} className="text-center py-8"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></TableCell></TableRow>
+                <TableRowsSkeleton rows={6} columns={5} />
+              ) : isError ? (
+                <TableRow><TableCell colSpan={5} className="p-0"><QueryError error={error} onRetry={() => refetch()} /></TableCell></TableRow>
               ) : filtered.length === 0 ? (
                 <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No materials found.</TableCell></TableRow>
               ) : filtered.map((m: Material) => (

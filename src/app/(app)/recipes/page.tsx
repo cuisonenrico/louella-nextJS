@@ -20,6 +20,8 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import QueryError from '@/components/QueryError';
+import { CardGridSkeleton } from '@/components/loading/Skeletons';
 
 const UNITS: MeasurementUnit[] = ['KG', 'G', 'LITER', 'ML', 'PIECE', 'DOZEN', 'BAG', 'SACHET', 'CUP', 'TBSP', 'TSP'];
 
@@ -49,7 +51,7 @@ export default function RecipesPage() {
   const [notes, setNotes] = useState('');
   const [ingredients, setIngredients] = useState<IngredientRow[]>([]);
 
-  const { data: recipes = [], isLoading } = useQuery({ queryKey: ['recipes'], queryFn: () => recipesApi.list().then((r) => r.data) });
+  const { data: recipes = [], isLoading, isError, error, refetch } = useQuery({ queryKey: ['recipes'], queryFn: () => recipesApi.list().then((r) => r.data) });
   const { data: products = [] } = useQuery({ queryKey: ['products'], queryFn: () => productsApi.list().then((r) => r.data) });
   const { data: materials = [] } = useQuery({ queryKey: ['materials'], queryFn: () => materialsApi.list().then((r) => r.data) });
 
@@ -124,7 +126,9 @@ export default function RecipesPage() {
         </div>
 
         {isLoading ? (
-          <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
+          <CardGridSkeleton count={6} height="h-32" className="md:grid-cols-2 xl:grid-cols-3" />
+        ) : isError ? (
+          <QueryError error={error} onRetry={() => refetch()} />
         ) : filtered.length === 0 ? (
           <p className="text-center text-muted-foreground py-12">No recipes found.</p>
         ) : (

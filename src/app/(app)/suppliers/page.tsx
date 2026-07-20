@@ -19,6 +19,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import QueryError from '@/components/QueryError';
+import { TableRowsSkeleton } from '@/components/loading/Skeletons';
 
 interface SupplierForm { name: string; contact: string; phone: string; email: string; address: string; isActive: boolean; }
 const defaultForm: SupplierForm = { name: '', contact: '', phone: '', email: '', address: '', isActive: true };
@@ -33,7 +35,7 @@ export default function SuppliersPage() {
   const [deleteTarget, setDeleteTarget] = useState<Supplier | null>(null);
   const [formError, setFormError] = useState('');
 
-  const { data: suppliers = [], isLoading } = useQuery({ queryKey: ['suppliers'], queryFn: () => suppliersApi.list().then((r) => r.data) });
+  const { data: suppliers = [], isLoading, isError, error, refetch } = useQuery({ queryKey: ['suppliers'], queryFn: () => suppliersApi.list().then((r) => r.data) });
 
   const createMutation = useMutation({
     mutationFn: (data: Partial<Supplier>) => suppliersApi.create(data),
@@ -92,7 +94,9 @@ export default function SuppliersPage() {
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={6} className="text-center py-8"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></TableCell></TableRow>
+                <TableRowsSkeleton rows={6} columns={6} />
+              ) : isError ? (
+                <TableRow><TableCell colSpan={6} className="p-0"><QueryError error={error} onRetry={() => refetch()} /></TableCell></TableRow>
               ) : filtered.length === 0 ? (
                 <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No suppliers found.</TableCell></TableRow>
               ) : filtered.map((s: Supplier) => (

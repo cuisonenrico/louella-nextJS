@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { usePageHeader } from '@/components/layout/usePageHeader';
 import Link from 'next/link';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2 } from 'lucide-react';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
+import { TableSkeleton } from '@/components/loading/Skeletons';
+import QueryError from '@/components/QueryError';
 import dayjs from 'dayjs';
 import { branchesApi, inventoryApi, productionApi, productionOrdersApi, productsApi } from '@/lib/apiServices';
 import type { Branch, Inventory, Product, Production, ProductionOrder, ProductType } from '@/types';
@@ -40,16 +41,19 @@ export default function ProductionPage() {
   const prodQuery = useQuery({
     queryKey: ['production', filterDate],
     queryFn: () => productionApi.byDateRange(filterDate).then((r) => r.data as Production[]),
+    placeholderData: keepPreviousData,
   });
 
   const invQuery = useQuery({
     queryKey: ['inventory-for-production', filterDate],
     queryFn: () => inventoryApi.byDateRange(filterDate).then((r) => r.data as Inventory[]),
+    placeholderData: keepPreviousData,
   });
 
   const { data: rawOrders = [] } = useQuery<ProductionOrder[]>({
     queryKey: ['planned-yield', filterDate],
     queryFn: () => productionOrdersApi.byDate(filterDate).then((r) => r.data as ProductionOrder[]),
+    placeholderData: keepPreviousData,
   });
 
   const plannedYields = useMemo(() => buildFinalizedPlannedYields(rawOrders), [rawOrders]);
@@ -125,6 +129,9 @@ export default function ProductionPage() {
   const today = dayjs().format('YYYY-MM-DD');
   const totalPending = pendingProduction.size + pendingInventory.size;
   const isLoading = prodQuery.isLoading || invQuery.isLoading;
+  const isError = prodQuery.isError || invQuery.isError;
+  const loadError = prodQuery.error ?? invQuery.error;
+  const refetchAll = () => { void prodQuery.refetch(); void invQuery.refetch(); };
 
   const isRowDirty = (row: ProdRow): boolean => {
     if (pendingProduction.has(row.productId)) return true;
@@ -199,7 +206,9 @@ export default function ProductionPage() {
 
           {/* Continuous production sheet */}
           {isLoading ? (
-            <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
+            <TableSkeleton rows={8} columns={6} className="py-4" />
+          ) : isError ? (
+            <QueryError error={loadError} onRetry={refetchAll} />
           ) : allRows.length === 0 ? (
             <p className="text-center text-muted-foreground py-12">No active products found.</p>
           ) : (

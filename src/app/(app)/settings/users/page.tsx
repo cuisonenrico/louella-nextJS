@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { usePageHeader } from '@/components/layout/usePageHeader';
 import { useState, useCallback, useEffect } from 'react';
 import { toast } from 'sonner';
@@ -21,6 +21,8 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import QueryError from '@/components/QueryError';
+import { TableRowsSkeleton } from '@/components/loading/Skeletons';
 
 const ROLES: UserRole[] = ['VIEWER', 'INVENTORY', 'MANAGER', 'ADMIN'];
 const ROLE_LABELS: Record<string, string> = {
@@ -84,9 +86,10 @@ export default function UsersPage() {
   const [permTarget, setPermTarget] = useState<User | null>(null);
 
   // ── Queries ──
-  const { data: usersData, isLoading } = useQuery({
+  const { data: usersData, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['admin-users', page, debouncedSearch],
     queryFn: () => usersApi.list(page, 20, debouncedSearch || undefined).then((r) => r.data),
+    placeholderData: keepPreviousData,
   });
 
   const { data: branches = [] } = useQuery<Branch[]>({
@@ -279,7 +282,9 @@ export default function UsersPage() {
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={6} className="text-center py-8"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></TableCell></TableRow>
+                <TableRowsSkeleton rows={6} columns={6} />
+              ) : isError ? (
+                <TableRow><TableCell colSpan={6} className="p-0"><QueryError error={error} onRetry={() => refetch()} /></TableCell></TableRow>
               ) : users.length === 0 ? (
                 <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No users found.</TableCell></TableRow>
               ) : users.map((u) => (

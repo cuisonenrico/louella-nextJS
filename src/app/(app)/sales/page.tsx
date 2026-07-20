@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Loader2, TrendingUp, ShoppingCart, Truck, AlertTriangle, Calendar, MapPin, BarChart3, Download, Trophy } from 'lucide-react';
 import dayjs from 'dayjs';
 import { usePageHeader } from '@/components/layout/usePageHeader';
@@ -13,7 +13,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import QueryError from '@/components/QueryError';
+import { DashboardSkeleton } from '@/components/loading/Skeletons';
 import { PRODUCT_TYPE_COLORS } from '@/lib/productTypeColors';
 import type { ProductType } from '@/types';
 import {
@@ -59,9 +60,10 @@ export default function SalesPage() {
 
   const { data: branches = [] } = useQuery({ queryKey: ['branches'], queryFn: () => branchesApi.list().then((r) => r.data) });
 
-  const { data: dashboard, isLoading, isError } = useQuery({
+  const { data: dashboard, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['inventory-dashboard', startDate, endDate, branchId],
     queryFn: () => inventoryApi.dashboard(startDate, endDate, branchId || undefined).then((r) => r.data),
+    placeholderData: keepPreviousData,
   });
 
   const typeEntries = useMemo(() => (dashboard ? Object.entries(dashboard.revenueByType) : []), [dashboard]);
@@ -128,11 +130,13 @@ export default function SalesPage() {
   return (
     <>
         {isLoading ? (
-          <div className="flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
+          <DashboardSkeleton />
         ) : isError ? (
-          <Alert variant="destructive" className="mt-4">
-            <AlertDescription>Failed to load sales data.</AlertDescription>
-          </Alert>
+          <QueryError
+            error={error}
+            onRetry={() => refetch()}
+            className="mt-4"
+          />
         ) : !dashboard ? (
           <p className="text-center text-muted-foreground py-20">No data for the selected range.</p>
         ) : (

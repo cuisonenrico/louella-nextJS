@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import dayjs from 'dayjs';
 import { Loader2, Play, RefreshCw } from 'lucide-react';
 import QueryError from '@/components/QueryError';
+import { CardGridSkeleton } from '@/components/loading/Skeletons';
 import { jobsApi } from '@/lib/apiServices';
 import type { JobRun, JobRunsResponse } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -89,7 +90,7 @@ export default function JobsSettingsPage() {
         {runsQuery.isError ? (
           <QueryError error={runsQuery.error} onRetry={() => runsQuery.refetch()} />
         ) : runsQuery.isLoading ? (
-          <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
+          <CardGridSkeleton count={6} height="h-20" className="sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3" />
         ) : (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">

@@ -2,8 +2,8 @@
 
 import { useState, useMemo } from 'react';
 import { usePageHeader } from '@/components/layout/usePageHeader';
-import { useQuery } from '@tanstack/react-query';
-import { Loader2, BarChart3 } from 'lucide-react';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { BarChart3 } from 'lucide-react';
 import dayjs from 'dayjs';
 import { productionApi, branchesApi } from '@/lib/apiServices';
 import type { Branch, ProductionEfficiencyItem } from '@/types';
@@ -14,6 +14,8 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
+import QueryError from '@/components/QueryError';
+import { TableRowsSkeleton } from '@/components/loading/Skeletons';
 
 export default function ProductionEfficiencyPage() {
   usePageHeader({ title: 'Production Efficiency' });
@@ -25,10 +27,11 @@ export default function ProductionEfficiencyPage() {
 
   const { data: branches = [] } = useQuery({ queryKey: ['branches'], queryFn: () => branchesApi.list().then((r) => r.data) });
 
-  const { data: effItems = [], isLoading } = useQuery({
+  const { data: effItems = [], isLoading, isError, error, refetch } = useQuery({
     queryKey: ['production-efficiency', startDate, endDate, branchId],
     queryFn: () => productionApi.efficiency(startDate, endDate, branchId && branchId !== 'all' ? parseInt(branchId) : undefined).then((r) => r.data),
     enabled: !!startDate && !!endDate,
+    placeholderData: keepPreviousData,
   });
 
   const totals = useMemo(() => {
@@ -134,7 +137,9 @@ export default function ProductionEfficiencyPage() {
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={9} className="text-center py-8"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></TableCell></TableRow>
+                <TableRowsSkeleton rows={6} columns={9} />
+              ) : isError ? (
+                <TableRow><TableCell colSpan={9} className="p-0"><QueryError error={error} onRetry={() => refetch()} /></TableCell></TableRow>
               ) : effItems.length === 0 ? (
                 <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No efficiency data.</TableCell></TableRow>
               ) : effItems.map((item: ProductionEfficiencyItem) => (

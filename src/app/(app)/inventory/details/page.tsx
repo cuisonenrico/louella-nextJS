@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { usePageHeader } from '@/components/layout/usePageHeader';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, AlertTriangle, Info } from 'lucide-react';
 import dayjs from 'dayjs';
 import { useRouter } from 'next/navigation';
@@ -24,6 +24,7 @@ import InventoryAdjustmentsDialog from '../components/InventoryAdjustmentsDialog
 import { useInventoryDisplayRows } from '../hooks/useInventoryDisplayRows';
 // import RejectionByProductCard from '@/components/analytics/RejectionByProductCard';
 import QueryError from '@/components/QueryError';
+import { TableSkeleton } from '@/components/loading/Skeletons';
 
 const PRODUCT_TYPE_ORDER: ProductType[] = ['BREAD', 'CAKE', 'SPECIAL', 'MISCELLANEOUS'];
 
@@ -70,11 +71,13 @@ export default function InventoryDetailsPage() {
       }
       return inventoryApi.byDateRange(filterDateFrom, filterDateTo).then((r) => r.data);
     },
+    placeholderData: keepPreviousData,
   });
 
   const summaryQuery = useQuery<InventorySummaryData>({
     queryKey: ['inventory-summary', filterDateFrom, filterDateTo, filterBranch],
     queryFn: () => inventoryApi.summary(filterDateFrom, filterDateTo, filterBranch || undefined).then((r) => r.data),
+    placeholderData: keepPreviousData,
   });
 
   const rows = invQuery.data ?? [];
@@ -283,7 +286,7 @@ export default function InventoryDetailsPage() {
               className="my-6"
             />
           ) : invQuery.isLoading ? (
-            <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
+            <TableSkeleton rows={8} columns={6} className="py-4" />
           ) : displayRows.length === 0 ? (
             <p className="text-center text-muted-foreground py-12">No inventory data. Select a branch and date.</p>
           ) : (

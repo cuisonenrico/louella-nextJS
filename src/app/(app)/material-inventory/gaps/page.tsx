@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { usePageHeader } from '@/components/layout/usePageHeader';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Loader2, AlertTriangle, CheckCircle } from 'lucide-react';
 import dayjs from 'dayjs';
 import { materialInventoryApi, jobsApi } from '@/lib/apiServices';
@@ -15,6 +15,8 @@ import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import QueryError from '@/components/QueryError';
+import { TableRowsSkeleton } from '@/components/loading/Skeletons';
 
 export default function MaterialInventoryGapsPage() {
   usePageHeader({ title: 'Material Stock Gaps' });
@@ -25,10 +27,11 @@ export default function MaterialInventoryGapsPage() {
   const [endDate, setEndDate] = useState(today);
   const [message, setMessage] = useState('');
 
-  const { data: gapsResult, isLoading } = useQuery({
+  const { data: gapsResult, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['material-inventory-gaps', startDate, endDate],
     queryFn: () => materialInventoryApi.gaps(startDate, endDate).then((r) => r.data),
     enabled: !!startDate && !!endDate,
+    placeholderData: keepPreviousData,
   });
 
   const fillTodayMut = useMutation({
@@ -78,7 +81,9 @@ export default function MaterialInventoryGapsPage() {
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={2} className="text-center py-8"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></TableCell></TableRow>
+                <TableRowsSkeleton rows={6} columns={2} />
+              ) : isError ? (
+                <TableRow><TableCell colSpan={2} className="p-0"><QueryError error={error} onRetry={() => refetch()} /></TableCell></TableRow>
               ) : gaps.length === 0 ? (
                 <TableRow><TableCell colSpan={2} className="text-center py-8 text-muted-foreground">All entries present. No gaps found.</TableCell></TableRow>
               ) : gaps.map((g: MaterialGapEntry, i: number) => (
