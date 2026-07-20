@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { Loader2 } from 'lucide-react';
+import { AppShellSkeleton } from '@/components/loading/Skeletons';
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading, user } = useAuth();
@@ -22,11 +22,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   }, [isLoading, isAuthenticated, user, router, pathname]);
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
+    return <AppShellSkeleton />;
   }
 
   if (!isAuthenticated) return null;
