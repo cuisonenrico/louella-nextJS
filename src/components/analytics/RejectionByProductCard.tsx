@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { ArrowRight, Loader2 } from 'lucide-react';
 import dayjs from 'dayjs';
 import { inventoryApi } from '@/lib/apiServices';
@@ -82,6 +82,7 @@ export default function RejectionByProductCard({
         .rejectionByProduct(startDate, endDate, branchId, type)
         .then((r) => r.data),
     staleTime: 5 * 60 * 1000, // avoid re-fetching on every focus/remount
+    placeholderData: keepPreviousData,
   });
 
   const rejected = rankByRejection(data.filter((item) => item.totalReject > 0));

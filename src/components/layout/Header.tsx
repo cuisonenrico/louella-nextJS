@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePageHeaderStore } from '@/lib/pageHeaderStore';
 import { DRAWER_WIDTH } from './Sidebar';
 import { LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -14,9 +15,12 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-export default function Header({ title, sidebarWidth = DRAWER_WIDTH, headerContent, headerActions }: { title?: string; sidebarWidth?: number; headerContent?: React.ReactNode; headerActions?: React.ReactNode }) {
+export default function Header({ sidebarWidth = DRAWER_WIDTH }: { sidebarWidth?: number }) {
   const { user, logout } = useAuth();
   const router = useRouter();
+  const title = usePageHeaderStore((s) => s.title);
+  const headerContent = usePageHeaderStore((s) => s.content);
+  const headerActions = usePageHeaderStore((s) => s.actions);
 
   const handleLogout = async () => {
     await logout();
