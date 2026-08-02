@@ -1,0 +1,129 @@
+[
+  {"branchId": 1, "productId": 85, "date": "2026-01-19", "quantity": 8},
+  {"branchId": 1, "productId": 86, "date": "2026-01-19", "quantity": 6},
+  {"branchId": 1, "productId": 87, "date": "2026-01-19", "quantity": 42},
+
+  {"branchId": 1, "productId": 85, "date": "2026-01-20", "quantity": 10},
+  {"branchId": 1, "productId": 86, "date": "2026-01-20", "quantity": 9},
+  {"branchId": 1, "productId": 87, "date": "2026-01-20", "quantity": 55},
+
+  {"branchId": 1, "productId": 85, "date": "2026-01-21", "quantity": 7},
+  {"branchId": 1, "productId": 86, "date": "2026-01-21", "quantity": 7},
+  {"branchId": 1, "productId": 87, "date": "2026-01-21", "quantity": 38},
+
+  {"branchId": 1, "productId": 85, "date": "2026-01-22", "quantity": 5},
+  {"branchId": 1, "productId": 86, "date": "2026-01-22", "quantity": 5},
+  {"branchId": 1, "productId": 87, "date": "2026-01-22", "quantity": 30},
+
+  {"branchId": 1, "productId": 85, "date": "2026-01-23", "quantity": 9},
+  {"branchId": 1, "productId": 86, "date": "2026-01-23", "quantity": 8},
+  {"branchId": 1, "productId": 87, "date": "2026-01-23", "quantity": 47},
+
+  {"branchId": 1, "productId": 85, "date": "2026-01-24", "quantity": 12},
+  {"branchId": 1, "productId": 86, "date": "2026-01-24", "quantity": 11},
+  {"branchId": 1, "productId": 87, "date": "2026-01-24", "quantity": 60, "notes": "Weekend peak"},
+
+  {"branchId": 1, "productId": 85, "date": "2026-01-25", "quantity": 14},
+  {"branchId": 1, "productId": 86, "date": "2026-01-25", "quantity": 13},
+  {"branchId": 1, "productId": 87, "date": "2026-01-25", "quantity": 65, "notes": "Weekend peak"},
+
+  {"branchId": 1, "productId": 85, "date": "2026-01-26", "quantity": 8},
+  {"branchId": 1, "productId": 86, "date": "2026-01-26", "quantity": 7},
+  {"branchId": 1, "productId": 87, "date": "2026-01-26", "quantity": 40},
+
+  {"branchId": 1, "productId": 85, "date": "2026-01-27", "quantity": 6},
+  {"branchId": 1, "productId": 86, "date": "2026-01-27", "quantity": 6},
+  {"branchId": 1, "productId": 87, "date": "2026-01-27", "quantity": 35},
+
+  {"branchId": 1, "productId": 85, "date": "2026-01-28", "quantity": 9},
+  {"branchId": 1, "productId": 86, "date": "2026-01-28", "quantity": 8},
+  {"branchId": 1, "productId": 87, "date": "2026-01-28", "quantity": 44},
+
+  {"branchId": 1, "productId": 85, "date": "2026-01-29", "quantity": 10},
+  {"branchId": 1, "productId": 86, "date": "2026-01-29", "quantity": 9},
+  {"branchId": 1, "productId": 87, "date": "2026-01-29", "quantity": 50},
+
+  {"branchId": 1, "productId": 85, "date": "2026-01-30", "quantity": 7},
+  {"branchId": 1, "productId": 86, "date": "2026-01-30", "quantity": 7},
+  {"branchId": 1, "productId": 87, "date": "2026-01-30", "quantity": 36},
+
+  {"branchId": 1, "productId": 85, "date": "2026-01-31", "quantity": 13},
+  {"branchId": 1, "productId": 86, "date": "2026-01-31", "quantity": 12},
+  {"branchId": 1, "productId": 87, "date": "2026-01-31", "quantity": 62, "notes": "Weekend peak"},
+
+  {"branchId": 1, "productId": 85, "date": "2026-02-01", "quantity": 15},
+  {"branchId": 1, "productId": 86, "date": "2026-02-01", "quantity": 14},
+  {"branchId": 1, "productId": 87, "date": "2026-02-01", "quantity": 68, "notes": "Weekend peak"},
+
+  {"branchId": 1, "productId": 85, "date": "2026-02-02", "quantity": 8},
+  {"branchId": 1, "productId": 86, "date": "2026-02-02", "quantity": 7},
+  {"branchId": 1, "productId": 87, "date": "2026-02-02", "quantity": 41},
+
+  {"branchId": 1, "productId": 85, "date": "2026-02-03", "quantity": 6},
+  {"branchId": 1, "productId": 86, "date": "2026-02-03", "quantity": 5},
+  {"branchId": 1, "productId": 87, "date": "2026-02-03", "quantity": 32},
+
+  {"branchId": 1, "productId": 85, "date": "2026-02-04", "quantity": 9},
+  {"branchId": 1, "productId": 86, "date": "2026-02-04", "quantity": 8},
+  {"branchId": 1, "productId": 87, "date": "2026-02-04", "quantity": 46},
+
+  {"branchId": 1, "productId": 85, "date": "2026-02-05", "quantity": 10},
+  {"branchId": 1, "productId": 86, "date": "2026-02-05", "quantity": 10},
+  {"branchId": 1, "productId": 87, "date": "2026-02-05", "quantity": 52},
+
+  {"branchId": 1, "productId": 85, "date": "2026-02-06", "quantity": 7},
+  {"branchId": 1, "productId": 86, "date": "2026-02-06", "quantity": 6},
+  {"branchId": 1, "productId": 87, "date": "2026-02-06", "quantity": 37},
+
+  {"branchId": 1, "productId": 85, "date": "2026-02-07", "quantity": 13},
+  {"branchId": 1, "productId": 86, "date": "2026-02-07", "quantity": 12},
+  {"branchId": 1, "productId": 87, "date": "2026-02-07", "quantity": 63, "notes": "Weekend peak"},
+
+  {"branchId": 1, "productId": 85, "date": "2026-02-08", "quantity": 16},
+  {"branchId": 1, "productId": 86, "date": "2026-02-08", "quantity": 15},
+  {"branchId": 1, "productId": 87, "date": "2026-02-08", "quantity": 70, "notes": "Weekend peak"},
+
+  {"branchId": 1, "productId": 85, "date": "2026-02-09", "quantity": 8},
+  {"branchId": 1, "productId": 86, "date": "2026-02-09", "quantity": 7},
+  {"branchId": 1, "productId": 87, "date": "2026-02-09", "quantity": 43},
+
+  {"branchId": 1, "productId": 85, "date": "2026-02-10", "quantity": 6},
+  {"branchId": 1, "productId": 86, "date": "2026-02-10", "quantity": 5},
+  {"branchId": 1, "productId": 87, "date": "2026-02-10", "quantity": 33},
+
+  {"branchId": 1, "productId": 85, "date": "2026-02-11", "quantity": 9},
+  {"branchId": 1, "productId": 86, "date": "2026-02-11", "quantity": 9},
+  {"branchId": 1, "productId": 87, "date": "2026-02-11", "quantity": 48},
+
+  {"branchId": 1, "productId": 85, "date": "2026-02-12", "quantity": 11},
+  {"branchId": 1, "productId": 86, "date": "2026-02-12", "quantity": 10},
+  {"branchId": 1, "productId": 87, "date": "2026-02-12", "quantity": 54},
+
+  {"branchId": 1, "productId": 85, "date": "2026-02-13", "quantity": 7},
+  {"branchId": 1, "productId": 86, "date": "2026-02-13", "quantity": 7},
+  {"branchId": 1, "productId": 87, "date": "2026-02-13", "quantity": 39},
+
+  {"branchId": 1, "productId": 85, "date": "2026-02-14", "quantity": 18, "notes": "Valentine's Day boost"},
+  {"branchId": 1, "productId": 86, "date": "2026-02-14", "quantity": 17, "notes": "Valentine's Day boost"},
+  {"branchId": 1, "productId": 87, "date": "2026-02-14", "quantity": 80, "notes": "Valentine's Day boost"},
+
+  {"branchId": 1, "productId": 85, "date": "2026-02-15", "quantity": 14},
+  {"branchId": 1, "productId": 86, "date": "2026-02-15", "quantity": 13},
+  {"branchId": 1, "productId": 87, "date": "2026-02-15", "quantity": 66, "notes": "Weekend peak"},
+
+  {"branchId": 1, "productId": 85, "date": "2026-02-16", "quantity": 8},
+  {"branchId": 1, "productId": 86, "date": "2026-02-16", "quantity": 7},
+  {"branchId": 1, "productId": 87, "date": "2026-02-16", "quantity": 40},
+
+  {"branchId": 1, "productId": 85, "date": "2026-02-17", "quantity": 7},
+  {"branchId": 1, "productId": 86, "date": "2026-02-17", "quantity": 6},
+  {"branchId": 1, "productId": 87, "date": "2026-02-17", "quantity": 35},
+
+  {"branchId": 1, "productId": 85, "date": "2026-02-18", "quantity": 10},
+  {"branchId": 1, "productId": 86, "date": "2026-02-18", "quantity": 9},
+  {"branchId": 1, "productId": 87, "date": "2026-02-18", "quantity": 51},
+
+  {"branchId": 1, "productId": 85, "date": "2026-02-19", "quantity": 9},
+  {"branchId": 1, "productId": 86, "date": "2026-02-19", "quantity": 8},
+  {"branchId": 1, "productId": 87, "date": "2026-02-19", "quantity": 45}
+]

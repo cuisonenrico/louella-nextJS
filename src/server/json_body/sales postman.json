@@ -1,0 +1,77 @@
+{
+      "name": "Sales",
+      "item": [
+        {
+          "name": "Sales by Branch + Date",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/sales/branch/1/date?date=2026-02-19",
+              "host": ["{{baseUrl}}"],
+              "path": ["sales", "branch", "1", "date"],
+              "query": [{ "key": "date", "value": "2026-02-19" }]
+            }
+          }
+        },
+        {
+          "name": "Sales by Branch (Date Range)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/sales/branch/1?startDate=2026-01-19&endDate=2026-02-19",
+              "host": ["{{baseUrl}}"],
+              "path": ["sales", "branch", "1"],
+              "query": [
+                { "key": "startDate", "value": "2026-01-19" },
+                { "key": "endDate", "value": "2026-02-19" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Sales by Branch + Product (Date Range)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/sales/branch/1/product/85?startDate=2026-01-19&endDate=2026-02-19",
+              "host": ["{{baseUrl}}"],
+              "path": ["sales", "branch", "1", "product", "85"],
+              "query": [
+                { "key": "startDate", "value": "2026-01-19" },
+                { "key": "endDate", "value": "2026-02-19" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Sales by Product Across All Branches (Date Range)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/sales/product/85?startDate=2026-01-19&endDate=2026-02-19",
+              "host": ["{{baseUrl}}"],
+              "path": ["sales", "product", "85"],
+              "query": [
+                { "key": "startDate", "value": "2026-01-19" },
+                { "key": "endDate", "value": "2026-02-19" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Daily Sales Summary by Branch (Date Range)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/sales/branch/1/summary?startDate=2026-01-19&endDate=2026-02-19",
+              "host": ["{{baseUrl}}"],
+              "path": ["sales", "branch", "1", "summary"],
+              "query": [
+                { "key": "startDate", "value": "2026-01-19" },
+                { "key": "endDate", "value": "2026-02-19" }
+              ]
+            }
+          }
+        }
+      ]
+    }

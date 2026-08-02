@@ -1,7 +1,8 @@
 # Single-Deploy Consolidation — Design
 
 **Date:** 2026-08-02
-**Status:** Approved, in implementation
+**Status:** Phase 1 implemented — see "Implementation notes" for where the
+build diverged from the plan, and "Outstanding" for what is not yet verified.
 **Branch:** `feature/single-deploy-consolidation` (louella-web)
 
 ## Problem
@@ -105,11 +106,17 @@ export { handle as GET, handle as POST, handle as PATCH,
          handle as PUT, handle as DELETE };
 ```
 
-`helmet` and `enableCors` move out of Nest into `next.config.ts` headers /
-middleware — security headers are now the whole app's concern, and Next owns
-the edge. CORS becomes largely moot for the web app (same origin) but is still
-required for the Flutter app's cross-origin calls; note that native mobile
-clients do not enforce CORS, so this is defense-in-depth only.
+`helmet` moves out of Nest into `next.config.ts` headers, so the security
+headers now cover the whole site rather than only the API — a real gain, since
+the Vercel-hosted pages previously got none of them. **CSP is deliberately not
+carried over:** helmet's `default-src 'self'` was fine for a JSON API but would
+break Next's inline bootstrap scripts, which need per-request nonces. A
+nonce-based CSP is worth doing and is tracked as outstanding work below.
+
+**CORS stays in Nest**, contrary to the initial sketch. The allowlist is
+dynamic (`ALLOWED_ORIGINS`) and credentialed, which Next's static `headers()`
+cannot express. It is also now largely vestigial: the web app is same-origin,
+and native mobile clients do not enforce CORS at all.
 
 ### The Web ↔ Node shim (primary risk)
 
@@ -124,20 +131,29 @@ back to Approach B rather than fight the runtime.
 
 ### Build pipeline
 
-Nest requires `emitDecoratorMetadata`, which Next's SWC/Turbopack compiler does
-not emit. Nest is therefore compiled by its own `tsc` pass before `next build`:
+The plan assumed Nest would need its own `tsc` pass, because Next's compiler
+was expected to drop `emitDecoratorMetadata`. **That turned out to be
+unnecessary** — Next's SWC reads both decorator flags straight from
+`tsconfig.json`, and the metadata survives the Turbopack build. Verified by
+observing DI-constructed guards and `class-validator` DTO rules working against
+a production build, not just `next dev`.
+
+So there is no separate server build. `tsconfig.json` gains:
 
 ```jsonc
-"scripts": {
-  "prebuild": "prisma generate && tsc -p tsconfig.server.json",
-  "build": "next build"
-}
+"experimentalDecorators": true,
+"emitDecoratorMetadata": true,
+"strictPropertyInitialization": false
 ```
 
-`next.config.ts` declares `serverExternalPackages` for `@nestjs/*`,
-`@prisma/client`, `firebase-admin`, and the AWS SDK so Next does not attempt to
-bundle reflection-dependent code. Vercel's file tracing pulls the compiled
-output into the function.
+`next.config.ts` declares `serverExternalPackages` for the Nest ecosystem and
+`class-transformer` / `class-validator`. This is not optional: Nest reaches
+`class-transformer/storage` through a bare `require` inside a try/catch, which
+the bundler cannot resolve statically — without it the build fails outright.
+Next already externalises `@prisma/client`, `express`, `bcrypt`,
+`firebase-admin`, and `@aws-sdk/*`.
+
+`prebuild` is still used, but only for `prisma generate`.
 
 ## Serverless-forced changes
 
@@ -146,7 +162,7 @@ These follow from leaving a long-lived container, independent of approach.
 | Concern | Change |
 |---|---|
 | **DB connections** | `DATABASE_URL` moves to the Supabase transaction pooler (`:6543`, `pgbouncer=true&connection_limit=1`). Session-mode `:5432` exhausts connections under lambda fan-out. Prisma `directUrl` keeps `:5432` for migrations. |
-| **CRON** | `ScheduleModule` and the three `@Cron` decorators stop firing. Replaced by `vercel.json` cron entries hitting the `/jobs/*` endpoints, authenticated by `CRON_SECRET`. A trigger endpoint is added for `morning-init`. |
+| **CRON** | `ScheduleModule` and the three `@Cron` decorators are removed. Replaced by `vercel.json` entries hitting a new `CronController` at `/api/v1/jobs/cron/*`, authenticated by `CRON_SECRET` via `CronSecretGuard`. Separate from the existing manual triggers because Vercel Cron issues **GET** with a shared secret, not authenticated POST. |
 | **Throttler** | `ThrottlerModule` is in-memory, so limits become per-instance and effectively unenforced. Documented as a known regression; the existing shared-bucket defect is tracked separately and not fixed here. |
 | **Cache** | `CacheModule` (45s TTL) likewise becomes per-instance. Acceptable — it is a latency optimization, not a correctness mechanism. |
 | **Region** | Vercel functions pinned to `hnd1` (Tokyo), co-located with Supabase. Net improvement over today's Korea→Tokyo hop. |
@@ -172,23 +188,80 @@ the same database.
 `louella-web`, not moved — the original is left on disk and marked deprecated.
 Deleting the repo is the user's call, made after the Flutter cutover.
 
+## Implementation notes
+
+Where the build diverged from the plan, and why:
+
+1. **No separate `tsc` build.** The predicted decorator-metadata problem did not
+   materialise; Next's SWC honours the tsconfig flags. This removed an entire
+   build stage and keeps `next dev` hot-reloading server code.
+2. **`strictPropertyInitialization: false`** added app-wide. 80 of the 82 type
+   errors from the relocated source were Nest DTOs declaring properties that
+   the ValidationPipe populates. The flag only affects class property
+   declarations and the frontend has zero classes, so the blast radius is
+   exactly the Nest DTOs it is meant for.
+3. **Two real type errors were fixed rather than suppressed.**
+   `jwt.strategy.ts` passed a possibly-undefined secret to passport-jwt, which
+   silently accepts every token when handed `undefined` — it now throws at
+   construction. The bridge's response body needed an explicitly
+   `ArrayBuffer`-backed view to satisfy `BodyInit`.
+4. **Three cron jobs became two endpoints.** Vercel's Hobby plan allows two
+   cron jobs per project. The two former 11 PM jobs now run back to back behind
+   `/jobs/cron/nightly`, which is also gentler on a connection-limited pooler
+   than firing both simultaneously. Each still records its own `JobRun`, and a
+   failure in the first does not skip the second.
+5. **Cron schedules are UTC**, while the business rules are Manila. Recorded in
+   `cron.controller.ts` because `vercel.json` cannot hold comments.
+6. **Test runners are split**: Jest owns `src/server` (18 suites carried over
+   unchanged), Vitest owns the frontend, with `src/server` excluded from its
+   glob. Rewriting 130 backend tests was not in scope for a deployment change.
+7. **The frontend API base URL is now the relative `/api/v1`.** Same-origin
+   removes the CORS preflight and makes the auth cookie first-party — which
+   also dissolves the `SameSite=none` requirement that previously existed only
+   because Vercel and Cloud Run were different sites.
+
 ## Verification
 
-- Spike gate: trivial endpoint responds through the shim under `next build` +
-  `next start`, not just `next dev`.
-- Existing backend Jest suites pass against the relocated source.
-- Existing web Vitest suites pass.
-- `next build` succeeds with the Nest prebuild in place.
-- Manual smoke of the highest-risk paths: login → refresh, an inventory read,
-  an inventory save with cascade, and one `/jobs/*` trigger.
+Performed against a production build (`next build` + `next start`), not
+`next dev`:
+
+- ✅ Routing, DI, and guards — `GET /api/v1/products` returns 401 from
+  `JwtAuthGuard` with `x-powered-by: Express`. The whole module graph resolves
+  at boot, so a DI failure would have thrown before any request.
+- ✅ Body parsing and decorator metadata — `POST /api/v1/auth/login` with an
+  invalid body returns the exact `class-validator` messages, and
+  `forbidNonWhitelisted` still rejects unknown properties.
+- ✅ Cron auth — 401 with no secret and with a wrong secret; 200 with the
+  correct one, with both jobs running independently.
+- ✅ 404 for unknown paths (Nest's router, not Next's).
+- ✅ Security headers present on every response.
+- ✅ `next build` succeeds; `/api/v1/[...path]` registered as dynamic.
+- ✅ 19 Jest suites / 130 tests pass. 4 Vitest suites / 51 tests pass.
+- ✅ 12 new `http-bridge` tests covering multi-value `Set-Cookie`, binary
+  payloads, chunked writes, `writeHead` headers, bodiless statuses, and
+  `Content-Length` invalidation.
+
+## Outstanding
+
+- ⛔ **DB-backed smoke test is blocked.** The Supabase pooler rejects the
+  configured credential — `FATAL: (ENOTFOUND) tenant/user
+  postgres.sdcfpfcgdxdeddvdmeyn not found` — reproduced with `prisma db
+  execute` outside the app entirely, so it is a pre-existing environment
+  problem, not a consequence of this work. Once credentials are restored,
+  verify: login round-trip and `Set-Cookie` over real HTTP, an inventory read,
+  an inventory save with cascade, and a real cron run.
+- Function bundle size has not been measured against Vercel's limit.
+- `inventory-import` and the autofill range endpoints have not been timed
+  against the 60s function cap with production data volumes.
+- Nonce-based CSP (see the header section above).
 
 ## Risks
 
-| Risk | Mitigation |
+| Risk | Status |
 |---|---|
-| Shim fails under Vercel's runtime | Day-1 spike gates the whole approach; fall back to B |
-| Decorator metadata lost in build | Separate `tsc` pass, never SWC, for `src/server` |
-| Function size limit exceeded | `serverExternalPackages`; measure after first build |
-| Long jobs exceed function timeout | Measure `inventory-import` and autofill-range against real volumes |
-| Throttling silently weakened | Documented regression, tracked separately |
-| Migration breaks frozen Cloud Run image | Backward-compatible migrations until Flutter cutover |
+| Shim fails under Vercel's runtime | Retired — verified against a production build locally. Still to confirm on a Vercel preview. |
+| Decorator metadata lost in build | Retired — SWC emits it; verified via working DI and DTO validation. |
+| Function size limit exceeded | Open — `serverExternalPackages` set, size not yet measured. |
+| Long jobs exceed function timeout | Open — needs timing against real volumes. |
+| Throttling silently weakened | Accepted — per-instance now; tracked separately. |
+| Migration breaks frozen Cloud Run image | Open — backward-compatible migrations required until Flutter cutover. |

@@ -1,0 +1,7 @@
+[
+  {"branchId": "<BRANCH_UUID>", "productId": "<PRODUCT_UUID>", "date": "2026-02-19", "quantity": 50, "notes": "Morning batch"},
+  {"branchId": "<BRANCH_UUID>", "productId": "<PRODUCT_UUID>", "date": "2026-02-19", "quantity": 30},
+  {"branchId": "<BRANCH_UUID>", "productId": "<PRODUCT_UUID>", "date": "2026-02-19", "quantity": 25, "notes": "Special order included"},
+  {"branchId": "<BRANCH_UUID>", "productId": "<PRODUCT_UUID>", "date": "2026-02-18", "quantity": 40},
+  {"branchId": "<BRANCH_UUID>", "productId": "<PRODUCT_UUID>", "date": "2026-02-18", "quantity": 20, "notes": "Low stock day"}
+]

@@ -1,0 +1,361 @@
+{
+  "info": {
+    "name": "Louella Bakery API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000/api/v1" },
+    { "key": "accessToken", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/auth/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@louella.com\",\n  \"password\": \"password123\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.accessToken) pm.collectionVariables.set('accessToken', json.accessToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@louella.com\",\n  \"password\": \"password123\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Me",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/auth/me"
+          }
+        },
+        {
+          "name": "Refresh",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/auth/refresh",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"<REFRESH_TOKEN>\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/auth/logout",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"<REFRESH_TOKEN>\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Branches",
+      "item": [
+        {
+          "name": "Create Branch",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/branches",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Main Branch\",\n  \"address\": \"123 Rizal St, Cebu City\",\n  \"phone\": \"032-123-4567\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Get All Branches",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/branches"
+          }
+        },
+        {
+          "name": "Get Branch by ID",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/branches/1"
+          }
+        },
+        {
+          "name": "Update Branch",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/branches/1",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"032-999-8888\",\n  \"isActive\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Branch",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/branches/1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Products",
+      "item": [
+        {
+          "name": "Create Product",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/products",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Yema Square\",\n  \"type\": \"CAKE\",\n  \"price\": 530\n}"
+            }
+          }
+        },
+        {
+          "name": "Bulk Create Products",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/products/bulk",
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  { \"name\": \"Yema Square\", \"type\": \"CAKE\", \"price\": 530 },\n  { \"name\": \"Butter small\", \"type\": \"CAKE\", \"price\": 530 },\n  { \"name\": \"Yema Roll Slice\", \"type\": \"CAKE\", \"price\": 30 }\n]"
+            }
+          }
+        },
+        {
+          "name": "Get All Products",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/products"
+          }
+        },
+        {
+          "name": "Get Product by ID",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/products/85"
+          }
+        },
+        {
+          "name": "Update Product",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/products/85",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"price\": 550\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Product",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/products/85"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Inventory",
+      "item": [
+        {
+          "name": "Create / Upsert Inventory Record",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/inventory",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"branchId\": 1,\n  \"productId\": 85,\n  \"date\": \"2026-02-19\",\n  \"quantity\": 10,\n  \"delivery\": 5,\n  \"leftover\": 3,\n  \"reject\": 1,\n  \"notes\": \"Sample record\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Bulk Upsert Inventory",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/inventory/bulk",
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  { \"branchId\": 1, \"productId\": 85, \"date\": \"2026-02-19\", \"quantity\": 10, \"delivery\": 5, \"leftover\": 3, \"reject\": 1 },\n  { \"branchId\": 1, \"productId\": 86, \"date\": \"2026-02-19\", \"quantity\": 8, \"delivery\": 4, \"leftover\": 2, \"reject\": 0 },\n  { \"branchId\": 1, \"productId\": 87, \"date\": \"2026-02-19\", \"quantity\": 45, \"delivery\": 20, \"leftover\": 12, \"reject\": 3 }\n]"
+            }
+          }
+        },
+        {
+          "name": "Get All Inventory",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/inventory"
+          }
+        },
+        {
+          "name": "Get Inventory by ID",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/inventory/1"
+          }
+        },
+        {
+          "name": "Get Inventory by Branch",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/inventory/branch/1"
+          }
+        },
+        {
+          "name": "Get Inventory by Product",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/inventory/product/85"
+          }
+        },
+        {
+          "name": "Get Inventory by Branch + Date",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/inventory/branch/1/date?date=2026-02-19",
+              "host": ["{{baseUrl}}"],
+              "path": ["inventory", "branch", "1", "date"],
+              "query": [{ "key": "date", "value": "2026-02-19" }]
+            }
+          }
+        },
+        {
+          "name": "Update Inventory Record",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/inventory/1",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"leftover\": 5,\n  \"reject\": 2\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Inventory Record",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/inventory/1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Sales",
+      "item": [
+        {
+          "name": "Sales by Branch + Date",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/sales/branch/1/date?date=2026-02-19",
+              "host": ["{{baseUrl}}"],
+              "path": ["sales", "branch", "1", "date"],
+              "query": [{ "key": "date", "value": "2026-02-19" }]
+            }
+          }
+        },
+        {
+          "name": "Sales by Branch (Date Range)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/sales/branch/1?startDate=2026-01-19&endDate=2026-02-19",
+              "host": ["{{baseUrl}}"],
+              "path": ["sales", "branch", "1"],
+              "query": [
+                { "key": "startDate", "value": "2026-01-19" },
+                { "key": "endDate", "value": "2026-02-19" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Sales by Branch + Product (Date Range)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/sales/branch/1/product/85?startDate=2026-01-19&endDate=2026-02-19",
+              "host": ["{{baseUrl}}"],
+              "path": ["sales", "branch", "1", "product", "85"],
+              "query": [
+                { "key": "startDate", "value": "2026-01-19" },
+                { "key": "endDate", "value": "2026-02-19" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Sales by Product Across All Branches (Date Range)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/sales/product/85?startDate=2026-01-19&endDate=2026-02-19",
+              "host": ["{{baseUrl}}"],
+              "path": ["sales", "product", "85"],
+              "query": [
+                { "key": "startDate", "value": "2026-01-19" },
+                { "key": "endDate", "value": "2026-02-19" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Daily Sales Summary by Branch (Date Range)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/sales/branch/1/summary?startDate=2026-01-19&endDate=2026-02-19",
+              "host": ["{{baseUrl}}"],
+              "path": ["sales", "branch", "1", "summary"],
+              "query": [
+                { "key": "startDate", "value": "2026-01-19" },
+                { "key": "endDate", "value": "2026-02-19" }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

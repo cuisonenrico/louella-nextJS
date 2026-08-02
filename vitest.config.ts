@@ -14,5 +14,9 @@ export default defineConfig({
     // (and add @testing-library/react) when component tests are introduced.
     environment: 'node',
     include: ['src/**/*.{spec,test}.{ts,tsx}'],
+    // Everything under src/server runs on Jest instead (see jest.config.js):
+    // those suites are Jest-based (jest.fn, @nestjs/testing) and carried over
+    // from louella-be unchanged. One boundary, no per-file exceptions.
+    exclude: ['node_modules/**', 'src/server/**'],
   },
 });

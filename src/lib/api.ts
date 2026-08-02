@@ -1,7 +1,12 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { getAccessToken, setAccessToken } from './tokenStore';
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000/api/v1';
+// The API is served by this same Next.js app (src/app/api/v1/[...path]), so the
+// default is a same-origin relative path — no origin to configure, no CORS
+// preflight, and the auth cookie is first-party in every environment.
+// NEXT_PUBLIC_API_URL remains an escape hatch for pointing a local build at a
+// deployed API; leave it unset for normal use.
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? '/api/v1';
 
 const api = axios.create({
   baseURL: BASE_URL,

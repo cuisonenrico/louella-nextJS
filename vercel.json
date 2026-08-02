@@ -1,0 +1,14 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "regions": ["hnd1"],
+  "functions": {
+    "src/app/api/v1/[...path]/route.ts": {
+      "memory": 1024,
+      "maxDuration": 60
+    }
+  },
+  "crons": [
+    { "path": "/api/v1/jobs/cron/morning-init", "schedule": "0 22 * * *" },
+    { "path": "/api/v1/jobs/cron/nightly", "schedule": "0 15 * * *" }
+  ]
+}
