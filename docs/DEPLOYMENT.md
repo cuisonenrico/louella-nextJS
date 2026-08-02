@@ -146,6 +146,37 @@ npm run test         # vitest (frontend) + jest (server)
 
 One process now serves both. Copy `.env.example` to `.env.local` first.
 
+### Running against a local database
+
+A local Postgres 18 instance is available on this machine and is the fastest
+way to work without touching the shared Supabase DB. A scratch database
+`louella_smoke` already exists, migrated and seeded:
+
+```bash
+export DATABASE_URL="postgresql://postgres:admin123@127.0.0.1:5432/louella_smoke"
+export DIRECT_URL="$DATABASE_URL"
+npx next start -p 4100
+```
+
+To rebuild it from scratch:
+
+```bash
+psql -h 127.0.0.1 -U postgres -c "DROP DATABASE IF EXISTS louella_smoke;"
+psql -h 127.0.0.1 -U postgres -c "CREATE DATABASE louella_smoke;"
+npx prisma migrate deploy
+for f in seed-users seed-products seed-materials seed-local; do
+  npx prisma db execute --file ./prisma/$f.sql --schema ./prisma/schema.prisma
+done
+```
+
+Drop it with `psql -h 127.0.0.1 -U postgres -c "DROP DATABASE louella_smoke;"`
+when it is no longer wanted.
+
+> **`DIRECT_URL` is now mandatory for every Prisma CLI call**, not just
+> migrations — `schema.prisma` references it, so `prisma db execute` and
+> `prisma generate` fail validation without it. Setting only `DATABASE_URL`
+> produces a confusing `P1012 Environment variable not found: DIRECT_URL`.
+
 > **Windows note:** `prisma generate` fails with `EPERM ... query_engine-windows.dll.node`
 > while a dev server is running — the process holds the engine DLL. Stop the
 > dev server before regenerating.

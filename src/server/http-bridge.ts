@@ -52,6 +52,14 @@ export async function toNodeRequest(request: Request): Promise<IncomingMessage> 
   }
   req.push(null);
 
+  // A real HTTP parser sets `complete` once the whole message has arrived. We
+  // always have the entire body up front, so it is true by construction — but
+  // it must be set explicitly, because consumers use it to tell a finished
+  // request from a client that hung up mid-upload. Multer is the one that
+  // cares: without this it aborts every multipart upload with
+  // "Request aborted" before the handler ever runs.
+  req.complete = true;
+
   return req;
 }
 

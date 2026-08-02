@@ -43,6 +43,21 @@ describe('http-bridge', () => {
       expect(Buffer.concat(chunks).toString()).toBe('{"email":"a@b.com"}');
     });
 
+    it('marks the request complete so multer does not read it as an abort', async () => {
+      // Regression: without this, multer sees a stream that ended while
+      // `complete` was false, treats it as a client hang-up, and fails every
+      // upload with "Request aborted" before the handler runs. Body-parser
+      // does not make this check, so JSON endpoints hid the bug entirely.
+      const req = await toNodeRequest(
+        new Request('https://example.com/api/v1/inventory-import/preview', {
+          method: 'POST',
+          body: 'payload',
+        }),
+      );
+
+      expect(req.complete).toBe(true);
+    });
+
     it('preserves a multipart body and its boundary for multer', async () => {
       // inventory-import posts an XLSX through FileInterceptor + memoryStorage.
       // multer/busboy needs the boundary from Content-Type and the exact bytes;
