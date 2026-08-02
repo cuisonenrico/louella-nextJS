@@ -1,10 +1,11 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { CacheModule } from '@nestjs/cache-manager';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
+import { AutofillInterceptor } from './common/interceptors/autofill.interceptor';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
@@ -38,8 +39,8 @@ import { CacheNamespaceModule } from './common/cache/cache-namespace.module';
     CacheModule.register({ isGlobal: true, ttl: 45_000, max: 500 }),
     CacheNamespaceModule,
     // No ScheduleModule: serverless functions do not stay alive between
-    // requests, so an in-process scheduler would never fire. The three former
-    // @Cron jobs are driven by Vercel Cron hitting /api/v1/jobs/* instead.
+    // requests, so an in-process scheduler would never fire. The autofill jobs
+    // it used to drive now run on demand — see AutofillInterceptor below.
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 20 }]),
     PrismaModule,
     UsersModule,
@@ -70,6 +71,10 @@ import { CacheNamespaceModule } from './common/cache/cache-namespace.module';
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+    // Registered globally so any module can opt in with @Autofill() metadata
+    // alone, without importing JobsModule (which would create a cycle through
+    // MaterialInventoryModule). Inert on handlers that lack the decorator.
+    { provide: APP_INTERCEPTOR, useClass: AutofillInterceptor },
   ],
 })
 export class AppModule {}

@@ -30,30 +30,63 @@ deployment if wrong:
 | `DATABASE_URL` | **Transaction pooler, port 6543**, with `?pgbouncer=true&connection_limit=1`. The session pooler (5432) exhausts connections under serverless fan-out. |
 | `DIRECT_URL` | Session pooler (5432). Used only by `prisma migrate`, which cannot run through the transaction pooler. |
 | `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` | ≥16 chars. `validateEnv` fails the boot without them — on serverless that surfaces as a 500 on first request, not a deploy failure. |
-| `CRON_SECRET` | Required. `CronSecretGuard` fails closed, so cron silently 401s if unset. |
 | `TZ` | Must be `Asia/Manila`. |
 | `ALLOWED_ORIGINS` | Only for cross-origin clients (the Flutter app). The web app is same-origin and needs no entry. |
 | `FIREBASE_SERVICE_ACCOUNT` | Inline JSON. There is no writable filesystem for the file-path variant. |
 
-## Scheduled jobs
+## Autofill jobs (no scheduler)
 
-`@nestjs/schedule` is gone — an in-process scheduler cannot fire on a platform
-that does not keep processes alive. Jobs run via Vercel Cron (`vercel.json`)
-hitting `/api/v1/jobs/cron/*`, authenticated with `CRON_SECRET`.
+There is **no cron and no scheduler**. Both mechanisms the old backend used are
+incompatible with serverless:
 
-**Vercel Cron schedules are UTC. The business rules are Manila (UTC+8).**
+- `@nestjs/schedule` needs a process that stays alive between requests.
+- The `onModuleInit` boot backfill ran once per deploy on Cloud Run, but Nest
+  bootstraps on every **cold start** here — and since `app.init()` awaits module
+  init, the first request after any idle period would have blocked on a full
+  gap scan.
 
-| Endpoint | Cron (UTC) | Manila | Runs |
-|---|---|---|---|
-| `/api/v1/jobs/cron/morning-init` | `0 22 * * *` | 6 AM next day | Seeds the day's rows |
-| `/api/v1/jobs/cron/nightly` | `0 15 * * *` | 11 PM same day | Inventory gap-fill, then material stock |
+Instead the jobs run **on demand, from the pages that need their output**.
+`AutofillInterceptor` (global, but inert without the `@Autofill()` decorator)
+tops up today's rows before these handlers read them:
 
-Two entries, not three: Vercel's Hobby plan allows two cron jobs per project,
-so the two former 11 PM jobs share one endpoint and run sequentially. Each
-still writes its own `JobRun` row, and the second runs even if the first fails.
+| Endpoint | Page | Scope |
+|---|---|---|
+| `GET /inventory/date` | Inventory sheet | `inventory` |
+| `GET /inventory/branch/:id/date` | Branch sheet, mobile quick entry | `inventory` |
+| `GET /production/date` | Production sheet | `inventory` |
+| `GET /production/branch/:id/date` | Branch production sheet | `inventory` |
+| `GET /material-inventory/by-date` | Material stock sheet | `materials` |
+
+Production shares the `inventory` scope because a single job creates both the
+Inventory and Production placeholder rows for a date.
+
+**Why this is safe on a hot read path:**
+
+- **Cheap when current:** one indexed `findFirst` on the date column, then a
+  5-minute per-instance memo suppresses even that. The TTL is what lets a
+  product added mid-morning still get rows — that was the 11 PM pass's job.
+- **Deduplicated:** concurrent requests on one instance share a single
+  in-flight promise. A duplicate run across instances is possible but harmless,
+  because the jobs are idempotent (`createMany` with `skipDuplicates`).
+- **Bounded:** catch-up is capped at 7 days. The underlying range jobs allow
+  365, which cannot finish inside a 60s function. A wider gap is an outage, not
+  routine carry-over — it logs a warning and asks for a deliberate run.
+- **Never fatal:** failures are logged and swallowed. A sheet rendering without
+  fresh placeholders beats a sheet returning 500.
+
+Runs are recorded in `JobRun` with `trigger: 'auto'`, so the Settings → Jobs
+screen shows them alongside historical `cron` and `boot` rows. `trigger` is a
+plain String column, so this needed no migration — which matters while the
+Cloud Run image is frozen.
 
 The manual `POST /api/v1/jobs/*` triggers are unchanged and still require a
-MANAGER JWT.
+MANAGER JWT. `POST /jobs/autofill-range` is the way to close a gap wider than
+the on-demand cap.
+
+**Trade-off to accept:** rows now appear when someone first opens a sheet,
+rather than at a fixed hour. If nobody opens any sheet on a given day, that
+day's placeholders are created whenever someone next does — which is also when
+anyone could first notice they were missing.
 
 ## Deploying
 

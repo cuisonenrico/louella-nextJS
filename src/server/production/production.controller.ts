@@ -20,6 +20,7 @@ import { ProductionDateQueryDto } from './dto/production-date-query.dto';
 import { ProductionDateRangeQueryDto } from './dto/production-date-range-query.dto';
 import { CurrentUser } from '../common/decorators/user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
+import { Autofill } from '../common/decorators/autofill.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { BranchGuard } from '../common/guards/branch.guard';
 
@@ -100,6 +101,9 @@ export class ProductionController {
     );
   }
 
+  // The production sheet. Shares the 'inventory' scope because one job creates
+  // both the Inventory and Production placeholder rows for a date.
+  @Autofill('inventory')
   @Get('date')
   findByDateAllBranches(
     @Query() query: ProductionDateRangeQueryDto,
@@ -113,6 +117,7 @@ export class ProductionController {
     );
   }
 
+  @Autofill('inventory')
   @Get('branch/:branchId/date')
   findByDate(
     @Param('branchId', ParseIntPipe) branchId: number,

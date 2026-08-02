@@ -1,3 +1,4 @@
+import { Readable } from 'node:stream';
 import { createCapturedResponse, toNodeRequest, toWebResponse } from './http-bridge';
 
 /**
@@ -40,6 +41,29 @@ describe('http-bridge', () => {
       for await (const chunk of req) chunks.push(Buffer.from(chunk as Uint8Array));
 
       expect(Buffer.concat(chunks).toString()).toBe('{"email":"a@b.com"}');
+    });
+
+    it('preserves a multipart body and its boundary for multer', async () => {
+      // inventory-import posts an XLSX through FileInterceptor + memoryStorage.
+      // multer/busboy needs the boundary from Content-Type and the exact bytes;
+      // a utf8 round-trip or a lost boundary makes the upload unparseable.
+      const form = new FormData();
+      form.append('file', new Blob([new Uint8Array([0x50, 0x4b, 0x03, 0x04])]), 'import.xlsx');
+
+      const request = new Request('https://example.com/api/v1/inventory-import', {
+        method: 'POST',
+        body: form,
+      });
+      const expected = Buffer.from(await request.clone().arrayBuffer());
+
+      const req = await toNodeRequest(request);
+
+      expect(req.headers['content-type']).toMatch(/^multipart\/form-data; boundary=/);
+
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) chunks.push(Buffer.from(chunk as Uint8Array));
+
+      expect(Buffer.concat(chunks).equals(expected)).toBe(true);
     });
 
     it('ends the stream for GET so middleware does not wait on a body', async () => {
@@ -145,6 +169,21 @@ describe('http-bridge', () => {
 
       const bytes = new Uint8Array(await toWebResponse(captured).arrayBuffer());
       expect(Array.from(bytes)).toEqual(Array.from(payload));
+    });
+
+    it('assembles a piped stream, as StreamableFile does', async () => {
+      const req = await toNodeRequest(new Request('https://example.com/api/v1/inventory/export'));
+      const captured = createCapturedResponse(req);
+
+      // inventory.controller returns `new StreamableFile(...)`, which Nest
+      // pipes into the response rather than calling end() with a payload.
+      // pipe() drives write()/end() and consults `writable`, so the patched
+      // response has to behave like a real one.
+      const source = Readable.from([Buffer.from('date,product\n'), Buffer.from('2026-08-02,pandesal\n')]);
+      source.pipe(captured.res);
+      await captured.finished;
+
+      expect(await toWebResponse(captured).text()).toBe('date,product\n2026-08-02,pandesal\n');
     });
 
     it('invokes the end callback so Express can finalise', async () => {

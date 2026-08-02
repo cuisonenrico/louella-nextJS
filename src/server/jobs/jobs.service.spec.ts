@@ -181,7 +181,9 @@ describe('JobsService', () => {
         expect.objectContaining({
           data: expect.objectContaining({
             jobName: 'inventory-autofill',
-            trigger: 'cron',
+            // The default is 'auto', not 'cron': there is no scheduler any
+            // more, so an untagged run came from the on-demand page trigger.
+            trigger: 'auto',
           }),
         }),
       );
@@ -252,13 +254,11 @@ describe('JobsService', () => {
     });
   });
 
-  describe('onModuleInit (boot backfill)', () => {
-    it('does not throw at boot even when the backfill fails', async () => {
-      prisma.inventory.findFirst.mockRejectedValue(new Error('no db'));
-
-      await expect(service.onModuleInit()).resolves.toBeUndefined();
-    });
-  });
+  // The boot-backfill test was removed with onModuleInit itself: Nest now
+  // bootstraps on every serverless cold start, so a startup backfill would
+  // have run constantly and blocked the first request each time. The
+  // equivalent behaviour — and its failure isolation — is covered by
+  // autofill-on-demand.service.spec.ts.
 
   describe('getRuns', () => {
     it('returns recent runs newest-first plus a latest-per-job summary', async () => {

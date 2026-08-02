@@ -1,10 +1,21 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { JobStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { MaterialInventoryService } from '../material-inventory/material-inventory.service';
 
+/**
+ * What caused a job to run, recorded on the JobRun row.
+ *
+ * `auto` is the on-demand trigger that replaced the schedule: a page that
+ * needs today's rows asked for them. `cron` and `boot` no longer occur — there
+ * is neither a scheduler nor a startup backfill — but both remain in the union
+ * because historical JobRun rows carry them and the settings screen reads them
+ * back. (The column is a plain String, so no migration is involved.)
+ */
+export type JobTrigger = 'cron' | 'manual' | 'boot' | 'auto';
+
 @Injectable()
-export class JobsService implements OnModuleInit {
+export class JobsService {
   private readonly logger = new Logger(JobsService.name);
 
   constructor(
@@ -20,7 +31,7 @@ export class JobsService implements OnModuleInit {
    */
   private async recordRun<T>(
     jobName: string,
-    trigger: 'cron' | 'manual' | 'boot',
+    trigger: JobTrigger,
     targetDate: string | undefined,
     fn: () => Promise<T>,
   ): Promise<T> {
@@ -77,91 +88,22 @@ export class JobsService implements OnModuleInit {
   }
 
   /**
-   * On server startup, detect any gap since the last filled date and backfill
-   * both Inventory/Production rows and MaterialInventory stock cards.
-   * This covers the scenario where the server (or cron) was down for N days.
-   */
-  async onModuleInit(): Promise<void> {
-    try {
-      await this.recordRun('boot-backfill', 'boot', undefined, () =>
-        this.runBackfillGaps(),
-      );
-    } catch (err) {
-      // Never block startup on a failed backfill — it is logged and visible
-      // as a FAILED JobRun row.
-      this.logger.error('Boot backfill failed', err);
-    }
-  }
-
-  /**
-   * Finds the last date that has inventory records and backfills everything
-   * from (lastDate + 1) through today. Safe to call repeatedly — upserts
-   * with `update: {}` won't overwrite rows that already have real data.
-   */
-  private async runBackfillGaps(): Promise<{
-    inventory: unknown;
-    materials: unknown;
-  }> {
-    const todayStr = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Manila',
-    }).format(new Date());
-
-    const [lastInv, lastMat] = await Promise.all([
-      this.prisma.inventory.findFirst({
-        orderBy: { date: 'desc' },
-        select: { date: true },
-      }),
-      this.prisma.materialInventory.findFirst({
-        orderBy: { date: 'desc' },
-        select: { date: true },
-      }),
-    ]);
-
-    const invGapStart = lastInv
-      ? new Date(lastInv.date.getTime() + 86_400_000).toISOString().slice(0, 10)
-      : todayStr;
-    const matGapStart = lastMat
-      ? new Date(lastMat.date.getTime() + 86_400_000).toISOString().slice(0, 10)
-      : todayStr;
-
-    // Nothing to backfill if last record is already today
-    const invNeedsBackfill = invGapStart <= todayStr;
-    const matNeedsBackfill = matGapStart <= todayStr;
-
-    if (!invNeedsBackfill && !matNeedsBackfill)
-      return { inventory: null, materials: null };
-
-    this.logger.log(
-      `Startup gap-fill: inv from ${invGapStart}, mat from ${matGapStart} → ${todayStr}`,
-    );
-
-    const [inventory, materials] = await Promise.all([
-      invNeedsBackfill
-        ? this.runAutofillDateRange(invGapStart, todayStr)
-        : Promise.resolve(null),
-      matNeedsBackfill
-        ? this.runAutofillMaterialStockRange(matGapStart, todayStr)
-        : Promise.resolve(null),
-    ]);
-    return { inventory, materials };
-  }
-
-  /**
-   * Runs every day at 11 PM.
    * For each active branch × active product pair, creates a placeholder
    * Inventory entry (and Production entry) if none exists for the target date.
    * The Inventory placeholder carries forward the leftover from the most recent
    * prior entry (or 0 if no prior entry exists).
    *
+   * Formerly the 11 PM cron. Now driven on demand by AutofillOnDemandService
+   * when an inventory or production sheet is read, and manually via
+   * `POST /jobs/autofill`.
+   *
    * @param targetDate - Optional YYYY-MM-DD string. Defaults to today (Manila local date).
-   * @param trigger    - 'cron' when called by the scheduler, 'manual' from the API.
+   * @param trigger    - 'auto' from the on-demand path, 'manual' from the API.
    * @returns Stats object summarising how many entries were created.
    */
-  // Scheduled by Vercel Cron at 11 PM Manila via POST /api/v1/jobs/autofill.
-  // See vercel.json — there is no in-process scheduler on serverless.
   async autofillMissingEntries(
     targetDate?: string,
-    trigger: 'cron' | 'manual' = 'cron',
+    trigger: JobTrigger = 'auto',
   ): Promise<{
     inventoryCreated: number;
     productionCreated: number;
@@ -359,29 +301,6 @@ export class JobsService implements OnModuleInit {
   }
 
   /**
-   * Runs every day at 6 AM Manila time — seeds today's Inventory and Production
-   * placeholders early so staff can start creating production orders and editing
-   * inventory without waiting for the 11 PM run.
-   *
-   * The 11 PM cron still runs as a gap-fill pass to catch any products or
-   * branches added during the day.
-   */
-  // Scheduled by Vercel Cron at 6 AM Manila via POST /api/v1/jobs/morning-init.
-  async autofillMorningInit(): Promise<void> {
-    const manilaDate = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Manila',
-    }).format(new Date());
-    await this.recordRun('morning-init', 'cron', manilaDate, async () => {
-      this.logger.log(
-        `Morning auto-fill triggered for Manila date: ${manilaDate}`,
-      );
-      // Use gap-aware backfill so that if the cron (or server) was down for
-      // several days, all missed dates are filled before today is processed.
-      return this.runBackfillGaps();
-    });
-  }
-
-  /**
    * Back-fills all missing entries for every day in [startDate, endDate].
    * Dates are processed in ascending chronological order so each day's
    * inventory correctly inherits the prior day's leftover.
@@ -393,7 +312,7 @@ export class JobsService implements OnModuleInit {
   async autofillDateRange(
     startDate: string,
     endDate?: string,
-    trigger: 'cron' | 'manual' | 'boot' = 'manual',
+    trigger: JobTrigger = 'manual',
   ): Promise<{
     totalInventoryCreated: number;
     totalProductionCreated: number;
@@ -486,7 +405,7 @@ export class JobsService implements OnModuleInit {
   // POST /api/v1/jobs/autofill-material-stock.
   async autofillMaterialStock(
     targetDate?: string,
-    trigger: 'cron' | 'manual' = 'cron',
+    trigger: JobTrigger = 'auto',
   ): Promise<{ created: number; date: string }> {
     const dateStr = targetDate ?? new Date().toISOString().slice(0, 10);
 
@@ -527,7 +446,7 @@ export class JobsService implements OnModuleInit {
   async autofillMaterialStockRange(
     startDate: string,
     endDate?: string,
-    trigger: 'cron' | 'manual' | 'boot' = 'manual',
+    trigger: JobTrigger = 'manual',
   ): Promise<{ totalCreated: number; datesProcessed: number }> {
     return this.recordRun('material-autofill-range', trigger, startDate, () =>
       this.runAutofillMaterialStockRange(startDate, endDate),

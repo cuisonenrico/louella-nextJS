@@ -31,6 +31,7 @@ import { InventoryGapsQueryDto } from './dto/inventory-gaps-query.dto';
 import { RecascadeDto } from './dto/recascade.dto';
 import { CurrentUser } from '../common/decorators/user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
+import { Autofill } from '../common/decorators/autofill.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { BranchGuard } from '../common/guards/branch.guard';
 
@@ -111,6 +112,9 @@ export class InventoryController {
     );
   }
 
+  // The inventory sheet. Tops up today's placeholder rows before reading them,
+  // which is what the 11 PM cron used to do.
+  @Autofill('inventory')
   @Get('date')
   findByDateAllBranches(
     @Query() query: InventoryDateRangeQueryDto,
@@ -124,6 +128,8 @@ export class InventoryController {
     );
   }
 
+  // Single-branch inventory sheet, and the mobile app's quick-entry screen.
+  @Autofill('inventory')
   @Get('branch/:branchId/date')
   findByDate(
     @Param('branchId', ParseIntPipe) branchId: number,

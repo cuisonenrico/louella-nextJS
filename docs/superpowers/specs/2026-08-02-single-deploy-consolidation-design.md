@@ -241,6 +241,78 @@ Performed against a production build (`next build` + `next start`), not
   payloads, chunked writes, `writeHead` headers, bodiless statuses, and
   `Content-Length` invalidation.
 
+## Parity audit (2026-08-02)
+
+A full audit of the consolidation against the original backend.
+
+**Source drift: none.** `diff -rq louella-be/src louella-web/src/server` returns
+exactly the intended set — 4 modified files, 5 added, `main.ts` removed. No
+business logic was touched.
+
+**Bootstrap parity: complete.** Every global from `main.ts` survives — global
+prefix, `ValidationPipe` (`whitelist` + `forbidNonWhitelisted` + `transform`),
+`PrismaExceptionFilter`, `cookie-parser`, 2 MB body limits, the
+`Prisma.Decimal.toJSON` numeric patch, and CORS — in the same middleware order.
+Only `app.listen()` is gone.
+
+### Findings
+
+| # | Finding | Severity | Status |
+|---|---|---|---|
+| 1 | `JobsService.onModuleInit` ran a full gap-fill backfill on **every cold start**, awaited by `app.init()`, so the first request after any idle period blocked on it | High | **Fixed** — hook removed, replaced by bounded on-demand autofill |
+| 2 | Cache invalidation is per-instance. `CacheNamespaceService` holds both the store and the version map in memory, so a write on instance A does not invalidate instance B — stale aggregate reads for up to the 45s TTL | Medium | **Open** — mitigate with `CACHE_ENABLED=false` or a shared store. Only affects inventory/material *aggregates*, not row reads. The service's own docblock already anticipated this. |
+| 3 | Rate limiting is per-instance, so the 20/min bucket is effectively unenforced | Medium | **Open** — needs a shared store; tracked with the pre-existing throttle work |
+| 4 | `trust proxy` is now unconditionally `1` (was `TRUST_PROXY=0` in prod), so `req.ip` reads `X-Forwarded-For` | Low | **Intentional** — correct behind Vercel, and an *improvement*: it gives each client its own throttle bucket instead of one shared one |
+| 5 | Local dev CORS fallback changed from `localhost:3000/3001` to `localhost:3000/4000` | Low | **Intentional** — matches the actual dev port; same-origin makes it moot anyway |
+| 6 | Swagger UI no longer mounted | Low | **Intentional** — already disabled in production and unreachable under the catch-all |
+| 7 | No CSP header | Low | **Open** — needs a nonce-based policy |
+
+### Paths specifically verified through the bridge
+
+These were the plausible silent breakages:
+
+- **`Set-Cookie` with multiple values** — auth issues two cookies per login;
+  collapsing them would break refresh. Preserved via `Headers.append`.
+- **`StreamableFile`** (inventory CSV export) — Nest *pipes* into the response
+  rather than calling `end()`, so the patched `write`/`end` must satisfy
+  `pipe`. Covered by test.
+- **Multipart uploads** (`inventory-import`, `FileInterceptor` +
+  `memoryStorage`) — multer needs the boundary from `Content-Type` and exact
+  bytes. Covered by test.
+- **Binary payloads** — a utf8 round-trip would corrupt XLSX. Covered by test.
+- **`@Header('Cache-Control')`** on reference endpoints — set via `setHeader`,
+  captured normally.
+- **`writeHead(status, headers)`** — bypasses `setHeader` and would otherwise
+  drop headers. Captured explicitly.
+
+## Scheduling change (2026-08-02)
+
+Vercel Cron was removed entirely in favour of on-demand execution, at the
+user's direction. `CronController` and `CronSecretGuard` are deleted, along
+with `CRON_SECRET`.
+
+`AutofillInterceptor` — global but inert without an `@Autofill()` decorator —
+tops up today's rows on the five sheet endpoints that consume them (inventory
+×2, production ×2, material-inventory ×1). Production shares the `inventory`
+scope because one job writes both tables.
+
+Guards run before interceptors in Nest, so autofill only ever fires for an
+authenticated request — an unauthenticated caller cannot trigger it.
+
+Safety properties, each covered by a test: memoised for 5 minutes per instance;
+concurrent callers share one in-flight promise; catch-up capped at 7 days (the
+underlying range jobs allow 365, which cannot finish in a 60s function);
+failures logged and swallowed so a sheet never 500s because autofill broke.
+
+Also removed as newly-dead code: `autofillMorningInit` and `runBackfillGaps`,
+whose only remaining caller was the deleted cron controller. Their behaviour —
+gap-aware catch-up to today — is what the on-demand service now does per scope
+and bounded. `POST /jobs/autofill-range` remains for wider gaps.
+
+**Trade-off:** rows now appear when someone first opens a sheet rather than at
+a fixed hour. If nobody opens a sheet all day, that day's placeholders are
+created whenever someone next does.
+
 ## Outstanding
 
 - ⛔ **DB-backed smoke test is blocked.** The Supabase pooler rejects the

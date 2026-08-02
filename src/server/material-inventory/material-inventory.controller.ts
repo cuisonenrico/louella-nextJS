@@ -18,6 +18,7 @@ import { UpdateMaterialInventoryDto } from './dto/update-material-inventory.dto'
 import { MaterialGapsQueryDto } from './dto/material-gaps-query.dto';
 import { CurrentUser } from '../common/decorators/user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
+import { Autofill } from '../common/decorators/autofill.decorator';
 
 @Controller('material-inventory')
 export class MaterialInventoryController {
@@ -77,6 +78,9 @@ export class MaterialInventoryController {
     return this.materialInventoryService.listDates();
   }
 
+  // The material stock sheet — the page whose rows the material autofill
+  // creates, so it carries the trigger the 11 PM cron used to provide.
+  @Autofill('materials')
   @Get('by-date')
   findByDate(@Query('date') date: string) {
     return this.materialInventoryService.findByDate(date);
