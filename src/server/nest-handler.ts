@@ -42,6 +42,11 @@ async function bootstrap(): Promise<Express> {
   // trustworthy here regardless of the TRUST_PROXY env var used on Cloud Run.
   expressApp.set('trust proxy', 1);
 
+  // helmet used to strip this. Next's `poweredByHeader: false` only suppresses
+  // Next's own header, so without this Express keeps advertising itself on
+  // every /api/v1 response.
+  expressApp.disable('x-powered-by');
+
   const corsOrigin = process.env.ALLOWED_ORIGINS
     ? process.env.ALLOWED_ORIGINS.split(',').map((origin) => origin.trim())
     : process.env.NODE_ENV === 'production'

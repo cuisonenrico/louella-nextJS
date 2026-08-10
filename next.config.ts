@@ -36,8 +36,12 @@ const nestPackages = [
 /**
  * Security headers formerly applied by helmet inside the Nest bootstrap.
  *
- * They now cover the whole site rather than just the API, which is a genuine
- * gain from consolidating: the Vercel-hosted pages previously got none of them.
+ * This is helmet's default set reproduced verbatim, so responses carry the
+ * same headers they did when the API ran on Cloud Run. They now cover the
+ * whole site rather than just the API, which is a genuine gain from
+ * consolidating: the Vercel-hosted pages previously got none of them.
+ *
+ * `crossOriginEmbedderPolicy` stays off, matching the old helmet options.
  *
  * Deliberately omitted: Content-Security-Policy. Helmet's old policy
  * (`default-src 'self'`) was safe for a JSON-only API but would break the
@@ -46,14 +50,24 @@ const nestPackages = [
  * piece of work — shipping a broken or toothless one here helps nobody.
  */
 const securityHeaders = [
-  { key: "X-Content-Type-Options", value: "nosniff" },
-  { key: "X-Frame-Options", value: "SAMEORIGIN" },
+  { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+  // Only enforced by browsers for no-cors subresource loads, so it does not
+  // affect the Flutter client or any CORS-enabled fetch of the API.
+  { key: "Cross-Origin-Resource-Policy", value: "same-origin" },
+  { key: "Origin-Agent-Cluster", value: "?1" },
   { key: "Referrer-Policy", value: "no-referrer" },
-  { key: "X-DNS-Prefetch-Control", value: "off" },
   {
     key: "Strict-Transport-Security",
-    value: "max-age=15552000; includeSubDomains",
+    value: "max-age=31536000; includeSubDomains",
   },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "X-DNS-Prefetch-Control", value: "off" },
+  { key: "X-Download-Options", value: "noopen" },
+  { key: "X-Frame-Options", value: "SAMEORIGIN" },
+  { key: "X-Permitted-Cross-Domain-Policies", value: "none" },
+  // Intentionally "0": the legacy XSS auditor is disabled, not enabled — its
+  // heuristics introduced vulnerabilities of their own. This is helmet's value.
+  { key: "X-XSS-Protection", value: "0" },
 ];
 
 const nextConfig: NextConfig = {
@@ -61,6 +75,9 @@ const nextConfig: NextConfig = {
     root: __dirname,
   },
   serverExternalPackages: nestPackages,
+  // helmet used to strip Express's `X-Powered-By`; without this Next would
+  // reintroduce the same disclosure with its own value.
+  poweredByHeader: false,
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

@@ -136,6 +136,23 @@ approach:
   `/api/v1/docs` if wanted.
 - **No CSP header.** Helmet's API-only policy would break Next's inline
   scripts; a nonce-based policy is outstanding work.
+- **`req.ip` is undefined in local dev.** The bridge's synthetic socket has no
+  `remoteAddress`, so with no `X-Forwarded-For` there is nothing to fall back
+  to. On Vercel the header is always present and `req.ip` resolves exactly as
+  it did on Cloud Run, so this is a local-only difference. Nothing but
+  `ThrottlerGuard`'s default tracker reads it.
+
+## Security header parity
+
+Every other header helmet used to set is reproduced in `next.config.ts` and now
+covers the whole site, not just `/api/v1`. Two of them are easy to lose:
+
+- `poweredByHeader: false` suppresses **Next's** `X-Powered-By`.
+- `expressApp.disable('x-powered-by')` in `nest-handler.ts` suppresses
+  **Express's**, which the Next setting does not touch. Helmet used to remove
+  it; without this line the API advertises Express on every response.
+
+CSP is the only member of helmet's set deliberately left out (see above).
 
 ## Local development
 
