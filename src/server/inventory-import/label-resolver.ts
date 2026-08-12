@@ -20,10 +20,13 @@ export type Resolution =
  *   1. alias on (label, section, price)
  *   2. alias on (label, section)
  *   3. alias on (label)
- *   4. catalog name, but only when the name is unique in the catalog
+ *   4. catalog name, but only when the name is unique in the catalog AND
+ *      the label is not in the bote (bottle-deposit) section
  *
  * A name that maps to several products with no alias to separate them is
- * reported as `ambiguous`, never silently summed into one of them.
+ * reported as `ambiguous`, never silently summed into one of them. A
+ * bote-section label with no alias is also `ambiguous`, never silently
+ * matched to the identically-named beverage in the main catalog.
  */
 export class LabelResolver {
   private readonly byKey = new Map<string, number>();
@@ -65,6 +68,22 @@ export class LabelResolver {
     for (const k of candidates) {
       const hit = this.byKey.get(k);
       if (hit !== undefined) return { kind: 'matched', productId: hit };
+    }
+
+    // A bote-section label with no alias must not fall back to the plain
+    // catalog name: the same word in the main catalog is the beverage, not
+    // the bottle deposit, and matching it there would silently misattribute
+    // a deposit count as a drink sale. Refuse instead of guessing.
+    if (sec === 'bote') {
+      return {
+        kind: 'ambiguous',
+        reason:
+          `"${label.trim()}" appeared in the bote (bottle-deposit) section ` +
+          `but no ProductAlias maps it to a deposit product there. ` +
+          `Resolving it by catalog name would wrongly match the beverage ` +
+          `of the same name. Add a ProductAlias row for sheetLabel ` +
+          `"${name}" with section "bote" pointing at the deposit product.`,
+      };
     }
 
     const products = this.catalog.get(name) ?? [];

@@ -68,4 +68,29 @@ describe('LabelResolver', () => {
     const res = r.resolve('Bonette', 'main', null);
     expect(res.kind).toBe('ambiguous');
   });
+
+  // --- Fix round 1: bote-section catalog fallback must refuse, not guess the beverage ---
+
+  it('refuses to fall back to the plain catalog name in the bote section when no alias covers it', () => {
+    const noBoteAlias: AliasRow[] = [
+      { sheetLabel: 'bonette', section: null, priceHint: 30, productId: 119 },
+      { sheetLabel: 'bonette', section: null, priceHint: 8, productId: 120 },
+    ];
+    const r = new LabelResolver(noBoteAlias, catalog);
+    const res = r.resolve('Litro', 'bote', 10);
+    expect(res.kind).toBe('ambiguous');
+    expect(res).not.toEqual({ kind: 'matched', productId: 147 });
+    expect((res as { reason: string }).reason).toMatch(/Litro/i);
+    expect((res as { reason: string }).reason).toMatch(/bote/i);
+  });
+
+  it('still resolves via a proper bote alias despite the new bote-section refusal', () => {
+    const r = new LabelResolver(aliases, catalog);
+    expect(r.resolve('Litro', 'bote', 10)).toEqual({ kind: 'matched', productId: 128 });
+  });
+
+  it('still resolves the main-section catalog fallback despite the new bote-section refusal', () => {
+    const r = new LabelResolver(aliases, catalog);
+    expect(r.resolve('Pandesal', 'main', 3)).toEqual({ kind: 'matched', productId: 8 });
+  });
 });
