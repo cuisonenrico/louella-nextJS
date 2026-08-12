@@ -413,6 +413,7 @@ export interface DryRunResult {
     totalSheets: number;
     totalMatched: number;
     totalUnmatched: number;
+    totalAmbiguous: number;
     datesDetected: string[];
   };
   sheets: DryRunSheet[];

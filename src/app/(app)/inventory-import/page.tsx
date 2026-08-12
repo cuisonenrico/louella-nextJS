@@ -78,6 +78,12 @@ export default function InventoryImportPage() {
     .filter((s) => (s.existing?.real ?? 0) > 0)
     .map((s) => s.date);
 
+  // A sheet with any ambiguous label is dropped entirely by the real import
+  // (see LabelResolver / collectSheetEntries). Importing must be blocked
+  // until every ambiguous label is resolved with a ProductAlias — otherwise
+  // an operator can launch an import that silently skips whole sheets.
+  const hasAmbiguous = (preview?.sheets ?? []).some((s) => s.ambiguous.length > 0);
+
   const reset = () => {
     setStep('upload'); setFile(null); setPreview(null); setBranchId(''); setResult(null); setError('');
     if (fileRef.current) fileRef.current.value = '';
@@ -199,6 +205,22 @@ export default function InventoryImportPage() {
                     </AlertDescription>
                   </Alert>
                 )}
+                {hasAmbiguous && (
+                  <Alert variant="destructive" className="mt-4">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription>
+                      <p className="font-medium mb-1">
+                        {preview.summary.totalAmbiguous} label{preview.summary.totalAmbiguous > 1 ? 's match' : ' matches'} more than one product and cannot be resolved automatically. The whole sheet{preview.sheets.filter((s) => s.ambiguous.length > 0).length > 1 ? 's containing them are' : ' containing it is'} skipped until a ProductAlias resolves each label:
+                      </p>
+                      <ul className="text-xs space-y-1">
+                        {[...new Set(preview.sheets.flatMap((s) => s.ambiguous))].map((reason, i) => (
+                          <li key={i}>{reason}</li>
+                        ))}
+                      </ul>
+                      <p className="text-xs mt-1 font-medium">Importing is disabled until this is resolved.</p>
+                    </AlertDescription>
+                  </Alert>
+                )}
               </CardContent>
             </Card>
             {conflictDates.length > 0 && (
@@ -223,7 +245,7 @@ export default function InventoryImportPage() {
                 <>
                   <Button
                     onClick={() => handleImport('skip')}
-                    disabled={preview.summary.totalSheets === 0 || !!preview.alreadyImported || importMut.isPending}
+                    disabled={preview.summary.totalSheets === 0 || !!preview.alreadyImported || hasAmbiguous || importMut.isPending}
                   >
                     {importMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
                     Import (skip {conflictDates.length} existing day{conflictDates.length > 1 ? 's' : ''})
@@ -231,7 +253,7 @@ export default function InventoryImportPage() {
                   <Button
                     variant="destructive"
                     onClick={() => handleImport('overwrite')}
-                    disabled={preview.summary.totalSheets === 0 || !!preview.alreadyImported || importMut.isPending}
+                    disabled={preview.summary.totalSheets === 0 || !!preview.alreadyImported || hasAmbiguous || importMut.isPending}
                   >
                     {importMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <AlertTriangle className="mr-2 h-4 w-4" />}
                     Overwrite existing days
@@ -240,7 +262,7 @@ export default function InventoryImportPage() {
               ) : (
                 <Button
                   onClick={() => handleImport()}
-                  disabled={preview.summary.totalSheets === 0 || !!preview.alreadyImported || importMut.isPending}
+                  disabled={preview.summary.totalSheets === 0 || !!preview.alreadyImported || hasAmbiguous || importMut.isPending}
                 >
                   {importMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}Import
                 </Button>

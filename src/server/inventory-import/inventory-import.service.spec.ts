@@ -230,6 +230,32 @@ describe('InventoryImportService', () => {
       expect(res.sheets[0].error).toMatch(/zero/i);
     });
 
+    it('flags an ambiguous sheet with a blocking error, not just the ambiguous array, so preview cannot look clean', async () => {
+      // importWorkbook aborts this whole sheet (see the importWorkbook suite
+      // below); the preview must say so up front — an operator who sees no
+      // error here and imports would otherwise learn the sheet was dropped
+      // only after the fact.
+      prisma.product.findMany.mockResolvedValue([
+        { id: 119, name: 'Bonette' },
+        { id: 120, name: 'Bonette' },
+      ]);
+      prisma.productAlias.findMany.mockResolvedValue([]);
+      const buf = buildWorkbook([
+        {
+          name: 'Day (1)',
+          dateHeader: '4/14/26',
+          rows: [['Bonette', 5, 2, 0]],
+        },
+      ]);
+
+      const res = await service.dryRunWorkbook(buf, 'sheet.xlsx');
+
+      expect(res.sheets[0].ambiguous).toHaveLength(1);
+      expect(res.sheets[0].ambiguous[0]).toMatch(/matches 2 products/);
+      expect(res.sheets[0].error).toMatch(/skipped/i);
+      expect(res.summary.totalAmbiguous).toBe(1);
+    });
+
     it('treats "Expected Sales (Dapat Benta)" as a label, not an unmatched product', async () => {
       const buf = buildWorkbook([
         {
@@ -603,6 +629,35 @@ describe('InventoryImportService', () => {
       expect(prisma.inventory.upsert).not.toHaveBeenCalled();
       expect(res.sheets[0].processed).toBe(0);
       expect(res.sheets[0].errors[0]).toMatch(/bote/i);
+    });
+
+    it('skips the whole sheet on ambiguity, including its otherwise-valid rows', async () => {
+      // Regression guard for a mutation that recorded the ambiguity error but
+      // still upserted the sheet's other, unambiguous rows. The sheet must be
+      // all-or-nothing: one unresolved label blocks every row on that sheet,
+      // not just its own.
+      prisma.product.findMany.mockResolvedValue([
+        { id: 1, name: 'Pandesal' },
+        { id: 119, name: 'Bonette' },
+        { id: 120, name: 'Bonette' }, // same name, two products
+      ]);
+      prisma.productAlias.findMany.mockResolvedValue([]);
+      const buf = buildWorkbook([
+        {
+          name: 'Day (1)',
+          dateHeader: '4/14/26',
+          rows: [
+            ['Pandesal', 10, 3, 1], // clearly valid, unique catalog match
+            ['Bonette', 5, 2, 0], // ambiguous
+          ],
+        },
+      ]);
+
+      const res = await service.importWorkbook(buf, 7, 'sheet.xlsx');
+
+      expect(prisma.inventory.upsert).not.toHaveBeenCalled();
+      expect(res.sheets[0].processed).toBe(0);
+      expect(res.sheets[0].errors[0]).toMatch(/matches 2 products/);
     });
   });
 });

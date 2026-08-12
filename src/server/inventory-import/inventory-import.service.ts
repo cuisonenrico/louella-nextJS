@@ -39,6 +39,7 @@ export interface DryRunResult {
     totalSheets: number;
     totalMatched: number;
     totalUnmatched: number;
+    totalAmbiguous: number;
     datesDetected: string[];
   };
   sheets: DryRunSheet[];
@@ -414,19 +415,28 @@ export class InventoryImportService {
       );
       const distinct = [...new Set(unmatched)];
       const allZero = accumulator.size > 0 && !hasNonZeroCounts(accumulator);
-      sheets.push({
+      const sheetEntry: DryRunSheet = {
         sheetName,
         date: toDateStr(dateMeta.sheetDate),
         matched: accumulator.size,
         unmatchedCount: distinct.length,
         unmatched: distinct,
         ambiguous,
-        ...(allZero && {
-          error:
-            'All product counts are zero; sheet will be skipped so ' +
-            'existing data is not overwritten',
-        }),
-      });
+      };
+      // Ambiguity aborts the whole sheet at import time — the preview must
+      // say so as visibly as the implausible-date/all-zero cases do, or an
+      // operator can approve an import that silently drops the sheet.
+      if (ambiguous.length > 0) {
+        sheetEntry.error =
+          `${ambiguous.length} label${ambiguous.length > 1 ? 's are' : ' is'} ` +
+          `ambiguous; this sheet will be skipped entirely at import until a ` +
+          `ProductAlias resolves ${ambiguous.length > 1 ? 'each label' : 'it'}.`;
+      } else if (allZero) {
+        sheetEntry.error =
+          'All product counts are zero; sheet will be skipped so ' +
+          'existing data is not overwritten';
+      }
+      sheets.push(sheetEntry);
     }
 
     if (branchId !== undefined) {
@@ -445,6 +455,10 @@ export class InventoryImportService {
     const datesDetected = sheets.filter((s) => s.date).map((s) => s.date);
     const totalMatched = sheets.reduce((sum, s) => sum + s.matched, 0);
     const totalUnmatched = sheets.reduce((sum, s) => sum + s.unmatchedCount, 0);
+    const totalAmbiguous = sheets.reduce(
+      (sum, s) => sum + s.ambiguous.length,
+      0,
+    );
 
     return {
       fileName: originalName,
@@ -454,6 +468,7 @@ export class InventoryImportService {
         totalSheets: sheets.length,
         totalMatched,
         totalUnmatched,
+        totalAmbiguous,
         datesDetected,
       },
       sheets,
