@@ -31,5 +31,11 @@ ALTER TABLE "ProductAlias" ADD CONSTRAINT "ProductAlias_productId_fkey"
 -- materialized in SQL — see the NOTE comment on the ProductAlias model in
 -- schema.prisma), so there is nothing to DROP here; this expression index is
 -- the only enforcement of that uniqueness.
+--
+-- sheetLabel is keyed as lower(trim(...)) because that is exactly how the
+-- application looks it up (LabelResolver normalizes both the alias on load
+-- and the sheet label on resolve). A case-sensitive index would let 'Litro'
+-- and 'litro' both insert with conflicting productIds while only one of them
+-- could ever match.
 CREATE UNIQUE INDEX "ProductAlias_lookup_key"
-  ON "ProductAlias" ("sheetLabel", COALESCE(section, ''), COALESCE("priceHint", -1));
+  ON "ProductAlias" (lower(trim("sheetLabel")), COALESCE(section, ''), COALESCE("priceHint", -1));
