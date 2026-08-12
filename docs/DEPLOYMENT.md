@@ -120,19 +120,55 @@ Migrations are **not** run by the build. Run them deliberately:
 npm run prisma:deploy   # prisma migrate deploy, uses DIRECT_URL
 ```
 
-## Cutover state (as of 2026-08-02)
+## Cutover state (as of 2026-08-12)
 
-Consolidation is complete on the web side, but the cutover is deliberately
-staged:
+**The web app is live on the consolidated API.**
 
 1. ✅ API consolidated into this project.
-2. ⬜ Deploy to a Vercel preview and verify.
-3. ⬜ Promote to production.
+2. ✅ Deployed to preview and verified.
+3. ✅ Promoted to production (`6bd2341`), env vars set, `NEXT_PUBLIC_API_URL`
+   removed so the frontend uses the relative `/api/v1`. Verified live: login,
+   refresh-via-cookie, all three autofill sheets, and the module sweep.
 4. ⬜ **Cloud Run `louella-be` is frozen, not deleted.** Its existing image
    keeps serving the current Flutter build. Stop deploying to it — do not
    delete it.
 5. ⬜ Repoint the Flutter app's base URL to the Vercel domain, ship that build,
    *then* delete the Cloud Run service. Cost is only eliminated at this step.
+
+### Env var changes require a rebuild, and the ordering is load-bearing
+
+Vercel binds environment variables to a deployment **at build time**. Adding or
+removing one does nothing to deployments that already exist. The first
+production deploy of the consolidation proved this the hard way: it was built
+before the vars were set, so `validateEnv` killed the process on every request —
+
+```
+Error: Missing required environment variable(s): DATABASE_URL, JWT_ACCESS_SECRET, JWT_REFRESH_SECRET.
+Node.js process exited with exit status: 1
+```
+
+`NEXT_PUBLIC_*` is stricter still: it is inlined into client bundles, so it must
+be removed **before** the build that is meant to drop it, never after.
+
+### Identifying a deployment before redeploying it
+
+`vercel ls --prod` prints bare URLs with no commit or timestamp, **and the first
+row is not reliably the newest**. Redeploying off that listing once shipped a
+two-month-old frontend-only commit to production and 404'd the whole API.
+
+Confirm what a deployment actually contains before acting on it:
+
+```bash
+vercel inspect <url>          # or the Vercel MCP's list_deployments, which
+                              # returns githubCommitSha + githubCommitMessage
+```
+
+A reliable tell for this project: the consolidated build reports
+`lambdaRuntimeStats: {"nodejs":2}`. Anything showing `1` predates the API move
+and has no `/api/v1` function at all.
+
+`vercel promote <deploymentId>` is the fast way back — it is an alias swap with
+no rebuild, ~2s, and does not need the source or env vars to be correct yet.
 
 > **While Cloud Run is frozen, every Prisma migration must stay
 > backward-compatible with that image** — it and this app share one database.
