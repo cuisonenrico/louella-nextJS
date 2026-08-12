@@ -16,10 +16,18 @@ describe('sectionForRow', () => {
   it('leaves the bote section at a TOTAL row', () => {
     expect(sectionForRow('TOTAL', 'bote')).toBe('main');
   });
+
+  it('trims trailing whitespace from Bote: header', () => {
+    expect(sectionForRow('Bote: ', 'main')).toBe('bote');
+  });
+
+  it('trims leading whitespace from PAGE header', () => {
+    expect(sectionForRow(' PAGE 4', 'bote')).toBe('main');
+  });
 });
 
 describe('isIgnoredLabel', () => {
-  it.each(['Estante', 'Freezer', 'Ref', 'Trays', 'Wooden Estante/Cab', 'Cake Chiller (C2)'])(
+  it.each(['Estante', 'Freezer', 'Ref', 'Trays', 'Board Stand', 'Thongs', 'Plancha', 'Wooden Estante/Cab', 'Ref-type Chiller', 'Cake Chiller (C2)'])(
     'ignores the equipment label %s',
     (label) => {
       expect(isIgnoredLabel(label)).toBe(true);
@@ -28,5 +36,9 @@ describe('isIgnoredLabel', () => {
 
   it('does not ignore a real product', () => {
     expect(isIgnoredLabel('Pandesal')).toBe(false);
+  });
+
+  it('trims whitespace from both sides of equipment labels', () => {
+    expect(isIgnoredLabel(' Estante ')).toBe(true);
   });
 });
