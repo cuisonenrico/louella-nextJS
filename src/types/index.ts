@@ -401,6 +401,7 @@ export interface DryRunSheet {
   matched: number; // distinct products found in the catalog
   unmatchedCount: number; // distinct names that did not match a product
   unmatched: string[]; // distinct unmatched names
+  ambiguous: string[]; // labels matching several products with no alias
   error?: string; // sheet-level problem (e.g. no date header)
 }
 

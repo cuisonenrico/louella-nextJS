@@ -12,6 +12,7 @@ function makePrisma() {
   return {
     branch: { findFirst: jest.fn() },
     product: { findMany: jest.fn() },
+    productAlias: { findMany: jest.fn() },
     inventory: { upsert: jest.fn(), groupBy: jest.fn() },
     importLog: {
       findFirst: jest.fn(),
@@ -79,6 +80,7 @@ describe('InventoryImportService', () => {
       { id: 1, name: 'Pandesal' },
       { id: 2, name: 'Ensaymada Big' },
     ]);
+    prisma.productAlias.findMany.mockResolvedValue([]);
     prisma.branch.findFirst.mockResolvedValue({ id: 7, name: 'Silang' });
     prisma.importLog.findFirst.mockResolvedValue(null);
     prisma.inventory.groupBy.mockResolvedValue([]);
@@ -532,6 +534,75 @@ describe('InventoryImportService', () => {
         leftover: 5,
         reject: 2,
       });
+    });
+
+    it('refuses a sheet containing an ambiguous label instead of summing it', async () => {
+      prisma.product.findMany.mockResolvedValue([
+        { id: 119, name: 'Bonette' },
+        { id: 120, name: 'Bonette' }, // same name, two products
+      ]);
+      prisma.productAlias.findMany.mockResolvedValue([]); // nothing disambiguates
+      const buf = buildWorkbook([
+        {
+          name: 'Day (1)',
+          dateHeader: '4/14/26',
+          rows: [['Bonette', 5, 2, 0]],
+        },
+      ]);
+
+      const res = await service.importWorkbook(buf, 7, 'sheet.xlsx');
+
+      expect(prisma.inventory.upsert).not.toHaveBeenCalled();
+      expect(res.sheets[0].processed).toBe(0);
+      expect(res.sheets[0].errors[0]).toMatch(/matches 2 products/);
+    });
+
+    it('does not report ignored equipment labels as errors', async () => {
+      prisma.product.findMany.mockResolvedValue([{ id: 1, name: 'Pandesal' }]);
+      prisma.productAlias.findMany.mockResolvedValue([]);
+      const buf = buildWorkbook([
+        {
+          name: 'Day (1)',
+          dateHeader: '4/14/26',
+          rows: [
+            ['Pandesal', 10, 3, 1],
+            ['Estante', 0, 0, 0],
+            ['Freezer', 0, 0, 0],
+          ],
+        },
+      ]);
+
+      const res = await service.importWorkbook(buf, 7, 'sheet.xlsx');
+
+      expect(res.sheets[0].processed).toBe(1);
+      expect(res.sheets[0].skipped).toBe(0);
+      expect(res.sheets[0].errors).toEqual([]);
+    });
+
+    it('aborts a bote-section label with no alias even when the catalog name is unique, proving section context flows from the sheet into the resolver', async () => {
+      // "Litro" has a single catalog match, so if section tracking were
+      // broken (label resolved as if it were always 'main'), this would
+      // resolve happily via the catalog-uniqueness fallback and upsert.
+      // Because it sits under a "Bote:" header with no alias, the resolver
+      // must refuse it as ambiguous instead.
+      prisma.product.findMany.mockResolvedValue([{ id: 50, name: 'Litro' }]);
+      prisma.productAlias.findMany.mockResolvedValue([]);
+      const buf = buildWorkbook([
+        {
+          name: 'Day (1)',
+          dateHeader: '4/14/26',
+          rows: [
+            ['Bote:', 0, 0, 0],
+            ['Litro', 5, 2, 0],
+          ],
+        },
+      ]);
+
+      const res = await service.importWorkbook(buf, 7, 'sheet.xlsx');
+
+      expect(prisma.inventory.upsert).not.toHaveBeenCalled();
+      expect(res.sheets[0].processed).toBe(0);
+      expect(res.sheets[0].errors[0]).toMatch(/bote/i);
     });
   });
 });

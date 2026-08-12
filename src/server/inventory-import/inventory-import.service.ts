@@ -6,6 +6,12 @@ import {
 import * as crypto from 'crypto';
 import * as XLSX from 'xlsx';
 import { PrismaService } from '../prisma/prisma.service';
+import { LabelResolver } from './label-resolver';
+import {
+  isIgnoredLabel,
+  sectionForRow,
+  type SheetSection,
+} from './sheet-sections';
 
 export interface DryRunSheet {
   sheetName: string;
@@ -13,6 +19,7 @@ export interface DryRunSheet {
   matched: number; // distinct products found in the catalog
   unmatchedCount: number; // distinct names that did not match a product
   unmatched: string[]; // distinct unmatched names (so the manager can fix the catalog)
+  ambiguous: string[]; // labels matching several products with no alias
   error?: string; // sheet-level problem (e.g. no date header)
   // Rows already stored for this sheet's date+branch (branch mode only).
   // Placeholders are untouched autofill rows and never block an import;
@@ -148,6 +155,13 @@ function parseCount(val: unknown): number {
   return isNaN(n) ? 0 : Math.round(n);
 }
 
+/** Column B holds the unit price as a formatted string, e.g. "36.00". */
+function parsePrice(val: unknown): number | null {
+  if (val === null || val === undefined || val === '') return null;
+  const n = parseFloat(String(val).trim().replace(/[^\d.\-]/g, ''));
+  return Number.isNaN(n) ? null : n;
+}
+
 @Injectable()
 export class InventoryImportService {
   constructor(private readonly prisma: PrismaService) {}
@@ -167,17 +181,43 @@ export class InventoryImportService {
     return branch;
   }
 
-  private async buildProductMap(): Promise<Map<string, number>> {
+  private async buildCatalog(): Promise<Map<string, number[]>> {
     const products = await this.prisma.product.findMany({
       where: { deletedAt: null },
       select: { id: true, name: true },
       orderBy: [{ type: 'asc' }, { sortOrder: 'asc' }, { name: 'asc' }],
     });
-    const productMap = new Map<string, number>();
+    const catalog = new Map<string, number[]>();
     for (const p of products) {
-      productMap.set(p.name.trim().toLowerCase(), p.id);
+      const key = p.name.trim().toLowerCase();
+      const list = catalog.get(key);
+      if (list) list.push(p.id);
+      else catalog.set(key, [p.id]);
     }
-    return productMap;
+    return catalog;
+  }
+
+  private async buildResolver(): Promise<LabelResolver> {
+    const [catalog, aliasRows] = await Promise.all([
+      this.buildCatalog(),
+      this.prisma.productAlias.findMany({
+        select: {
+          sheetLabel: true,
+          section: true,
+          priceHint: true,
+          productId: true,
+        },
+      }),
+    ]);
+    return new LabelResolver(
+      aliasRows.map((a) => ({
+        sheetLabel: a.sheetLabel,
+        section: a.section,
+        priceHint: a.priceHint === null ? null : Number(a.priceHint),
+        productId: a.productId,
+      })),
+      catalog,
+    );
   }
 
   // One batched groupBy for all sheet dates: how many rows already exist per
@@ -222,33 +262,53 @@ export class InventoryImportService {
   private collectSheetEntries(
     rows: Record<string, unknown>[],
     dateKey: string,
-    productMap: Map<string, number>,
-  ): { accumulator: Map<number, Counts>; unmatched: string[] } {
+    resolver: LabelResolver,
+  ): {
+    accumulator: Map<number, Counts>;
+    unmatched: string[];
+    ambiguous: string[];
+  } {
     const accumulator = new Map<number, Counts>();
     const unmatched: string[] = [];
+    const ambiguous: string[] = [];
+    let section: SheetSection = 'main';
+
     for (const row of rows) {
       const rawName = row['PAGE 1'];
       if (typeof rawName !== 'string') continue;
       const productName = rawName.trim();
+
+      // Section headers are themselves skippable labels, so update the
+      // section before the skip test discards the row.
+      section = sectionForRow(productName, section);
+
       if (isSkippableLabel(productName)) continue;
-      const productId = productMap.get(productName.toLowerCase());
-      if (!productId) {
+      if (isIgnoredLabel(productName)) continue;
+
+      const price = parsePrice(row['__EMPTY']);
+      const res = resolver.resolve(productName, section, price);
+      if (res.kind === 'ambiguous') {
+        ambiguous.push(res.reason);
+        continue;
+      }
+      if (res.kind === 'unmatched') {
         unmatched.push(productName);
         continue;
       }
+
       const delivery = parseCount(row['__EMPTY_1']);
       const leftover = parseCount(row['__EMPTY_3']);
       const reject = parseCount(row[dateKey]);
-      const existing = accumulator.get(productId);
+      const existing = accumulator.get(res.productId);
       if (existing) {
         existing.delivery += delivery;
         existing.leftover += leftover;
         existing.reject += reject;
       } else {
-        accumulator.set(productId, { delivery, leftover, reject });
+        accumulator.set(res.productId, { delivery, leftover, reject });
       }
     }
-    return { accumulator, unmatched };
+    return { accumulator, unmatched, ambiguous };
   }
 
   private async upsertAccumulated(
@@ -306,7 +366,7 @@ export class InventoryImportService {
       }
     }
 
-    const productMap = await this.buildProductMap();
+    const resolver = await this.buildResolver();
     const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
     const sheets: DryRunSheet[] = [];
 
@@ -326,6 +386,7 @@ export class InventoryImportService {
           matched: 0,
           unmatchedCount: 0,
           unmatched: [],
+          ambiguous: [],
           error: 'Could not determine date from column headers',
         });
         continue;
@@ -338,6 +399,7 @@ export class InventoryImportService {
           matched: 0,
           unmatchedCount: 0,
           unmatched: [],
+          ambiguous: [],
           error:
             `Sheet date ${toDateStr(dateMeta.sheetDate)} is implausible ` +
             `(unused template tab); sheet will be skipped`,
@@ -345,10 +407,10 @@ export class InventoryImportService {
         continue;
       }
 
-      const { accumulator, unmatched } = this.collectSheetEntries(
+      const { accumulator, unmatched, ambiguous } = this.collectSheetEntries(
         rows,
         dateMeta.dateKey,
-        productMap,
+        resolver,
       );
       const distinct = [...new Set(unmatched)];
       const allZero = accumulator.size > 0 && !hasNonZeroCounts(accumulator);
@@ -358,6 +420,7 @@ export class InventoryImportService {
         matched: accumulator.size,
         unmatchedCount: distinct.length,
         unmatched: distinct,
+        ambiguous,
         ...(allZero && {
           error:
             'All product counts are zero; sheet will be skipped so ' +
@@ -420,7 +483,7 @@ export class InventoryImportService {
       );
     }
 
-    const productMap = await this.buildProductMap();
+    const resolver = await this.buildResolver();
     const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
     const sheetResults: SheetImportResult[] = [];
 
@@ -483,11 +546,20 @@ export class InventoryImportService {
         continue;
       }
 
-      const { accumulator, unmatched } = this.collectSheetEntries(
+      const { accumulator, unmatched, ambiguous } = this.collectSheetEntries(
         rows,
         dateMeta.dateKey,
-        productMap,
+        resolver,
       );
+      if (ambiguous.length > 0) {
+        for (const reason of ambiguous) result.errors.push(reason);
+        result.errors.push(
+          `${result.date}: sheet skipped — resolve the ambiguous labels with ` +
+            `a ProductAlias before importing`,
+        );
+        sheetResults.push(result);
+        continue;
+      }
       result.skipped = unmatched.length;
       for (const name of unmatched) {
         result.errors.push(`Product not found: "${name}"`);
