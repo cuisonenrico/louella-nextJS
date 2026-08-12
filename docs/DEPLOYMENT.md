@@ -30,9 +30,30 @@ deployment if wrong:
 | `DATABASE_URL` | **Transaction pooler, port 6543**, with `?pgbouncer=true&connection_limit=1`. The session pooler (5432) exhausts connections under serverless fan-out. |
 | `DIRECT_URL` | Session pooler (5432). Used only by `prisma migrate`, which cannot run through the transaction pooler. |
 | `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` | ≥16 chars. `validateEnv` fails the boot without them — on serverless that surfaces as a 500 on first request, not a deploy failure. |
-| `TZ` | Must be `Asia/Manila`. |
+| ~~`TZ`~~ | **Cannot be set — Vercel reserves the name** and rejects it with `The name of your Environment Variable is reserved`. Cloud Run allowed it; Vercel does not. Functions always run UTC, so every date boundary must pin `Asia/Manila` explicitly in code (see below). |
 | `ALLOWED_ORIGINS` | Only for cross-origin clients (the Flutter app). The web app is same-origin and needs no entry. |
 | `FIREBASE_SERVICE_ACCOUNT` | Inline JSON. There is no writable filesystem for the file-path variant. |
+
+## Timezone: pin it in code, never via `TZ`
+
+Vercel **reserves the `TZ` environment variable** and refuses to accept it, so
+functions always run in UTC. This is a hard platform difference from Cloud Run,
+where `TZ=Asia/Manila` was how every "today" boundary stayed correct.
+
+Every date boundary must therefore resolve the zone explicitly:
+
+```ts
+new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date())
+```
+
+`en-CA` is what yields `YYYY-MM-DD`. This is the pattern in `jobs.service`,
+`autofill-on-demand.service`, `suggestions.service`, and — since the Vercel
+migration — `inventory.service`'s `localToday()`.
+
+**Why it matters:** under UTC, a `getFullYear()/getMonth()/getDate()` reading is
+wrong from 16:00–23:59 UTC, which is **00:00–08:00 in Manila** — the
+early-morning baking shift, exactly when the sheets are first opened. Any new
+code that derives a date from the system clock is a bug on this platform.
 
 ## Autofill jobs (no scheduler)
 
