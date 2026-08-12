@@ -151,8 +151,35 @@ model Product {
   recipe       Recipe?
   priceHistory ProductPriceHistory[]
   productionOrderItems ProductionOrderItem[]
+  aliases      ProductAlias[]
 
   @@index([type, sortOrder])
+}
+
+// Maps a label as it appears in column A of an imported day sheet to a
+// product. Sheet labels are ambiguous in two ways: the same word names a
+// beverage and its bottle deposit (resolved by `section`), and in a few
+// legacy cases two distinct SKUs share a name (resolved by `priceHint`).
+// Price is a disambiguator only — never part of product identity, because
+// prices are repriced constantly (see ProductPriceHistory).
+/// NOTE: the [sheetLabel, section, priceHint] uniqueness is enforced in SQL by
+/// the ProductAlias_lookup_key expression index (COALESCE on the nullable
+/// columns), not by the @@unique below, which Postgres would treat as
+/// NULLS DISTINCT. Keep both; drop neither.
+model ProductAlias {
+  id         Int      @id @default(autoincrement())
+  productId  Int
+  sheetLabel String   // lowercased, trimmed, exactly as it appears in col A
+  section    String?  // 'bote' for the deposit block; null = main body
+  priceHint  Decimal? @db.Decimal(10, 2) // last-resort tie-break within one file
+  notes      String?
+  createdAt  DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([sheetLabel, section, priceHint])
+  @@index([productId]) // FK columns are not auto-indexed by Postgres
+  @@index([sheetLabel])
 }
 
 model Branch {
