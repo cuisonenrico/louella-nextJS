@@ -162,10 +162,19 @@ model Product {
 // legacy cases two distinct SKUs share a name (resolved by `priceHint`).
 // Price is a disambiguator only — never part of product identity, because
 // prices are repriced constantly (see ProductPriceHistory).
-/// NOTE: the [sheetLabel, section, priceHint] uniqueness is enforced in SQL by
-/// the ProductAlias_lookup_key expression index (COALESCE on the nullable
-/// columns), not by the @@unique below, which Postgres would treat as
-/// NULLS DISTINCT. Keep both; drop neither.
+/// NOTE: there is deliberately no @@unique([sheetLabel, section, priceHint])
+/// here. Uniqueness for that triple is enforced solely in SQL by the
+/// ProductAlias_lookup_key expression index (COALESCE on the nullable
+/// columns) in the migration — a plain multi-column UNIQUE cannot do this,
+/// because Postgres treats NULLs as distinct within a unique index (two rows
+/// with the same sheetLabel and NULL section/priceHint would both insert
+/// happily) and Prisma's @@unique has no way to express NULLS NOT DISTINCT.
+/// Do not re-add @@unique here: Prisma's migration engine would then expect a
+/// plain index named ProductAlias_sheetLabel_section_priceHint_key that will
+/// never exist in the database, and propose creating it on every future
+/// `prisma migrate dev`. Nothing in the codebase needs the compound key as a
+/// named constraint — lookups use findMany, and alias seeding uses
+/// `ON CONFLICT DO NOTHING` against the expression index directly.
 model ProductAlias {
   id         Int      @id @default(autoincrement())
   productId  Int
@@ -177,7 +186,6 @@ model ProductAlias {
 
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  @@unique([sheetLabel, section, priceHint])
   @@index([productId]) // FK columns are not auto-indexed by Postgres
   @@index([sheetLabel])
 }
