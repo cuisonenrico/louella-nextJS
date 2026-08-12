@@ -1,0 +1,845 @@
+{
+  "info": {
+    "name": "Louella API – Full Collection",
+    "_postman_id": "louella-full-v1",
+    "description": "All available endpoints for the Louella backend API. Set the `baseUrl` variable to your server address (default: http://localhost:3000). After calling Login or Register, the `accessToken` variable is auto-populated for all protected requests.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      { "key": "token", "value": "{{accessToken}}", "type": "string" }
+    ]
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000/api/v1", "type": "string" },
+    { "key": "accessToken", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "auth": { "type": "noauth" },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.accessToken) { pm.collectionVariables.set('accessToken', json.accessToken); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth", "register"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@louella.com\",\n  \"password\": \"secret123\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login",
+          "auth": { "type": "noauth" },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.accessToken) { pm.collectionVariables.set('accessToken', json.accessToken); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@louella.com\",\n  \"password\": \"secret123\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "auth": { "type": "noauth" },
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/auth/refresh", "host": ["{{baseUrl}}"], "path": ["auth", "refresh"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"<your-refresh-token>\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "auth": { "type": "noauth" },
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/auth/logout", "host": ["{{baseUrl}}"], "path": ["auth", "logout"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"<your-refresh-token>\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Get Current User (me)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/auth/me", "host": ["{{baseUrl}}"], "path": ["auth", "me"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Files",
+      "item": [
+        {
+          "name": "Presign Upload URL",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/files/presign", "host": ["{{baseUrl}}"], "path": ["files", "presign"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"filename\": \"sales-report.xlsx\",\n  \"contentType\": \"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Complete Upload",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/files/complete", "host": ["{{baseUrl}}"], "path": ["files", "complete"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"key\": \"uploads/1/1709123456789-sales-report.xlsx\",\n  \"filename\": \"sales-report.xlsx\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Branches",
+      "item": [
+        {
+          "name": "Create Branch",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/branches", "host": ["{{baseUrl}}"], "path": ["branches"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Main Branch\",\n  \"address\": \"123 Main St, Manila\",\n  \"phone\": \"+63 912 345 6789\",\n  \"isActive\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "Get All Branches",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/branches", "host": ["{{baseUrl}}"], "path": ["branches"] }
+          }
+        },
+        {
+          "name": "Search Branches",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/branches/search?q=main",
+              "host": ["{{baseUrl}}"],
+              "path": ["branches", "search"],
+              "query": [{ "key": "q", "value": "main" }]
+            }
+          }
+        },
+        {
+          "name": "Get Branch by ID",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/branches/1", "host": ["{{baseUrl}}"], "path": ["branches", "1"] }
+          }
+        },
+        {
+          "name": "Update Branch",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/branches/1", "host": ["{{baseUrl}}"], "path": ["branches", "1"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Main Branch – Updated\",\n  \"isActive\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Branch",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/branches/1", "host": ["{{baseUrl}}"], "path": ["branches", "1"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Products",
+      "item": [
+        {
+          "name": "Create Product",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/products", "host": ["{{baseUrl}}"], "path": ["products"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Ensaymada\",\n  \"type\": \"BREAD\",\n  \"price\": 35.00,\n  \"date\": \"2026-02-28\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Create Products (Bulk)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/products/bulk", "host": ["{{baseUrl}}"], "path": ["products", "bulk"] },
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  { \"name\": \"Ensaymada\", \"type\": \"BREAD\", \"price\": 35.00 },\n  { \"name\": \"Chocolate Cake\", \"type\": \"CAKE\", \"price\": 850.00 },\n  { \"name\": \"Ube Pandesal\", \"type\": \"SPECIAL\", \"price\": 20.00 }\n]"
+            }
+          }
+        },
+        {
+          "name": "Get All Products",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/products", "host": ["{{baseUrl}}"], "path": ["products"] }
+          }
+        },
+        {
+          "name": "Search Products",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/products/search?q=ensaymada",
+              "host": ["{{baseUrl}}"],
+              "path": ["products", "search"],
+              "query": [{ "key": "q", "value": "ensaymada" }]
+            }
+          }
+        },
+        {
+          "name": "Get Product by ID",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/products/1", "host": ["{{baseUrl}}"], "path": ["products", "1"] }
+          }
+        },
+        {
+          "name": "Update Product",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/products/1", "host": ["{{baseUrl}}"], "path": ["products", "1"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"price\": 40.00\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Product",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/products/1", "host": ["{{baseUrl}}"], "path": ["products", "1"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Inventory",
+      "item": [
+        {
+          "name": "Create / Upsert Inventory Record",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/inventory", "host": ["{{baseUrl}}"], "path": ["inventory"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"branchId\": 1,\n  \"productId\": 1,\n  \"date\": \"2026-02-28\",\n  \"quantity\": 100,\n  \"delivery\": 80,\n  \"leftover\": 15,\n  \"reject\": 5,\n  \"notes\": \"Normal delivery day\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Create / Upsert Inventory Records (Bulk)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/inventory/bulk", "host": ["{{baseUrl}}"], "path": ["inventory", "bulk"] },
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  { \"branchId\": 1, \"productId\": 1, \"date\": \"2026-02-28\", \"quantity\": 100, \"delivery\": 80, \"leftover\": 15, \"reject\": 5 },\n  { \"branchId\": 1, \"productId\": 2, \"date\": \"2026-02-28\", \"quantity\": 50, \"delivery\": 40, \"leftover\": 8, \"reject\": 2 },\n  { \"branchId\": 2, \"productId\": 1, \"date\": \"2026-02-28\", \"quantity\": 80, \"delivery\": 60, \"leftover\": 10, \"reject\": 10 }\n]"
+            }
+          }
+        },
+        {
+          "name": "Get All Inventory Records",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/inventory", "host": ["{{baseUrl}}"], "path": ["inventory"] }
+          }
+        },
+        {
+          "name": "Search Inventory Records",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/inventory/search?q=main&page=1&limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["inventory", "search"],
+              "query": [
+                { "key": "q", "value": "main" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "50" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Inventory by Branch",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/inventory/branch/1", "host": ["{{baseUrl}}"], "path": ["inventory", "branch", "1"] }
+          }
+        },
+        {
+          "name": "Get Inventory by Product",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/inventory/product/1", "host": ["{{baseUrl}}"], "path": ["inventory", "product", "1"] }
+          }
+        },
+        {
+          "name": "Get Inventory by Branch + Date",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/inventory/branch/1/date?date=2026-02-28",
+              "host": ["{{baseUrl}}"],
+              "path": ["inventory", "branch", "1", "date"],
+              "query": [{ "key": "date", "value": "2026-02-28" }]
+            }
+          }
+        },
+        {
+          "name": "Get Inventory Record by ID",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/inventory/1", "host": ["{{baseUrl}}"], "path": ["inventory", "1"] }
+          }
+        },
+        {
+          "name": "Update Inventory Record",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/inventory/1", "host": ["{{baseUrl}}"], "path": ["inventory", "1"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"leftover\": 20,\n  \"reject\": 3,\n  \"notes\": \"Slightly more leftover than expected\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Inventory Record",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/inventory/1", "host": ["{{baseUrl}}"], "path": ["inventory", "1"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Sales",
+      "item": [
+        {
+          "name": "Get Sales by Branch + Date",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/sales/branch/1/date?date=2026-02-28",
+              "host": ["{{baseUrl}}"],
+              "path": ["sales", "branch", "1", "date"],
+              "query": [{ "key": "date", "value": "2026-02-28" }]
+            }
+          }
+        },
+        {
+          "name": "Get Sales by Branch (Date Range)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/sales/branch/1?startDate=2026-02-01&endDate=2026-02-28",
+              "host": ["{{baseUrl}}"],
+              "path": ["sales", "branch", "1"],
+              "query": [
+                { "key": "startDate", "value": "2026-02-01" },
+                { "key": "endDate", "value": "2026-02-28" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Sales by Branch + Product (Date Range)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/sales/branch/1/product/1?startDate=2026-02-01&endDate=2026-02-28",
+              "host": ["{{baseUrl}}"],
+              "path": ["sales", "branch", "1", "product", "1"],
+              "query": [
+                { "key": "startDate", "value": "2026-02-01" },
+                { "key": "endDate", "value": "2026-02-28" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Sales by Product (Date Range)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/sales/product/1?startDate=2026-02-01&endDate=2026-02-28",
+              "host": ["{{baseUrl}}"],
+              "path": ["sales", "product", "1"],
+              "query": [
+                { "key": "startDate", "value": "2026-02-01" },
+                { "key": "endDate", "value": "2026-02-28" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Daily Sales Summary by Branch (Date Range)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/sales/branch/1/summary?startDate=2026-02-01&endDate=2026-02-28",
+              "host": ["{{baseUrl}}"],
+              "path": ["sales", "branch", "1", "summary"],
+              "query": [
+                { "key": "startDate", "value": "2026-02-01" },
+                { "key": "endDate", "value": "2026-02-28" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Materials",
+      "item": [
+        {
+          "name": "Create Material",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/materials", "host": ["{{baseUrl}}"], "path": ["materials"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"All-Purpose Flour\",\n  \"unit\": \"kg\",\n  \"pricePerUnit\": 55.00\n}"
+            }
+          }
+        },
+        {
+          "name": "Create Materials (Bulk)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/materials/bulk", "host": ["{{baseUrl}}"], "path": ["materials", "bulk"] },
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  { \"name\": \"All-Purpose Flour\", \"unit\": \"kg\", \"pricePerUnit\": 55.00 },\n  { \"name\": \"White Sugar\", \"unit\": \"kg\", \"pricePerUnit\": 60.00 },\n  { \"name\": \"Butter\", \"unit\": \"kg\", \"pricePerUnit\": 320.00 },\n  { \"name\": \"Eggs\", \"unit\": \"piece\", \"pricePerUnit\": 8.00 },\n  { \"name\": \"Fresh Milk\", \"unit\": \"liter\", \"pricePerUnit\": 90.00 },\n  { \"name\": \"Cocoa Powder\", \"unit\": \"kg\", \"pricePerUnit\": 450.00 }\n]"
+            }
+          }
+        },
+        {
+          "name": "Get All Materials",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/materials", "host": ["{{baseUrl}}"], "path": ["materials"] }
+          }
+        },
+        {
+          "name": "Search Materials",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/materials/search?q=flour",
+              "host": ["{{baseUrl}}"],
+              "path": ["materials", "search"],
+              "query": [{ "key": "q", "value": "flour" }]
+            }
+          }
+        },
+        {
+          "name": "Get Material by ID",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/materials/1", "host": ["{{baseUrl}}"], "path": ["materials", "1"] }
+          }
+        },
+        {
+          "name": "Update Material",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/materials/1", "host": ["{{baseUrl}}"], "path": ["materials", "1"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pricePerUnit\": 58.00\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Material",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/materials/1", "host": ["{{baseUrl}}"], "path": ["materials", "1"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Recipes",
+      "item": [
+        {
+          "name": "Create Recipe",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/recipes", "host": ["{{baseUrl}}"], "path": ["recipes"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": 1,\n  \"notes\": \"Classic ensaymada recipe – yields 12 pcs\",\n  \"items\": [\n    { \"materialId\": 1, \"quantity\": 0.5, \"unit\": \"kg\" },\n    { \"materialId\": 2, \"quantity\": 0.1, \"unit\": \"kg\" },\n    { \"materialId\": 3, \"quantity\": 0.08, \"unit\": \"kg\" },\n    { \"materialId\": 4, \"quantity\": 2, \"unit\": \"piece\" },\n    { \"materialId\": 5, \"quantity\": 0.12, \"unit\": \"liter\" }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Get All Recipes",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/recipes", "host": ["{{baseUrl}}"], "path": ["recipes"] }
+          }
+        },
+        {
+          "name": "Search Recipes",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/recipes/search?q=ensaymada",
+              "host": ["{{baseUrl}}"],
+              "path": ["recipes", "search"],
+              "query": [{ "key": "q", "value": "ensaymada" }]
+            }
+          }
+        },
+        {
+          "name": "Get Recipe by ID",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/recipes/1", "host": ["{{baseUrl}}"], "path": ["recipes", "1"] }
+          }
+        },
+        {
+          "name": "Get Recipe by Product ID",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/recipes/product/1", "host": ["{{baseUrl}}"], "path": ["recipes", "product", "1"] }
+          }
+        },
+        {
+          "name": "Update Recipe (notes only)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/recipes/1", "host": ["{{baseUrl}}"], "path": ["recipes", "1"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notes\": \"Updated – yields 15 pcs with new ratio\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Recipe (replace all items)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/recipes/1", "host": ["{{baseUrl}}"], "path": ["recipes", "1"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notes\": \"Revised recipe v2\",\n  \"items\": [\n    { \"materialId\": 1, \"quantity\": 0.6, \"unit\": \"kg\" },\n    { \"materialId\": 2, \"quantity\": 0.12, \"unit\": \"kg\" },\n    { \"materialId\": 3, \"quantity\": 0.1, \"unit\": \"kg\" },\n    { \"materialId\": 4, \"quantity\": 3, \"unit\": \"piece\" },\n    { \"materialId\": 5, \"quantity\": 0.15, \"unit\": \"liter\" }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Recipe",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/recipes/1", "host": ["{{baseUrl}}"], "path": ["recipes", "1"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Material Inventory",
+      "item": [
+        {
+          "name": "Create / Upsert Material Inventory Record",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/material-inventory", "host": ["{{baseUrl}}"], "path": ["material-inventory"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"branchId\": 1,\n  \"materialId\": 1,\n  \"date\": \"2026-02-28\",\n  \"quantity\": 25.0,\n  \"delivery\": 20.0,\n  \"leftover\": 4.5,\n  \"reject\": 0.5,\n  \"notes\": \"Flour stock replenished\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Create / Upsert Material Inventory Records (Bulk)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/material-inventory/bulk", "host": ["{{baseUrl}}"], "path": ["material-inventory", "bulk"] },
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  { \"branchId\": 1, \"materialId\": 1, \"date\": \"2026-02-28\", \"quantity\": 25.0, \"delivery\": 20.0, \"leftover\": 4.5, \"reject\": 0.5 },\n  { \"branchId\": 1, \"materialId\": 2, \"date\": \"2026-02-28\", \"quantity\": 10.0, \"delivery\": 8.0, \"leftover\": 1.8, \"reject\": 0.2 },\n  { \"branchId\": 1, \"materialId\": 3, \"date\": \"2026-02-28\", \"quantity\": 5.0, \"delivery\": 4.0, \"leftover\": 0.9, \"reject\": 0.1 },\n  { \"branchId\": 1, \"materialId\": 4, \"date\": \"2026-02-28\", \"quantity\": 120, \"delivery\": 100, \"leftover\": 18, \"reject\": 2 }\n]"
+            }
+          }
+        },
+        {
+          "name": "Get All Material Inventory Records",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/material-inventory", "host": ["{{baseUrl}}"], "path": ["material-inventory"] }
+          }
+        },
+        {
+          "name": "Search Material Inventory Records",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/material-inventory/search?q=flour&page=1&limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["material-inventory", "search"],
+              "query": [
+                { "key": "q", "value": "flour" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "50" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Material Inventory by Branch",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/material-inventory/branch/1", "host": ["{{baseUrl}}"], "path": ["material-inventory", "branch", "1"] }
+          }
+        },
+        {
+          "name": "Get Material Inventory by Material",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/material-inventory/material/1", "host": ["{{baseUrl}}"], "path": ["material-inventory", "material", "1"] }
+          }
+        },
+        {
+          "name": "Get Material Inventory by Branch + Date",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/material-inventory/branch/1/date?date=2026-02-28",
+              "host": ["{{baseUrl}}"],
+              "path": ["material-inventory", "branch", "1", "date"],
+              "query": [{ "key": "date", "value": "2026-02-28" }]
+            }
+          }
+        },
+        {
+          "name": "Get Material Inventory Record by ID",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/material-inventory/1", "host": ["{{baseUrl}}"], "path": ["material-inventory", "1"] }
+          }
+        },
+        {
+          "name": "Update Material Inventory Record",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/material-inventory/1", "host": ["{{baseUrl}}"], "path": ["material-inventory", "1"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"leftover\": 5.0,\n  \"reject\": 0.8,\n  \"notes\": \"Slight wastage due to spillage\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Material Inventory Record",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/material-inventory/1", "host": ["{{baseUrl}}"], "path": ["material-inventory", "1"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Production",
+      "item": [
+        {
+          "name": "Create / Upsert Production Record",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/production", "host": ["{{baseUrl}}"], "path": ["production"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"branchId\": 1,\n  \"productId\": 1,\n  \"date\": \"2026-03-22\",\n  \"yield\": 120,\n  \"notes\": \"Extra batch for weekend\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Create / Upsert Production Records (Bulk)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/production/bulk", "host": ["{{baseUrl}}"], "path": ["production", "bulk"] },
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  { \"branchId\": 1, \"productId\": 1, \"date\": \"2026-03-22\", \"yield\": 120 },\n  { \"branchId\": 1, \"productId\": 2, \"date\": \"2026-03-22\", \"yield\": 60 },\n  { \"branchId\": 2, \"productId\": 1, \"date\": \"2026-03-22\", \"yield\": 80 }\n]"
+            }
+          }
+        },
+        {
+          "name": "Get All Production Records",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/production?page=1&limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["production"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "50" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Production by Branch",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/production/branch/1?page=1&limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["production", "branch", "1"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "50" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Production by Product",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/production/product/1?page=1&limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["production", "product", "1"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "50" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Production by Date (All Branches)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/production/date?startDate=2026-03-01&endDate=2026-03-22",
+              "host": ["{{baseUrl}}"],
+              "path": ["production", "date"],
+              "query": [
+                { "key": "startDate", "value": "2026-03-01" },
+                { "key": "endDate", "value": "2026-03-22" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Production by Branch + Date",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/production/branch/1/date?date=2026-03-22",
+              "host": ["{{baseUrl}}"],
+              "path": ["production", "branch", "1", "date"],
+              "query": [{ "key": "date", "value": "2026-03-22" }]
+            }
+          }
+        },
+        {
+          "name": "Get Production Record by ID",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/production/1", "host": ["{{baseUrl}}"], "path": ["production", "1"] }
+          }
+        },
+        {
+          "name": "Update Production Record",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/production/1", "host": ["{{baseUrl}}"], "path": ["production", "1"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"yield\": 135,\n  \"notes\": \"Adjusted after recount\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Production Record",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/production/1", "host": ["{{baseUrl}}"], "path": ["production", "1"] }
+          }
+        }
+      ]
+    }
+  ]
+}

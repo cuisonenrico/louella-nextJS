@@ -13,6 +13,22 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  {
+    // The Nest API under src/server is server-side Node code that happens to
+    // live in a Next.js project. Next's React/browser rules do not describe it,
+    // and it carries its own conventions from when it was a standalone repo.
+    // These match the rules louella-be linted under, so the relocated source
+    // stays lint-clean without being rewritten for a deployment change.
+    files: ["src/server/**/*.ts"],
+    rules: {
+      // Nest and Prisma code is heavily generic; the old config allowed this.
+      "@typescript-eslint/no-explicit-any": "off",
+      // Flags `const module = await Test.createTestingModule(...)`, the
+      // standard @nestjs/testing idiom. The rule exists to protect Next's
+      // bundler-injected `module`, which server-side Nest code never touches.
+      "@next/next/no-assign-module-variable": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;

@@ -1,0 +1,577 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  // Serverless functions fan out into many short-lived instances, so runtime
+  // queries go through Supabase's transaction pooler (port 6543) with
+  // pgbouncer=true&connection_limit=1. Pointing this at the session pooler
+  // (5432) exhausts the connection limit under any real traffic.
+  url       = env("DATABASE_URL")
+  // Migrations need a real session — the transaction pooler cannot run them.
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  USER
+  VIEWER
+  INVENTORY
+  MANAGER
+  ADMIN
+}
+
+enum FileStatus {
+  PENDING
+  UPLOADED
+  PROCESSING
+  FAILED
+}
+
+enum ProductType {
+  BREAD
+  CAKE
+  SPECIAL
+  MISCELLANEOUS
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum MeasurementUnit {
+  KG
+  G
+  LITER
+  ML
+  PIECE
+  DOZEN
+  BAG
+  SACHET
+  CUP
+  TBSP
+  TSP
+}
+
+enum AdjustmentType {
+  PULL_IN
+  PULL_OUT
+  ANOMALY
+}
+
+model User {
+  id                 Int            @id @default(autoincrement())
+  email              String         @unique
+  passwordHash       String
+  role               UserRole       @default(USER)
+  isActive           Boolean        @default(true)
+  mustChangePassword Boolean        @default(false)
+  failedLoginAttempts Int           @default(0)
+  lockedUntil        DateTime?
+  createdById        Int?
+  branchId           Int?           @unique
+  refreshTokens      RefreshToken[]
+  files              File[]
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  inventoryEntries         Inventory[]         @relation("InventoryCreatedBy")
+  materialInventoryEntries MaterialInventory[] @relation("MaterialInventoryCreatedBy")
+  productionEntries        Production[]        @relation("ProductionCreatedBy")
+  productionOrders         ProductionOrder[]   @relation("ProductionOrderCreatedBy")
+  deviceTokens             DeviceToken[]
+  importLogs               ImportLog[]         @relation("ImportLogCreatedBy")
+
+  createdBy      User?   @relation("UserCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdUsers   User[]  @relation("UserCreatedBy")
+  managedBranch  Branch? @relation("BranchManager", fields: [branchId], references: [id], onDelete: SetNull)
+
+  rolePermissionsUpdated RoleFeaturePermission[] @relation("RolePermissionUpdater")
+  userPermissions        UserFeaturePermission[] @relation("UserPermissions")
+  userPermissionsUpdated UserFeaturePermission[] @relation("UserPermissionUpdater")
+}
+
+model RefreshToken {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  jti       String?  @unique
+  tokenHash String
+  expiresAt DateTime
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model File {
+  id        Int         @id @default(autoincrement())
+  userId    Int
+  s3Key     String
+  filename  String
+  status    FileStatus  @default(PENDING)
+  createdAt DateTime    @default(now())
+
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobs Job[]
+
+  @@index([userId])
+}
+
+model Job {
+  id             Int       @id @default(autoincrement())
+  fileId         Int
+  status         JobStatus @default(PENDING)
+  progress       Int       @default(0)
+  resultLocation String?
+  createdAt      DateTime  @default(now())
+
+  file File @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@index([fileId])
+}
+
+model Product {
+  id        Int         @id @default(autoincrement())
+  name      String
+  type      ProductType @default(BREAD)
+  sortOrder Int         @default(0)
+  price     Decimal     @db.Decimal(10, 2) @default(0.00)
+  isActive  Boolean     @default(true)
+  date      DateTime    @default(now()) // product introduction / launch date
+  createdAt DateTime    @default(now())
+  deletedAt DateTime?                   // soft delete – null means active
+
+  inventories  Inventory[]
+  productions  Production[]
+  recipe       Recipe?
+  priceHistory ProductPriceHistory[]
+  productionOrderItems ProductionOrderItem[]
+
+  @@index([type, sortOrder])
+}
+
+model Branch {
+  id        Int       @id @default(autoincrement())
+  name      String
+  address   String?
+  phone     String?
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? // soft delete – null means active
+
+  inventories      Inventory[]
+  productions      Production[]
+  productionOrders ProductionOrder[]
+  importLogs       ImportLog[]
+  manager          User?             @relation("BranchManager")
+}
+
+// ---------------------------------------------------------------------------
+// Granular Feature Permissions
+// ---------------------------------------------------------------------------
+
+model Feature {
+  id          Int      @id @default(autoincrement())
+  key         String   @unique
+  label       String
+  description String?
+  createdAt   DateTime @default(now())
+
+  rolePermissions RoleFeaturePermission[]
+  userPermissions UserFeaturePermission[]
+}
+
+model RoleFeaturePermission {
+  id          Int      @id @default(autoincrement())
+  role        UserRole
+  featureKey  String
+  enabled     Boolean  @default(true)
+  updatedAt   DateTime @updatedAt
+  updatedById Int?
+
+  feature   Feature @relation(fields: [featureKey], references: [key], onDelete: Cascade)
+  updatedBy User?   @relation("RolePermissionUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@unique([role, featureKey])
+  @@index([role])
+}
+
+model UserFeaturePermission {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  featureKey  String
+  enabled     Boolean  @default(true)
+  updatedAt   DateTime @updatedAt
+  updatedById Int?
+
+  user      User    @relation("UserPermissions", fields: [userId], references: [id], onDelete: Cascade)
+  feature   Feature @relation(fields: [featureKey], references: [key], onDelete: Cascade)
+  updatedBy User?   @relation("UserPermissionUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@unique([userId, featureKey])
+  @@index([userId])
+}
+
+model Inventory {
+  id          Int      @id @default(autoincrement())
+  branchId    Int
+  productId   Int
+  createdById Int?     // user who submitted this record
+  // quantity/delivery/leftover/reject are Int (whole pieces). If partial-unit
+  // products are ever introduced, all four columns must migrate to Decimal.
+  quantity    Int      @default(0) // total pieces produced / available for the day
+  delivery    Int      @default(0) // pieces delivered from production to this branch
+  leftover    Int      @default(0) // unsold pieces at end of day
+  reject      Int      @default(0) // damaged / rejected pieces
+  date        DateTime @db.Date
+  notes       String?
+  isAutoGenerated Boolean @default(false) // true = created by the daily CRON job (placeholder)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?             // soft delete – null means active
+
+  branch      Branch                @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  product     Product               @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdBy   User?                 @relation("InventoryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  adjustments InventoryAdjustment[]
+
+  @@unique([branchId, productId, date])
+  @@index([branchId])
+  @@index([productId])
+  @@index([date])
+  @@index([createdById])
+  @@index([branchId, date])
+  @@index([productId, date])
+}
+
+// ---------------------------------------------------------------------------
+// Inventory Adjustments
+// ---------------------------------------------------------------------------
+
+model InventoryAdjustment {
+  id                  Int            @id @default(autoincrement())
+  inventoryId         Int
+  type                AdjustmentType
+  value               Int            // positive = stock added (pull-in), negative = stock removed
+  notes               String?
+  linkedAdjustmentId  Int?           // paired transfer counterpart (PULL_OUT ↔ PULL_IN)
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  deletedAt           DateTime?
+
+  inventory        Inventory            @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  linkedAdjustment InventoryAdjustment? @relation("TransferLink", fields: [linkedAdjustmentId], references: [id], onDelete: SetNull)
+  linkedBy         InventoryAdjustment[] @relation("TransferLink")
+
+  @@index([inventoryId])
+  @@index([linkedAdjustmentId])
+}
+
+// ---------------------------------------------------------------------------
+// Production
+// ---------------------------------------------------------------------------
+
+model Production {
+  id          Int      @id @default(autoincrement())
+  branchId    Int
+  productId   Int
+  createdById Int?     // user who submitted this record
+  yield       Int      @default(0) // actual pieces produced that day (independent of recipe yield)
+  date        DateTime @db.Date
+  notes       String?
+  isAutoGenerated Boolean @default(false) // true = created by the daily CRON job (placeholder)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  branch    Branch  @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdBy User?   @relation("ProductionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([branchId, productId, date])
+  @@index([branchId])
+  @@index([productId])
+  @@index([date])
+  @@index([createdById])
+  @@index([branchId, date])
+  @@index([productId, date])
+}
+
+// ---------------------------------------------------------------------------
+// Production Orders
+// ---------------------------------------------------------------------------
+
+enum ProductionOrderStatus {
+  DRAFT
+  FINALIZED
+  CANCELLED
+}
+
+model ProductionOrder {
+  id          Int                   @id @default(autoincrement())
+  branchId    Int?
+  date        DateTime              @db.Date
+  status      ProductionOrderStatus @default(DRAFT)
+  notes       String?
+  createdById Int?
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+  deletedAt   DateTime?
+
+  branch    Branch?              @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  createdBy User?                @relation("ProductionOrderCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  items     ProductionOrderItem[]
+
+  @@index([branchId])
+  @@index([branchId, date])
+  @@index([date])
+  @@index([status])
+  @@index([createdById])
+}
+
+model ProductionOrderItem {
+  id                Int @id @default(autoincrement())
+  productionOrderId Int
+  productId         Int
+  yield             Int @default(0)
+
+  productionOrder ProductionOrder @relation(fields: [productionOrderId], references: [id], onDelete: Cascade)
+  product         Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productionOrderId, productId])
+  @@index([productionOrderId])
+  @@index([productId])
+}
+
+// ---------------------------------------------------------------------------
+// Materials & Recipes
+// ---------------------------------------------------------------------------
+
+model Material {
+  id           Int             @id @default(autoincrement())
+  name         String
+  unit         MeasurementUnit // base unit for stock tracking and pricing
+  pricePerUnit Decimal         @db.Decimal(10, 4) @default(0.0000)
+  reorderLevel Decimal         @db.Decimal(10, 4) @default(0.0000) // alert threshold – restock when stock drops below this
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  deletedAt    DateTime?       // soft delete – null means active
+
+  recipeItems         RecipeItem[]
+  materialInventories MaterialInventory[]
+  priceHistory        MaterialPriceHistory[]
+}
+
+model Recipe {
+  id          Int      @id @default(autoincrement())
+  productId   Int      @unique // enforces 1:1 with Product
+  recipeYield Float     @default(1) // number of product units produced per batch of this recipe
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?             // soft delete – null means active
+
+  product     Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  recipeItems RecipeItem[]
+}
+
+model RecipeItem {
+  id         Int             @id @default(autoincrement())
+  recipeId   Int
+  materialId Int
+  quantity   Float           // how much of the material is required per batch
+  unit       MeasurementUnit // unit for this recipe step – may differ from material base unit
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  recipe   Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  material Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+
+  @@unique([recipeId, materialId])
+  @@index([recipeId])
+  @@index([materialId])
+}
+
+// MaterialInventory is keyed on (materialId, date) with NO branchId.
+// This is intentional: Louella has a single central kitchen, so raw-material
+// stock is tracked globally rather than per-branch. Do NOT add a branchId
+// column here — if the business ever opens a second kitchen, model that as a
+// separate entity rather than cramming it into this table.
+model MaterialInventory {
+  id          Int       @id @default(autoincrement())
+  materialId  Int
+  date        DateTime  // one stock-card per material per day
+  supplierId  Int?
+  createdById Int?
+  batchNumber String?
+  expiresAt   DateTime?
+  quantity    Float     @default(0) // opening stock (carried over from previous day)
+  delivery    Float     @default(0) // received on this day
+  used        Float     @default(0) // consumed by production (auto-updated)
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  material    Material            @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  supplier    Supplier?           @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  createdBy   User?               @relation("MaterialInventoryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  adjustments MaterialAdjustment[]
+
+  @@unique([materialId, date])
+  @@index([date])
+  @@index([supplierId])
+  @@index([createdById])
+}
+
+// ---------------------------------------------------------------------------
+// Material Adjustments (losses, spoilage, corrections)
+// ---------------------------------------------------------------------------
+
+model MaterialAdjustment {
+  id                  Int            @id @default(autoincrement())
+  materialInventoryId Int
+  type                AdjustmentType // PULL_IN = restock, PULL_OUT = transfer out, ANOMALY = loss/spoilage
+  value               Float          // magnitude (always positive; direction conveyed by type)
+  notes               String?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  deletedAt           DateTime?
+
+  materialInventory MaterialInventory @relation(fields: [materialInventoryId], references: [id], onDelete: Cascade)
+
+  @@index([materialInventoryId])
+}
+
+// ---------------------------------------------------------------------------
+// Suppliers & Price History
+// ---------------------------------------------------------------------------
+
+model Supplier {
+  id        Int       @id @default(autoincrement())
+  name      String
+  contact   String?   // contact person name
+  phone     String?
+  email     String?
+  address   String?
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? // soft delete – null means active
+
+  materialInventories MaterialInventory[]
+  priceHistory        MaterialPriceHistory[]
+}
+
+model MaterialPriceHistory {
+  id           Int       @id @default(autoincrement())
+  materialId   Int
+  supplierId   Int?      // supplier this price was quoted / paid from
+  pricePerUnit Decimal  @db.Decimal(10, 4)
+  effectiveAt  DateTime // date from which this price applies
+  createdAt    DateTime @default(now())
+
+  material Material  @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  supplier Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+
+  @@index([materialId])
+  @@index([effectiveAt])
+}
+
+model ProductPriceHistory {
+  id          Int      @id @default(autoincrement())
+  productId   Int
+  price       Decimal  @db.Decimal(10, 2)
+  effectiveAt DateTime // date from which this price applies
+  createdAt   DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([effectiveAt])
+}
+
+// ---------------------------------------------------------------------------
+// Unit Conversions
+// ---------------------------------------------------------------------------
+
+model UnitConversion {
+  id       Int             @id @default(autoincrement())
+  fromUnit MeasurementUnit
+  toUnit   MeasurementUnit
+  // Multiply a quantity in fromUnit by this factor to get the quantity in toUnit.
+  // e.g. fromUnit=KG, toUnit=G, factor=1000  →  1 kg * 1000 = 1000 g
+  // The inverse pair (G→KG, factor=0.001) is always stored alongside this record.
+  factor   Float
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([fromUnit, toUnit])
+  @@index([fromUnit]) 
+  @@index([toUnit])
+}
+
+// ---------------------------------------------------------------------------
+// Notifications — FCM Device Tokens
+// ---------------------------------------------------------------------------
+
+model DeviceToken {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  token     String   @unique
+  platform  String   @default("web") // web | android | ios
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Import Log — audit trail for Excel/CSV imports
+// ---------------------------------------------------------------------------
+
+model ImportLog {
+  id           Int      @id @default(autoincrement())
+  branchId     Int
+  fileName     String
+  fileHash     String   // SHA-256 hex of the raw file buffer
+  importedBy   Int?
+  importedAt   DateTime @default(now())
+  sheetCount   Int      @default(0)
+  rowCount     Int      @default(0)
+  skippedCount Int      @default(0)
+  status       String   @default("SUCCESS") // SUCCESS | PARTIAL
+  notes        String?
+
+  branch         Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  importedByUser User?  @relation("ImportLogCreatedBy", fields: [importedBy], references: [id], onDelete: SetNull)
+
+  @@unique([branchId, fileHash])
+  @@index([importedAt])
+}
+
+// ---------------------------------------------------------------------------
+// Job Runs — execution log for scheduled/manual background jobs
+// ---------------------------------------------------------------------------
+
+model JobRun {
+  id         Int       @id @default(autoincrement())
+  // inventory-autofill | inventory-autofill-range | material-autofill |
+  // material-autofill-range | morning-init | boot-backfill
+  jobName    String
+  trigger    String    @default("cron") // cron | manual | boot
+  targetDate DateTime? @db.Date
+  status     JobStatus @default(RUNNING)
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  result     Json?     // raw job return, e.g. {"inventoryCreated":42,"productionCreated":42}
+  error      String?
+
+  @@index([jobName, startedAt])
+}

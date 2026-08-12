@@ -1,0 +1,24 @@
+/**
+ * TypeScript settings for the Nest server source (src/server).
+ *
+ * The root tsconfig targets the browser bundle: ESM modules, bundler
+ * resolution, JSX. Nest's Jest suites need the opposite — CommonJS emit and
+ * Node resolution — so ts-jest reads this file instead. Both configs agree on
+ * the decorator flags, which is what actually matters for Nest.
+ */
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "target": "ES2023",
+    "noEmit": false,
+    "jsx": "preserve",
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "types": ["jest", "node"]
+  },
+  "include": ["src/server/**/*.ts"]
+}
