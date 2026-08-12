@@ -21,17 +21,22 @@ export class InventoryService {
   ) {}
 
   /**
-   * Returns today's calendar date as a UTC-midnight Date, using the process
-   * timezone (set via TZ env var, e.g. TZ=Asia/Manila in Cloud Run) so the
-   * date is correct for the bakery's locale, not UTC.
+   * Returns today's calendar date as a UTC-midnight Date, resolved in Manila.
+   *
+   * This used to read the process timezone via `TZ=Asia/Manila`, which worked
+   * on Cloud Run. **Vercel reserves `TZ` and refuses to set it**, so functions
+   * always run UTC — and under UTC every call from 16:00–23:59 UTC, which is
+   * **00:00–08:00 in Manila**, returned the *previous* date. That window is the
+   * early-morning baking shift, so it would have been wrong precisely when the
+   * inventory sheets are first opened each day.
+   *
+   * Pinning the zone explicitly is the only portable fix, and it matches what
+   * jobs.service, autofill-on-demand, and suggestions.service already do.
    */
   private localToday(): Date {
-    const d = new Date();
-    const str = [
-      d.getFullYear(),
-      String(d.getMonth() + 1).padStart(2, '0'),
-      String(d.getDate()).padStart(2, '0'),
-    ].join('-');
+    const str = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Manila',
+    }).format(new Date());
     return new Date(`${str}T00:00:00.000Z`);
   }
 
