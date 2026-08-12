@@ -49,7 +49,8 @@ export default function InventoryImportPage() {
   });
 
   const importMut = useMutation({
-    mutationFn: ({ f, bid }: { f: File; bid: number }) => inventoryImportApi.importFile(f, bid),
+    mutationFn: ({ f, bid, mode }: { f: File; bid: number; mode?: 'skip' | 'overwrite' }) =>
+      inventoryImportApi.importFile(f, bid, mode),
     onSuccess: (res) => { setResult(res.data); setStep('result'); setError(''); },
     onError: (err) => setError(extractError(err)),
   });
@@ -66,10 +67,16 @@ export default function InventoryImportPage() {
     previewMut.mutate({ f: file, bid: parseInt(branchId) });
   };
 
-  const handleImport = () => {
+  const handleImport = (mode?: 'skip' | 'overwrite') => {
     if (!file || !branchId) return;
-    importMut.mutate({ f: file, bid: parseInt(branchId) });
+    importMut.mutate({ f: file, bid: parseInt(branchId), mode });
   };
+
+  // Days in the preview whose date already holds real (manually entered or
+  // previously imported) rows — the manager must choose skip vs overwrite.
+  const conflictDates = (preview?.sheets ?? [])
+    .filter((s) => (s.existing?.real ?? 0) > 0)
+    .map((s) => s.date);
 
   const reset = () => {
     setStep('upload'); setFile(null); setPreview(null); setBranchId(''); setResult(null); setError('');
@@ -158,6 +165,7 @@ export default function InventoryImportPage() {
                         <TableHead>Date</TableHead>
                         <TableHead className="text-right">Matched</TableHead>
                         <TableHead className="text-right">Unmatched</TableHead>
+                        <TableHead>Existing data</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -167,6 +175,15 @@ export default function InventoryImportPage() {
                           <TableCell>{sheet.error ? <span className="text-destructive">{sheet.error}</span> : sheet.date}</TableCell>
                           <TableCell className="text-right">{sheet.matched}</TableCell>
                           <TableCell className="text-right">{sheet.unmatchedCount > 0 ? <span className="text-destructive">{sheet.unmatchedCount}</span> : 0}</TableCell>
+                          <TableCell>
+                            {(sheet.existing?.real ?? 0) > 0 ? (
+                              <span className="text-destructive font-medium">{sheet.existing!.real} rows</span>
+                            ) : (sheet.existing?.placeholders ?? 0) > 0 ? (
+                              <span className="text-muted-foreground">placeholders</span>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -184,14 +201,50 @@ export default function InventoryImportPage() {
                 )}
               </CardContent>
             </Card>
+            {conflictDates.length > 0 && (
+              <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>
+                  <p className="font-medium mb-1">
+                    {conflictDates.length} day{conflictDates.length > 1 ? 's' : ''} in this file already{' '}
+                    {conflictDates.length > 1 ? 'have' : 'has'} data for {preview.branch?.name ?? 'this branch'}:{' '}
+                    {conflictDates.join(', ')}
+                  </p>
+                  <p className="text-xs">
+                    Choose <span className="font-medium">Import (skip those days)</span> to keep the existing records,
+                    or <span className="font-medium">Overwrite existing days</span> to replace them with this file.
+                  </p>
+                </AlertDescription>
+              </Alert>
+            )}
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setStep('branch')}>Back</Button>
-              <Button
-                onClick={handleImport}
-                disabled={preview.summary.totalSheets === 0 || !!preview.alreadyImported || importMut.isPending}
-              >
-                {importMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}Import
-              </Button>
+              {conflictDates.length > 0 ? (
+                <>
+                  <Button
+                    onClick={() => handleImport('skip')}
+                    disabled={preview.summary.totalSheets === 0 || !!preview.alreadyImported || importMut.isPending}
+                  >
+                    {importMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                    Import (skip {conflictDates.length} existing day{conflictDates.length > 1 ? 's' : ''})
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={() => handleImport('overwrite')}
+                    disabled={preview.summary.totalSheets === 0 || !!preview.alreadyImported || importMut.isPending}
+                  >
+                    {importMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <AlertTriangle className="mr-2 h-4 w-4" />}
+                    Overwrite existing days
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  onClick={() => handleImport()}
+                  disabled={preview.summary.totalSheets === 0 || !!preview.alreadyImported || importMut.isPending}
+                >
+                  {importMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}Import
+                </Button>
+              )}
             </div>
           </div>
         )}
@@ -218,8 +271,9 @@ export default function InventoryImportPage() {
                   <AlertTriangle className="h-4 w-4" />
                   <AlertDescription>
                     This branch has {branchLogs.length} previous import
-                    {branchLogs.length > 1 ? 's' : ''}. If dates overlap, existing
-                    records will be updated. Uploading the exact same file will be rejected.
+                    {branchLogs.length > 1 ? 's' : ''}. Days that already hold data
+                    are flagged in the preview, where you can choose to skip or
+                    overwrite them. Uploading the exact same file will be rejected.
                   </AlertDescription>
                 </Alert>
               )}

@@ -189,10 +189,15 @@ export const inventoryImportApi = {
     if (branchId !== undefined) form.append('branchId', String(branchId));
     return api.post<DryRunResult>('/inventory-import/preview', form);
   },
-  importFile: (file: File, branchId: number) => {
+  importFile: (
+    file: File,
+    branchId: number,
+    conflictMode?: 'skip' | 'overwrite',
+  ) => {
     const form = new FormData();
     form.append('file', file);
     form.append('branchId', String(branchId));
+    if (conflictMode) form.append('conflictMode', conflictMode);
     return api.post<InventoryImportResult>('/inventory-import/import', form);
   },
 };

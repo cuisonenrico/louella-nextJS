@@ -394,6 +394,10 @@ export interface ProductionEfficiencyItem {
 export interface DryRunSheet {
   sheetName: string;
   date: string; // '' when the date could not be determined
+  // Rows already stored for this sheet's date+branch. Placeholders are
+  // untouched autofill rows (safe to absorb); real rows block the import
+  // unless it is re-run with conflictMode 'overwrite'.
+  existing?: { placeholders: number; real: number };
   matched: number; // distinct products found in the catalog
   unmatchedCount: number; // distinct names that did not match a product
   unmatched: string[]; // distinct unmatched names

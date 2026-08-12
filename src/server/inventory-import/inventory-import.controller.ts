@@ -17,7 +17,10 @@ import { UserRole } from '@prisma/client';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/user.decorator';
-import { InventoryImportService } from './inventory-import.service';
+import {
+  InventoryImportService,
+  type ImportConflictMode,
+} from './inventory-import.service';
 import type { Express } from 'express';
 
 @Controller('inventory-import')
@@ -67,17 +70,27 @@ export class InventoryImportController {
     @UploadedFile() file: Express.Multer.File,
     @Body('branchId') branchIdStr: string,
     @CurrentUser() user: { id: number },
+    @Body('conflictMode') conflictMode?: string,
   ) {
     this.validateFile(file);
     if (!branchIdStr) throw new BadRequestException('branchId is required.');
     const branchId = parseInt(branchIdStr, 10);
     if (isNaN(branchId))
       throw new BadRequestException('branchId must be a valid integer.');
+    if (
+      conflictMode !== undefined &&
+      conflictMode !== 'skip' &&
+      conflictMode !== 'overwrite'
+    )
+      throw new BadRequestException(
+        'conflictMode must be "skip" or "overwrite".',
+      );
     return this.service.importWorkbook(
       file.buffer,
       branchId,
       file.originalname,
       user?.id,
+      (conflictMode as ImportConflictMode) ?? 'skip',
     );
   }
 
