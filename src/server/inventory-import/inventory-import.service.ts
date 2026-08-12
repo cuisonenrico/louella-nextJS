@@ -210,13 +210,25 @@ export class InventoryImportService {
         },
       }),
     ]);
+    // buildCatalog() already drops soft-deleted products; aliases must obey
+    // the same filter or an alias could resolve to a product that is invisible
+    // in every report. Dropping the row makes the label fail loudly (bote /
+    // price-hint refusal, or "product not found") instead of writing
+    // inventory nobody can see.
+    const liveProductIds = new Set<number>();
+    for (const ids of catalog.values()) {
+      for (const id of ids) liveProductIds.add(id);
+    }
+
     return new LabelResolver(
-      aliasRows.map((a) => ({
-        sheetLabel: a.sheetLabel,
-        section: a.section,
-        priceHint: a.priceHint === null ? null : Number(a.priceHint),
-        productId: a.productId,
-      })),
+      aliasRows
+        .filter((a) => liveProductIds.has(a.productId))
+        .map((a) => ({
+          sheetLabel: a.sheetLabel,
+          section: a.section,
+          priceHint: a.priceHint === null ? null : Number(a.priceHint),
+          productId: a.productId,
+        })),
       catalog,
     );
   }
@@ -268,10 +280,12 @@ export class InventoryImportService {
     accumulator: Map<number, Counts>;
     unmatched: string[];
     ambiguous: string[];
+    ambiguousLabels: string[];
   } {
     const accumulator = new Map<number, Counts>();
     const unmatched: string[] = [];
     const ambiguous: string[] = [];
+    const ambiguousLabels: string[] = [];
     let section: SheetSection = 'main';
 
     for (const row of rows) {
@@ -290,6 +304,7 @@ export class InventoryImportService {
       const res = resolver.resolve(productName, section, price);
       if (res.kind === 'ambiguous') {
         ambiguous.push(res.reason);
+        ambiguousLabels.push(productName);
         continue;
       }
       if (res.kind === 'unmatched') {
@@ -309,7 +324,7 @@ export class InventoryImportService {
         accumulator.set(res.productId, { delivery, leftover, reject });
       }
     }
-    return { accumulator, unmatched, ambiguous };
+    return { accumulator, unmatched, ambiguous, ambiguousLabels };
   }
 
   private async upsertAccumulated(
@@ -501,6 +516,7 @@ export class InventoryImportService {
     const resolver = await this.buildResolver();
     const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
     const sheetResults: SheetImportResult[] = [];
+    const blockedLabels = new Set<string>();
 
     // First pass: parse every day sheet so the existing-row check for all
     // dates can be answered with a single batched query.
@@ -561,12 +577,10 @@ export class InventoryImportService {
         continue;
       }
 
-      const { accumulator, unmatched, ambiguous } = this.collectSheetEntries(
-        rows,
-        dateMeta.dateKey,
-        resolver,
-      );
+      const { accumulator, unmatched, ambiguous, ambiguousLabels } =
+        this.collectSheetEntries(rows, dateMeta.dateKey, resolver);
       if (ambiguous.length > 0) {
+        for (const label of ambiguousLabels) blockedLabels.add(label);
         for (const reason of ambiguous) result.errors.push(reason);
         result.errors.push(
           `${result.date}: sheet skipped — resolve the ambiguous labels with ` +
@@ -601,6 +615,38 @@ export class InventoryImportService {
       (sum, r) => sum + r.errors.length,
       0,
     );
+
+    // Blocking ambiguity server-side, not just in the UI: page.tsx disables
+    // its buttons, but the Flutter client and plain curl never see them. When
+    // ambiguity is the reason nothing at all was written, the caller gets a
+    // hard error naming what to fix rather than a cheerful zero-row summary.
+    // A partial import is left alone — it really did write rows, and must
+    // still be recorded.
+    if (blockedLabels.size > 0 && totalProcessed === 0) {
+      throw new ConflictException(
+        `Nothing was imported: no label could be resolved to exactly one ` +
+          `product. Ambiguous label${blockedLabels.size > 1 ? 's' : ''}: ` +
+          `${[...blockedLabels].map((l) => `"${l}"`).join(', ')}. ` +
+          `Add a ProductAlias row for each (section "bote" for bottle ` +
+          `deposits, priceHint to separate same-named SKUs) and upload again.`,
+      );
+    }
+
+    // Nothing was written, so nothing may be recorded as an import. Writing an
+    // ImportLog here would burn this file's SHA-256 and the hash guard above
+    // would then reject the corrected re-run forever — recovery needs
+    // DELETE /logs/:id, which is ADMIN while import is MANAGER.
+    if (totalProcessed === 0) {
+      return {
+        summary: {
+          totalSheets: sheetResults.length,
+          totalProcessed,
+          totalSkipped,
+          totalErrors,
+        },
+        sheets: sheetResults,
+      };
+    }
 
     try {
       await this.prisma.importLog.create({

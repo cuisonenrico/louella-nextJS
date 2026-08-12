@@ -563,7 +563,12 @@ describe('InventoryImportService', () => {
     });
 
     it('refuses a sheet containing an ambiguous label instead of summing it', async () => {
+      // A second, clean sheet keeps this a per-sheet test: without it the
+      // whole import would abort with the server-side ambiguity refusal
+      // (covered separately below) and there would be no sheet result to
+      // inspect.
       prisma.product.findMany.mockResolvedValue([
+        { id: 1, name: 'Pandesal' },
         { id: 119, name: 'Bonette' },
         { id: 120, name: 'Bonette' }, // same name, two products
       ]);
@@ -574,11 +579,19 @@ describe('InventoryImportService', () => {
           dateHeader: '4/14/26',
           rows: [['Bonette', 5, 2, 0]],
         },
+        {
+          name: 'Day (2)',
+          dateHeader: '4/15/26',
+          rows: [['Pandesal', 10, 3, 1]],
+        },
       ]);
 
       const res = await service.importWorkbook(buf, 7, 'sheet.xlsx');
 
-      expect(prisma.inventory.upsert).not.toHaveBeenCalled();
+      const ids = prisma.inventory.upsert.mock.calls.map(
+        (c) => c[0].where.branchId_productId_date.productId,
+      );
+      expect(ids).toEqual([1]); // neither Bonette was written, nor summed
       expect(res.sheets[0].processed).toBe(0);
       expect(res.sheets[0].errors[0]).toMatch(/matches 2 products/);
     });
@@ -611,7 +624,10 @@ describe('InventoryImportService', () => {
       // resolve happily via the catalog-uniqueness fallback and upsert.
       // Because it sits under a "Bote:" header with no alias, the resolver
       // must refuse it as ambiguous instead.
-      prisma.product.findMany.mockResolvedValue([{ id: 50, name: 'Litro' }]);
+      prisma.product.findMany.mockResolvedValue([
+        { id: 50, name: 'Litro' },
+        { id: 1, name: 'Pandesal' },
+      ]);
       prisma.productAlias.findMany.mockResolvedValue([]);
       const buf = buildWorkbook([
         {
@@ -622,11 +638,20 @@ describe('InventoryImportService', () => {
             ['Litro', 5, 2, 0],
           ],
         },
+        // Clean sheet so the run is a partial import, not a whole-file abort.
+        {
+          name: 'Day (2)',
+          dateHeader: '4/15/26',
+          rows: [['Pandesal', 10, 3, 1]],
+        },
       ]);
 
       const res = await service.importWorkbook(buf, 7, 'sheet.xlsx');
 
-      expect(prisma.inventory.upsert).not.toHaveBeenCalled();
+      const ids = prisma.inventory.upsert.mock.calls.map(
+        (c) => c[0].where.branchId_productId_date.productId,
+      );
+      expect(ids).not.toContain(50);
       expect(res.sheets[0].processed).toBe(0);
       expect(res.sheets[0].errors[0]).toMatch(/bote/i);
     });
@@ -638,6 +663,7 @@ describe('InventoryImportService', () => {
       // not just its own.
       prisma.product.findMany.mockResolvedValue([
         { id: 1, name: 'Pandesal' },
+        { id: 2, name: 'Ensaymada Big' },
         { id: 119, name: 'Bonette' },
         { id: 120, name: 'Bonette' }, // same name, two products
       ]);
@@ -651,13 +677,227 @@ describe('InventoryImportService', () => {
             ['Bonette', 5, 2, 0], // ambiguous
           ],
         },
+        // A separate clean sheet, so the file as a whole is a partial import
+        // and the ambiguous sheet's own result stays inspectable.
+        {
+          name: 'Day (2)',
+          dateHeader: '4/15/26',
+          rows: [['Ensaymada Big', 4, 1, 0]],
+        },
       ]);
 
       const res = await service.importWorkbook(buf, 7, 'sheet.xlsx');
 
-      expect(prisma.inventory.upsert).not.toHaveBeenCalled();
+      const ids = prisma.inventory.upsert.mock.calls.map(
+        (c) => c[0].where.branchId_productId_date.productId,
+      );
+      // Pandesal shared the ambiguous sheet, so it must NOT be written even
+      // though it resolved cleanly; only the other sheet's row lands.
+      expect(ids).toEqual([2]);
       expect(res.sheets[0].processed).toBe(0);
       expect(res.sheets[0].errors[0]).toMatch(/matches 2 products/);
+    });
+
+    // -----------------------------------------------------------------------
+    // I5 — a zero-row import must not burn the file's SHA-256
+    // -----------------------------------------------------------------------
+
+    describe('ImportLog creation', () => {
+      it('does not write an ImportLog when no row was processed', async () => {
+        // Nothing was written, so nothing may be recorded as an import —
+        // otherwise the hash guard permanently rejects the corrected re-run,
+        // and recovery needs ADMIN while import is MANAGER.
+        const buf = buildWorkbook([
+          {
+            name: 'Day (16)',
+            dateHeader: '1/0/00',
+            rows: [['Pandesal', 1, 1, 1]],
+          },
+        ]);
+
+        const res = await service.importWorkbook(buf, 7, 'sheet.xlsx');
+
+        expect(res.summary.totalProcessed).toBe(0);
+        expect(prisma.importLog.create).not.toHaveBeenCalled();
+      });
+
+      it('does not write an ImportLog for an all-zero workbook', async () => {
+        const buf = buildWorkbook([
+          {
+            name: 'Day 0',
+            dateHeader: '4/28/26',
+            rows: [
+              ['Pandesal', 0, 0, 0],
+              ['Ensaymada Big', 0, 0, 0],
+            ],
+          },
+        ]);
+
+        const res = await service.importWorkbook(buf, 7, 'sheet.xlsx');
+
+        expect(res.summary.totalProcessed).toBe(0);
+        expect(prisma.importLog.create).not.toHaveBeenCalled();
+      });
+
+      it('still writes a PARTIAL ImportLog when at least one row was processed', async () => {
+        const buf = buildWorkbook([
+          {
+            name: 'Day (1)',
+            dateHeader: '4/14/26',
+            rows: [
+              ['Pandesal', 10, 3, 1],
+              ['Unknown Item', 4, 4, 0],
+            ],
+          },
+        ]);
+
+        const res = await service.importWorkbook(buf, 7, 'sheet.xlsx');
+
+        expect(res.summary.totalProcessed).toBe(1);
+        expect(prisma.importLog.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({ status: 'PARTIAL', rowCount: 1 }),
+          }),
+        );
+      });
+    });
+
+    // -----------------------------------------------------------------------
+    // I6 — ambiguity blocking must hold server-side, not just in the UI
+    // -----------------------------------------------------------------------
+
+    describe('server-side ambiguity blocking', () => {
+      function ambiguousWorkbook() {
+        prisma.product.findMany.mockResolvedValue([
+          { id: 119, name: 'Bonette' },
+          { id: 120, name: 'Bonette' },
+        ]);
+        prisma.productAlias.findMany.mockResolvedValue([]);
+        return buildWorkbook([
+          {
+            name: 'Day (1)',
+            dateHeader: '4/14/26',
+            rows: [['Bonette', 5, 2, 0]],
+          },
+        ]);
+      }
+
+      it('throws ConflictException when ambiguity left nothing to import', async () => {
+        // The Flutter client and plain curl never see page.tsx's disabled
+        // buttons; the refusal has to live on the server.
+        await expect(
+          service.importWorkbook(ambiguousWorkbook(), 7, 'sheet.xlsx'),
+        ).rejects.toThrow(ConflictException);
+        expect(prisma.inventory.upsert).not.toHaveBeenCalled();
+      });
+
+      it('names the ambiguous label and tells the caller to add a ProductAlias', async () => {
+        await expect(
+          service.importWorkbook(ambiguousWorkbook(), 7, 'sheet.xlsx'),
+        ).rejects.toThrow(/Bonette/);
+        await expect(
+          service.importWorkbook(ambiguousWorkbook(), 7, 'sheet.xlsx'),
+        ).rejects.toThrow(/ProductAlias/);
+      });
+
+      it('writes no ImportLog on the ambiguity throw path, so the file can be re-imported', async () => {
+        await expect(
+          service.importWorkbook(ambiguousWorkbook(), 7, 'sheet.xlsx'),
+        ).rejects.toThrow(ConflictException);
+        expect(prisma.importLog.create).not.toHaveBeenCalled();
+      });
+
+      it('does not throw when another sheet imported successfully, and still logs the partial import', async () => {
+        prisma.product.findMany.mockResolvedValue([
+          { id: 1, name: 'Pandesal' },
+          { id: 119, name: 'Bonette' },
+          { id: 120, name: 'Bonette' },
+        ]);
+        prisma.productAlias.findMany.mockResolvedValue([]);
+        const buf = buildWorkbook([
+          {
+            name: 'Day (1)',
+            dateHeader: '4/14/26',
+            rows: [['Bonette', 5, 2, 0]],
+          },
+          {
+            name: 'Day (2)',
+            dateHeader: '4/15/26',
+            rows: [['Pandesal', 10, 3, 1]],
+          },
+        ]);
+
+        const res = await service.importWorkbook(buf, 7, 'sheet.xlsx');
+
+        expect(res.summary.totalProcessed).toBe(1);
+        expect(res.sheets[0].processed).toBe(0);
+        expect(res.sheets[0].errors[0]).toMatch(/matches 2 products/);
+        expect(prisma.importLog.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({ status: 'PARTIAL' }),
+          }),
+        );
+      });
+    });
+
+    // -----------------------------------------------------------------------
+    // M7 — aliases must respect the soft-delete filter
+    // -----------------------------------------------------------------------
+
+    describe('soft-deleted products behind aliases', () => {
+      const aliasRows = [
+        {
+          sheetLabel: 'bonette small',
+          section: null,
+          priceHint: null,
+          productId: 121,
+        },
+      ];
+      const workbook = () =>
+        buildWorkbook([
+          {
+            name: 'Day (1)',
+            dateHeader: '4/14/26',
+            rows: [
+              ['Pandesal', 10, 3, 1],
+              ['Bonette Small', 5, 2, 0],
+            ],
+          },
+        ]);
+
+      it('does not write inventory for an alias pointing at a soft-deleted product', async () => {
+        // buildCatalog() filters deletedAt: null, so product 121 is absent
+        // from the live catalog — the alias must not smuggle it back in.
+        prisma.product.findMany.mockResolvedValue([{ id: 1, name: 'Pandesal' }]);
+        prisma.productAlias.findMany.mockResolvedValue(aliasRows);
+
+        const res = await service.importWorkbook(workbook(), 7, 'sheet.xlsx');
+
+        const ids = prisma.inventory.upsert.mock.calls.map(
+          (c) => c[0].where.branchId_productId_date.productId,
+        );
+        expect(ids).not.toContain(121);
+        expect(ids).toEqual([1]);
+        expect(res.sheets[0].errors).toContain(
+          'Product not found: "Bonette Small"',
+        );
+      });
+
+      it('still honours an alias pointing at a live product', async () => {
+        prisma.product.findMany.mockResolvedValue([
+          { id: 1, name: 'Pandesal' },
+          { id: 121, name: 'Bonette Small' },
+        ]);
+        prisma.productAlias.findMany.mockResolvedValue(aliasRows);
+
+        const res = await service.importWorkbook(workbook(), 7, 'sheet.xlsx');
+
+        const ids = prisma.inventory.upsert.mock.calls.map(
+          (c) => c[0].where.branchId_productId_date.productId,
+        );
+        expect(ids).toContain(121);
+        expect(res.sheets[0].errors).toEqual([]);
+      });
     });
   });
 });
