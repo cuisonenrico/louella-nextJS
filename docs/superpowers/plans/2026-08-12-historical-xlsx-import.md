@@ -21,6 +21,46 @@
 
 ---
 
+## STATUS — Tasks 1–5 implemented on `feature/import-product-aliases`
+
+Nine commits, `2851d1c..8267432`. Server suite 207/207, web 51/51, `tsc --noEmit` clean, lint 0 errors. **Tasks 6–9 are NOT implemented** — they are gated on the full workbook archive, the client's decisions, and live DB access.
+
+### ⛔ MERGE PREREQUISITE — apply the migration before deploying
+
+`prisma/migrations/20260812000000_add_product_alias/` is **hand-authored and has never been applied to any database.** Neither `npm run build` (`prisma generate && next build`) nor `vercel.json` runs migrations. `buildResolver()` is called unconditionally by **both** the preview and the import endpoints.
+
+If this branch deploys before the migration is applied, every workbook upload returns a bare 500 (`P2021: relation "ProductAlias" does not exist`) — a feature that works today stops working. Run `npm run prisma:deploy` first, then deploy.
+
+While applying it, also run the duplicate-INSERT proof that Task 2 Step 4 specifies but could not execute offline.
+
+### Three rulings that override this plan's own text
+
+1. **Task 2 Step 3** said "Keep both; drop neither." **`@@unique` was dropped.** Keeping it made Prisma expect a plain index that would never exist, so every future `prisma migrate dev` would propose creating it. Uniqueness is enforced solely by `ProductAlias_lookup_key`, now keyed `lower(trim("sheetLabel"))`.
+2. **Task 4 Step 3's code** fell back to the catalog name for a bote-section label with no alias — resolving a bottle deposit to the same-named beverage. **It now refuses.**
+3. **The same fallback on the price axis also refuses.** This one is the important change to Task 6 below.
+
+### ⚠️ Task 6 requirements have changed — read before writing the alias seed
+
+The final review simulated this branch's real logic over the workbooks on disk and found that `prisma/seed-products.sql` has **zero duplicate names**, and Task 6 as written creates the second SKUs under *new* names (`Bonette Small`, `Pandesal Sack`). That makes `products.length > 1` unreachable, so the "matches N products" refusal was dead code against real data.
+
+Concretely: `D:/Downloads/Jan1-13-2026.xlsx` — **a third workbook Task 1's smoke test never saw** — carries `"Bonette "` at **₱5.00**, which misses both hints this plan proposes (₱30 and ₱8). Before the fix it silently resolved to product 119, collapsing two distinct SKUs on **14 of 46 sheets** with zero ambiguity reported.
+
+The resolver now refuses whenever a label has *any* price-hinted alias and the observed price matches none of them. Consequences for Task 6:
+
+- The archive audit must enumerate **every distinct price per price-disambiguated label across all files**, not just the two this plan's collision table lists. `Bonette` alone is ₱30 / ₱8 / ₱5.
+- Likewise every label appearing under a `Bote:` header across all files — the seed here covers only five, and an uncovered one now aborts its sheet.
+- Before aliases are seeded, **all sheets are ambiguous**, so the first import attempt refuses wholesale. That is intended: the dry-run surfaces the same labels, so the flow is preview → read the refusals → seed the aliases → import.
+- Alias `sheetLabel` values must be written lowercase and trimmed. The index normalizes, but write them correctly anyway.
+
+### Also changed from what Tasks 1–5 describe
+
+- An import that writes **zero** rows no longer records an `ImportLog`, so it cannot burn the file's SHA-256 and lock out a corrected re-upload.
+- `importWorkbook` now **throws** `ConflictException` when ambiguity blocked every sheet — the UI block alone was bypassable by the Flutter client or curl.
+- Aliases pointing at soft-deleted products are dropped at load, so they refuse loudly instead of writing inventory for an invisible product.
+- `docs/import-audit-report.md` covers **2 of at least 3** workbooks and must be regenerated against the full archive before the client conversation.
+
+---
+
 ## Why not name+price (read before Task 1)
 
 Name+price was the leading candidate for a composite identity. Measured against the two real workbooks, it fails:
