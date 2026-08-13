@@ -6,6 +6,16 @@ import {
 import * as crypto from 'crypto';
 import * as XLSX from 'xlsx';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  LabelResolver,
+  type PriceHistoryMap,
+  type ProductCandidate,
+} from './label-resolver';
+import {
+  isIgnoredLabel,
+  sectionForRow,
+  type SheetSection,
+} from './sheet-sections';
 
 export interface DryRunSheet {
   sheetName: string;
@@ -13,6 +23,7 @@ export interface DryRunSheet {
   matched: number; // distinct products found in the catalog
   unmatchedCount: number; // distinct names that did not match a product
   unmatched: string[]; // distinct unmatched names (so the manager can fix the catalog)
+  ambiguous: string[]; // labels matching several products with no alias
   error?: string; // sheet-level problem (e.g. no date header)
   // Rows already stored for this sheet's date+branch (branch mode only).
   // Placeholders are untouched autofill rows and never block an import;
@@ -32,6 +43,7 @@ export interface DryRunResult {
     totalSheets: number;
     totalMatched: number;
     totalUnmatched: number;
+    totalAmbiguous: number;
     datesDetected: string[];
   };
   sheets: DryRunSheet[];
@@ -148,6 +160,13 @@ function parseCount(val: unknown): number {
   return isNaN(n) ? 0 : Math.round(n);
 }
 
+/** Column B holds the unit price as a formatted string, e.g. "36.00". */
+function parsePrice(val: unknown): number | null {
+  if (val === null || val === undefined || val === '') return null;
+  const n = parseFloat(String(val).trim().replace(/[^\d.\-]/g, ''));
+  return Number.isNaN(n) ? null : n;
+}
+
 @Injectable()
 export class InventoryImportService {
   constructor(private readonly prisma: PrismaService) {}
@@ -167,17 +186,78 @@ export class InventoryImportService {
     return branch;
   }
 
-  private async buildProductMap(): Promise<Map<string, number>> {
+  // Products keyed by lowercased name. A name may carry SEVERAL products —
+  // that is the point: two real SKUs share a label and the price separates
+  // them (see prisma/seed-products-apr2026.sql).
+  private async buildCatalog(): Promise<Map<string, ProductCandidate[]>> {
     const products = await this.prisma.product.findMany({
       where: { deletedAt: null },
-      select: { id: true, name: true },
+      select: { id: true, name: true, price: true },
       orderBy: [{ type: 'asc' }, { sortOrder: 'asc' }, { name: 'asc' }],
     });
-    const productMap = new Map<string, number>();
+    const catalog = new Map<string, ProductCandidate[]>();
     for (const p of products) {
-      productMap.set(p.name.trim().toLowerCase(), p.id);
+      const key = p.name.trim().toLowerCase();
+      const entry = { productId: p.id, price: Number(p.price) };
+      const list = catalog.get(key);
+      if (list) list.push(entry);
+      else catalog.set(key, [entry]);
     }
-    return productMap;
+    return catalog;
+  }
+
+  // Price changes per product, ascending by effectiveAt — the order
+  // getEffectivePrice() relies on to pick the price in force on a given date.
+  private async buildPriceHistory(): Promise<PriceHistoryMap> {
+    const rows = await this.prisma.productPriceHistory.findMany({
+      select: { productId: true, price: true, effectiveAt: true },
+      orderBy: { effectiveAt: 'asc' },
+    });
+    const history: PriceHistoryMap = new Map();
+    for (const r of rows) {
+      const list = history.get(r.productId);
+      const entry = { price: Number(r.price), effectiveAt: r.effectiveAt };
+      if (list) list.push(entry);
+      else history.set(r.productId, [entry]);
+    }
+    return history;
+  }
+
+  private async buildResolver(): Promise<LabelResolver> {
+    const [catalog, aliasRows, priceHistory] = await Promise.all([
+      this.buildCatalog(),
+      this.prisma.productAlias.findMany({
+        select: {
+          sheetLabel: true,
+          section: true,
+          priceHint: true,
+          productId: true,
+        },
+      }),
+      this.buildPriceHistory(),
+    ]);
+    // buildCatalog() already drops soft-deleted products; aliases must obey
+    // the same filter or an alias could resolve to a product that is invisible
+    // in every report. Dropping the row makes the label fail loudly (bote /
+    // price-hint refusal, or "product not found") instead of writing
+    // inventory nobody can see.
+    const liveProductIds = new Set<number>();
+    for (const entries of catalog.values()) {
+      for (const e of entries) liveProductIds.add(e.productId);
+    }
+
+    return new LabelResolver(
+      aliasRows
+        .filter((a) => liveProductIds.has(a.productId))
+        .map((a) => ({
+          sheetLabel: a.sheetLabel,
+          section: a.section,
+          priceHint: a.priceHint === null ? null : Number(a.priceHint),
+          productId: a.productId,
+        })),
+      catalog,
+      priceHistory,
+    );
   }
 
   // One batched groupBy for all sheet dates: how many rows already exist per
@@ -222,33 +302,59 @@ export class InventoryImportService {
   private collectSheetEntries(
     rows: Record<string, unknown>[],
     dateKey: string,
-    productMap: Map<string, number>,
-  ): { accumulator: Map<number, Counts>; unmatched: string[] } {
+    resolver: LabelResolver,
+    sheetDate: Date,
+  ): {
+    accumulator: Map<number, Counts>;
+    unmatched: string[];
+    ambiguous: string[];
+    ambiguousLabels: string[];
+  } {
     const accumulator = new Map<number, Counts>();
     const unmatched: string[] = [];
+    const ambiguous: string[] = [];
+    const ambiguousLabels: string[] = [];
+    let section: SheetSection = 'main';
+
     for (const row of rows) {
       const rawName = row['PAGE 1'];
       if (typeof rawName !== 'string') continue;
       const productName = rawName.trim();
+
+      // Section headers are themselves skippable labels, so update the
+      // section before the skip test discards the row.
+      section = sectionForRow(productName, section);
+
       if (isSkippableLabel(productName)) continue;
-      const productId = productMap.get(productName.toLowerCase());
-      if (!productId) {
+      if (isIgnoredLabel(productName)) continue;
+
+      const price = parsePrice(row['__EMPTY']);
+      // The sheet's own date decides which price was in force, so a workbook
+      // from last year resolves against last year's prices.
+      const res = resolver.resolve(productName, section, price, sheetDate);
+      if (res.kind === 'ambiguous') {
+        ambiguous.push(res.reason);
+        ambiguousLabels.push(productName);
+        continue;
+      }
+      if (res.kind === 'unmatched') {
         unmatched.push(productName);
         continue;
       }
+
       const delivery = parseCount(row['__EMPTY_1']);
       const leftover = parseCount(row['__EMPTY_3']);
       const reject = parseCount(row[dateKey]);
-      const existing = accumulator.get(productId);
+      const existing = accumulator.get(res.productId);
       if (existing) {
         existing.delivery += delivery;
         existing.leftover += leftover;
         existing.reject += reject;
       } else {
-        accumulator.set(productId, { delivery, leftover, reject });
+        accumulator.set(res.productId, { delivery, leftover, reject });
       }
     }
-    return { accumulator, unmatched };
+    return { accumulator, unmatched, ambiguous, ambiguousLabels };
   }
 
   private async upsertAccumulated(
@@ -306,7 +412,7 @@ export class InventoryImportService {
       }
     }
 
-    const productMap = await this.buildProductMap();
+    const resolver = await this.buildResolver();
     const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
     const sheets: DryRunSheet[] = [];
 
@@ -326,6 +432,7 @@ export class InventoryImportService {
           matched: 0,
           unmatchedCount: 0,
           unmatched: [],
+          ambiguous: [],
           error: 'Could not determine date from column headers',
         });
         continue;
@@ -338,6 +445,7 @@ export class InventoryImportService {
           matched: 0,
           unmatchedCount: 0,
           unmatched: [],
+          ambiguous: [],
           error:
             `Sheet date ${toDateStr(dateMeta.sheetDate)} is implausible ` +
             `(unused template tab); sheet will be skipped`,
@@ -345,25 +453,36 @@ export class InventoryImportService {
         continue;
       }
 
-      const { accumulator, unmatched } = this.collectSheetEntries(
+      const { accumulator, unmatched, ambiguous } = this.collectSheetEntries(
         rows,
         dateMeta.dateKey,
-        productMap,
+        resolver,
+        dateMeta.sheetDate,
       );
       const distinct = [...new Set(unmatched)];
       const allZero = accumulator.size > 0 && !hasNonZeroCounts(accumulator);
-      sheets.push({
+      const sheetEntry: DryRunSheet = {
         sheetName,
         date: toDateStr(dateMeta.sheetDate),
         matched: accumulator.size,
         unmatchedCount: distinct.length,
         unmatched: distinct,
-        ...(allZero && {
-          error:
-            'All product counts are zero; sheet will be skipped so ' +
-            'existing data is not overwritten',
-        }),
-      });
+        ambiguous,
+      };
+      // Ambiguity aborts the whole sheet at import time — the preview must
+      // say so as visibly as the implausible-date/all-zero cases do, or an
+      // operator can approve an import that silently drops the sheet.
+      if (ambiguous.length > 0) {
+        sheetEntry.error =
+          `${ambiguous.length} label${ambiguous.length > 1 ? 's are' : ' is'} ` +
+          `ambiguous; this sheet will be skipped entirely at import until a ` +
+          `ProductAlias resolves ${ambiguous.length > 1 ? 'each label' : 'it'}.`;
+      } else if (allZero) {
+        sheetEntry.error =
+          'All product counts are zero; sheet will be skipped so ' +
+          'existing data is not overwritten';
+      }
+      sheets.push(sheetEntry);
     }
 
     if (branchId !== undefined) {
@@ -382,6 +501,10 @@ export class InventoryImportService {
     const datesDetected = sheets.filter((s) => s.date).map((s) => s.date);
     const totalMatched = sheets.reduce((sum, s) => sum + s.matched, 0);
     const totalUnmatched = sheets.reduce((sum, s) => sum + s.unmatchedCount, 0);
+    const totalAmbiguous = sheets.reduce(
+      (sum, s) => sum + s.ambiguous.length,
+      0,
+    );
 
     return {
       fileName: originalName,
@@ -391,6 +514,7 @@ export class InventoryImportService {
         totalSheets: sheets.length,
         totalMatched,
         totalUnmatched,
+        totalAmbiguous,
         datesDetected,
       },
       sheets,
@@ -420,9 +544,10 @@ export class InventoryImportService {
       );
     }
 
-    const productMap = await this.buildProductMap();
+    const resolver = await this.buildResolver();
     const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
     const sheetResults: SheetImportResult[] = [];
+    const blockedLabels = new Set<string>();
 
     // First pass: parse every day sheet so the existing-row check for all
     // dates can be answered with a single batched query.
@@ -483,11 +608,23 @@ export class InventoryImportService {
         continue;
       }
 
-      const { accumulator, unmatched } = this.collectSheetEntries(
-        rows,
-        dateMeta.dateKey,
-        productMap,
-      );
+      const { accumulator, unmatched, ambiguous, ambiguousLabels } =
+        this.collectSheetEntries(
+          rows,
+          dateMeta.dateKey,
+          resolver,
+          dateMeta.sheetDate,
+        );
+      if (ambiguous.length > 0) {
+        for (const label of ambiguousLabels) blockedLabels.add(label);
+        for (const reason of ambiguous) result.errors.push(reason);
+        result.errors.push(
+          `${result.date}: sheet skipped — resolve the ambiguous labels with ` +
+            `a ProductAlias before importing`,
+        );
+        sheetResults.push(result);
+        continue;
+      }
       result.skipped = unmatched.length;
       for (const name of unmatched) {
         result.errors.push(`Product not found: "${name}"`);
@@ -514,6 +651,38 @@ export class InventoryImportService {
       (sum, r) => sum + r.errors.length,
       0,
     );
+
+    // Blocking ambiguity server-side, not just in the UI: page.tsx disables
+    // its buttons, but the Flutter client and plain curl never see them. When
+    // ambiguity is the reason nothing at all was written, the caller gets a
+    // hard error naming what to fix rather than a cheerful zero-row summary.
+    // A partial import is left alone — it really did write rows, and must
+    // still be recorded.
+    if (blockedLabels.size > 0 && totalProcessed === 0) {
+      throw new ConflictException(
+        `Nothing was imported: no label could be resolved to exactly one ` +
+          `product. Ambiguous label${blockedLabels.size > 1 ? 's' : ''}: ` +
+          `${[...blockedLabels].map((l) => `"${l}"`).join(', ')}. ` +
+          `Add a ProductAlias row for each (section "bote" for bottle ` +
+          `deposits, priceHint to separate same-named SKUs) and upload again.`,
+      );
+    }
+
+    // Nothing was written, so nothing may be recorded as an import. Writing an
+    // ImportLog here would burn this file's SHA-256 and the hash guard above
+    // would then reject the corrected re-run forever — recovery needs
+    // DELETE /logs/:id, which is ADMIN while import is MANAGER.
+    if (totalProcessed === 0) {
+      return {
+        summary: {
+          totalSheets: sheetResults.length,
+          totalProcessed,
+          totalSkipped,
+          totalErrors,
+        },
+        sheets: sheetResults,
+      };
+    }
 
     try {
       await this.prisma.importLog.create({
