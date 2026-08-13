@@ -13,6 +13,7 @@ function makePrisma() {
     branch: { findFirst: jest.fn() },
     product: { findMany: jest.fn() },
     productAlias: { findMany: jest.fn() },
+    productPriceHistory: { findMany: jest.fn() },
     inventory: { upsert: jest.fn(), groupBy: jest.fn() },
     importLog: {
       findFirst: jest.fn(),
@@ -77,10 +78,11 @@ describe('InventoryImportService', () => {
 
     // Default catalog used by most tests.
     prisma.product.findMany.mockResolvedValue([
-      { id: 1, name: 'Pandesal' },
-      { id: 2, name: 'Ensaymada Big' },
+      { id: 1, name: 'Pandesal', price: 0 },
+      { id: 2, name: 'Ensaymada Big', price: 0 },
     ]);
     prisma.productAlias.findMany.mockResolvedValue([]);
+    prisma.productPriceHistory.findMany.mockResolvedValue([]);
     prisma.branch.findFirst.mockResolvedValue({ id: 7, name: 'Silang' });
     prisma.importLog.findFirst.mockResolvedValue(null);
     prisma.inventory.groupBy.mockResolvedValue([]);
@@ -236,8 +238,8 @@ describe('InventoryImportService', () => {
       // error here and imports would otherwise learn the sheet was dropped
       // only after the fact.
       prisma.product.findMany.mockResolvedValue([
-        { id: 119, name: 'Bonette' },
-        { id: 120, name: 'Bonette' },
+        { id: 119, name: 'Bonette', price: 30 },
+        { id: 120, name: 'Bonette', price: 8 },
       ]);
       prisma.productAlias.findMany.mockResolvedValue([]);
       const buf = buildWorkbook([
@@ -251,7 +253,8 @@ describe('InventoryImportService', () => {
       const res = await service.dryRunWorkbook(buf, 'sheet.xlsx');
 
       expect(res.sheets[0].ambiguous).toHaveLength(1);
-      expect(res.sheets[0].ambiguous[0]).toMatch(/matches 2 products/);
+      expect(res.sheets[0].ambiguous[0]).toMatch(/Bonette/);
+      expect(res.sheets[0].ambiguous[0]).toMatch(/matches none of the 2 product/);
       expect(res.sheets[0].error).toMatch(/skipped/i);
       expect(res.summary.totalAmbiguous).toBe(1);
     });
@@ -568,9 +571,12 @@ describe('InventoryImportService', () => {
       // (covered separately below) and there would be no sheet result to
       // inspect.
       prisma.product.findMany.mockResolvedValue([
-        { id: 1, name: 'Pandesal' },
-        { id: 119, name: 'Bonette' },
-        { id: 120, name: 'Bonette' }, // same name, two products
+        { id: 1, name: 'Pandesal', price: 0 },
+        // Two real SKUs sharing a name, separated only by price — the sheet
+        // rows here carry price 0 (buildSheet hardcodes column B), so neither
+        // price matches and the resolver must refuse.
+        { id: 119, name: 'Bonette', price: 30 },
+        { id: 120, name: 'Bonette', price: 8 },
       ]);
       prisma.productAlias.findMany.mockResolvedValue([]); // nothing disambiguates
       const buf = buildWorkbook([
@@ -593,11 +599,12 @@ describe('InventoryImportService', () => {
       );
       expect(ids).toEqual([1]); // neither Bonette was written, nor summed
       expect(res.sheets[0].processed).toBe(0);
-      expect(res.sheets[0].errors[0]).toMatch(/matches 2 products/);
+      expect(res.sheets[0].errors[0]).toMatch(/Bonette/);
+      expect(res.sheets[0].errors[0]).toMatch(/matches none of the 2 product/);
     });
 
     it('does not report ignored equipment labels as errors', async () => {
-      prisma.product.findMany.mockResolvedValue([{ id: 1, name: 'Pandesal' }]);
+      prisma.product.findMany.mockResolvedValue([{ id: 1, name: 'Pandesal', price: 0 }]);
       prisma.productAlias.findMany.mockResolvedValue([]);
       const buf = buildWorkbook([
         {
@@ -625,8 +632,10 @@ describe('InventoryImportService', () => {
       // Because it sits under a "Bote:" header with no alias, the resolver
       // must refuse it as ambiguous instead.
       prisma.product.findMany.mockResolvedValue([
-        { id: 50, name: 'Litro' },
-        { id: 1, name: 'Pandesal' },
+        // Only the DRINK is seeded (₱45); the ₱10 bote deposit is missing.
+        // The sheet's bote row must refuse rather than book returns as sales.
+        { id: 50, name: 'Litro', price: 45 },
+        { id: 1, name: 'Pandesal', price: 0 },
       ]);
       prisma.productAlias.findMany.mockResolvedValue([]);
       const buf = buildWorkbook([
@@ -662,10 +671,13 @@ describe('InventoryImportService', () => {
       // all-or-nothing: one unresolved label blocks every row on that sheet,
       // not just its own.
       prisma.product.findMany.mockResolvedValue([
-        { id: 1, name: 'Pandesal' },
-        { id: 2, name: 'Ensaymada Big' },
-        { id: 119, name: 'Bonette' },
-        { id: 120, name: 'Bonette' }, // same name, two products
+        { id: 1, name: 'Pandesal', price: 0 },
+        { id: 2, name: 'Ensaymada Big', price: 0 },
+        // Two real SKUs sharing a name, separated only by price — the sheet
+        // rows here carry price 0 (buildSheet hardcodes column B), so neither
+        // price matches and the resolver must refuse.
+        { id: 119, name: 'Bonette', price: 30 },
+        { id: 120, name: 'Bonette', price: 8 },
       ]);
       prisma.productAlias.findMany.mockResolvedValue([]);
       const buf = buildWorkbook([
@@ -695,7 +707,8 @@ describe('InventoryImportService', () => {
       // though it resolved cleanly; only the other sheet's row lands.
       expect(ids).toEqual([2]);
       expect(res.sheets[0].processed).toBe(0);
-      expect(res.sheets[0].errors[0]).toMatch(/matches 2 products/);
+      expect(res.sheets[0].errors[0]).toMatch(/Bonette/);
+      expect(res.sheets[0].errors[0]).toMatch(/matches none of the 2 product/);
     });
 
     // -----------------------------------------------------------------------
@@ -769,8 +782,8 @@ describe('InventoryImportService', () => {
     describe('server-side ambiguity blocking', () => {
       function ambiguousWorkbook() {
         prisma.product.findMany.mockResolvedValue([
-          { id: 119, name: 'Bonette' },
-          { id: 120, name: 'Bonette' },
+          { id: 119, name: 'Bonette', price: 30 },
+          { id: 120, name: 'Bonette', price: 8 },
         ]);
         prisma.productAlias.findMany.mockResolvedValue([]);
         return buildWorkbook([
@@ -809,9 +822,9 @@ describe('InventoryImportService', () => {
 
       it('does not throw when another sheet imported successfully, and still logs the partial import', async () => {
         prisma.product.findMany.mockResolvedValue([
-          { id: 1, name: 'Pandesal' },
-          { id: 119, name: 'Bonette' },
-          { id: 120, name: 'Bonette' },
+          { id: 1, name: 'Pandesal', price: 0 },
+          { id: 119, name: 'Bonette', price: 30 },
+          { id: 120, name: 'Bonette', price: 8 },
         ]);
         prisma.productAlias.findMany.mockResolvedValue([]);
         const buf = buildWorkbook([
@@ -831,7 +844,8 @@ describe('InventoryImportService', () => {
 
         expect(res.summary.totalProcessed).toBe(1);
         expect(res.sheets[0].processed).toBe(0);
-        expect(res.sheets[0].errors[0]).toMatch(/matches 2 products/);
+        expect(res.sheets[0].errors[0]).toMatch(/Bonette/);
+      expect(res.sheets[0].errors[0]).toMatch(/matches none of the 2 product/);
         expect(prisma.importLog.create).toHaveBeenCalledWith(
           expect.objectContaining({
             data: expect.objectContaining({ status: 'PARTIAL' }),
@@ -868,7 +882,7 @@ describe('InventoryImportService', () => {
       it('does not write inventory for an alias pointing at a soft-deleted product', async () => {
         // buildCatalog() filters deletedAt: null, so product 121 is absent
         // from the live catalog — the alias must not smuggle it back in.
-        prisma.product.findMany.mockResolvedValue([{ id: 1, name: 'Pandesal' }]);
+        prisma.product.findMany.mockResolvedValue([{ id: 1, name: 'Pandesal', price: 0 }]);
         prisma.productAlias.findMany.mockResolvedValue(aliasRows);
 
         const res = await service.importWorkbook(workbook(), 7, 'sheet.xlsx');
@@ -885,8 +899,8 @@ describe('InventoryImportService', () => {
 
       it('still honours an alias pointing at a live product', async () => {
         prisma.product.findMany.mockResolvedValue([
-          { id: 1, name: 'Pandesal' },
-          { id: 121, name: 'Bonette Small' },
+          { id: 1, name: 'Pandesal', price: 0 },
+          { id: 121, name: 'Bonette Small', price: 0 },
         ]);
         prisma.productAlias.findMany.mockResolvedValue(aliasRows);
 

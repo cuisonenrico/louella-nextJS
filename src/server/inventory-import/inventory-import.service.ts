@@ -6,7 +6,11 @@ import {
 import * as crypto from 'crypto';
 import * as XLSX from 'xlsx';
 import { PrismaService } from '../prisma/prisma.service';
-import { LabelResolver } from './label-resolver';
+import {
+  LabelResolver,
+  type PriceHistoryMap,
+  type ProductCandidate,
+} from './label-resolver';
 import {
   isIgnoredLabel,
   sectionForRow,
@@ -182,24 +186,45 @@ export class InventoryImportService {
     return branch;
   }
 
-  private async buildCatalog(): Promise<Map<string, number[]>> {
+  // Products keyed by lowercased name. A name may carry SEVERAL products —
+  // that is the point: two real SKUs share a label and the price separates
+  // them (see prisma/seed-products-apr2026.sql).
+  private async buildCatalog(): Promise<Map<string, ProductCandidate[]>> {
     const products = await this.prisma.product.findMany({
       where: { deletedAt: null },
-      select: { id: true, name: true },
+      select: { id: true, name: true, price: true },
       orderBy: [{ type: 'asc' }, { sortOrder: 'asc' }, { name: 'asc' }],
     });
-    const catalog = new Map<string, number[]>();
+    const catalog = new Map<string, ProductCandidate[]>();
     for (const p of products) {
       const key = p.name.trim().toLowerCase();
+      const entry = { productId: p.id, price: Number(p.price) };
       const list = catalog.get(key);
-      if (list) list.push(p.id);
-      else catalog.set(key, [p.id]);
+      if (list) list.push(entry);
+      else catalog.set(key, [entry]);
     }
     return catalog;
   }
 
+  // Price changes per product, ascending by effectiveAt — the order
+  // getEffectivePrice() relies on to pick the price in force on a given date.
+  private async buildPriceHistory(): Promise<PriceHistoryMap> {
+    const rows = await this.prisma.productPriceHistory.findMany({
+      select: { productId: true, price: true, effectiveAt: true },
+      orderBy: { effectiveAt: 'asc' },
+    });
+    const history: PriceHistoryMap = new Map();
+    for (const r of rows) {
+      const list = history.get(r.productId);
+      const entry = { price: Number(r.price), effectiveAt: r.effectiveAt };
+      if (list) list.push(entry);
+      else history.set(r.productId, [entry]);
+    }
+    return history;
+  }
+
   private async buildResolver(): Promise<LabelResolver> {
-    const [catalog, aliasRows] = await Promise.all([
+    const [catalog, aliasRows, priceHistory] = await Promise.all([
       this.buildCatalog(),
       this.prisma.productAlias.findMany({
         select: {
@@ -209,6 +234,7 @@ export class InventoryImportService {
           productId: true,
         },
       }),
+      this.buildPriceHistory(),
     ]);
     // buildCatalog() already drops soft-deleted products; aliases must obey
     // the same filter or an alias could resolve to a product that is invisible
@@ -216,8 +242,8 @@ export class InventoryImportService {
     // price-hint refusal, or "product not found") instead of writing
     // inventory nobody can see.
     const liveProductIds = new Set<number>();
-    for (const ids of catalog.values()) {
-      for (const id of ids) liveProductIds.add(id);
+    for (const entries of catalog.values()) {
+      for (const e of entries) liveProductIds.add(e.productId);
     }
 
     return new LabelResolver(
@@ -230,6 +256,7 @@ export class InventoryImportService {
           productId: a.productId,
         })),
       catalog,
+      priceHistory,
     );
   }
 
@@ -276,6 +303,7 @@ export class InventoryImportService {
     rows: Record<string, unknown>[],
     dateKey: string,
     resolver: LabelResolver,
+    sheetDate: Date,
   ): {
     accumulator: Map<number, Counts>;
     unmatched: string[];
@@ -301,7 +329,9 @@ export class InventoryImportService {
       if (isIgnoredLabel(productName)) continue;
 
       const price = parsePrice(row['__EMPTY']);
-      const res = resolver.resolve(productName, section, price);
+      // The sheet's own date decides which price was in force, so a workbook
+      // from last year resolves against last year's prices.
+      const res = resolver.resolve(productName, section, price, sheetDate);
       if (res.kind === 'ambiguous') {
         ambiguous.push(res.reason);
         ambiguousLabels.push(productName);
@@ -427,6 +457,7 @@ export class InventoryImportService {
         rows,
         dateMeta.dateKey,
         resolver,
+        dateMeta.sheetDate,
       );
       const distinct = [...new Set(unmatched)];
       const allZero = accumulator.size > 0 && !hasNonZeroCounts(accumulator);
@@ -578,7 +609,12 @@ export class InventoryImportService {
       }
 
       const { accumulator, unmatched, ambiguous, ambiguousLabels } =
-        this.collectSheetEntries(rows, dateMeta.dateKey, resolver);
+        this.collectSheetEntries(
+          rows,
+          dateMeta.dateKey,
+          resolver,
+          dateMeta.sheetDate,
+        );
       if (ambiguous.length > 0) {
         for (const label of ambiguousLabels) blockedLabels.add(label);
         for (const reason of ambiguous) result.errors.push(reason);
