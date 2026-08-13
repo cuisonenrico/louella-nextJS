@@ -17,7 +17,7 @@ are the only source of inventory.
 | 4 | `seed-materials.sql` | `Material`, `Supplier`, `UnitConversion`, `MaterialInventory`, `MaterialPriceHistory`, `MaterialAdjustment` | No product dependency. |
 | 5 | `seed-products-apr2026.sql` | `Product` | 169 products from `Apr14-28-2026.xlsx`. Same-named variants separated by price. |
 | 6 | `seed-product-price-history.sql` | `ProductPriceHistory` | **Required, not optional** — see below. |
-| 7 | `seed-product-aliases.sql` | `ProductAlias` | One-off prices that are not catalog price changes. |
+| 7 | `seed-product-aliases.sql` | `ProductAlias` | Currently seeds **no rows**, and that is correct — the catalog plus price history resolve the whole known archive. Run it anyway so the table is in a known state. |
 
 Then import the workbooks **chronologically, oldest first**, per
 `docs/HISTORICAL_IMPORT_RUNBOOK.md` (once written) and the plan in
@@ -34,25 +34,36 @@ Two independent reasons:
 1. **Matching.** The importer identifies same-named products by price *as of
    the sheet's date*. Without history, every sheet is compared against today's
    `Product.price`, so any older workbook refuses with "matches none". Measured
-   over the three known workbooks: history takes the refusals from 17 to 3.
+   over the three known workbooks: without history, 17 rows refuse; with it,
+   none do.
 2. **Money.** `computeSold` / revenue value historical rows through
-   `getEffectivePrice()`. Without history, two years of sales are priced at
-   today's rates. 112 of 169 products already changed price across just three
-   workbooks.
+   `getEffectivePrice()`. Without history, the whole archive is priced at
+   today's rates. **117 of 169 products changed price at least once** across
+   just three workbooks — one of them 16 times.
+
+The history is built from **every day sheet**, not one snapshot per workbook,
+so a price that changes part-way through a fortnight is recorded on the day it
+took effect. That matters more than it sounds: `Pandesal Pack` (id 34) runs
+₱40 → ₱300 on Jan 4 → ₱40 on Jan 6 → ₱4200 on May 7 → ₱40 on May 8. A
+per-workbook snapshot sees only the ₱40 and those three sheets refuse.
 
 ### Verification after seeding
 
 ```sql
 SELECT COUNT(*) FROM "Product";                 -- 169
-SELECT COUNT(*) FROM "ProductPriceHistory";     -- 286
-SELECT COUNT(*) FROM "ProductAlias";            -- 4
+SELECT COUNT(*) FROM "ProductPriceHistory";     -- 336
+SELECT COUNT(*) FROM "ProductAlias";            --   0  (expected — see the file)
 -- names deliberately carrying two products, separated by price
 SELECT name, COUNT(*) FROM "Product" GROUP BY name HAVING COUNT(*) > 1;
 --   Bonette, Cobra, Kasalo, Litro, Pandesal Pack, Vitamilk
+-- price history must span the archive, not sit at one date
+SELECT MIN("effectiveAt"), MAX("effectiveAt"), COUNT(DISTINCT "effectiveAt")
+FROM "ProductPriceHistory";                     -- 2025-12-31 .. 2026-05-13, 29
 ```
 
 Simulated over `Jan1-13-2026`, `Apr14-28-2026` and `Apr29-May13-2026` with all
-seven files applied: **7,866 product rows resolved, 0 ambiguous, 0 unmatched.**
+seven files applied: **7,866 product rows resolved, 0 ambiguous, 0 unmatched —
+with no aliases at all.**
 
 ## B. Local development with sample operational data
 
