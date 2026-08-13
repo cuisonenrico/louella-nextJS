@@ -4,23 +4,32 @@
 -- Owns: Branch. Run BEFORE seed-users.sql (User.branchId references it) and
 -- before any inventory import (the import writes rows against a branchId).
 --
--- Extracted from seed-local.sql so a production-shaped database can be built
--- without also pulling in that file's synthetic inventory/production rows,
--- which would collide with an XLSX history import.
+-- SINGLE BRANCH: C2
+--   Only C2 is seeded for now. The bakery has others (C3, B1, …) — add them
+--   here as they come online. Every workbook currently on disk belongs to C2:
+--   Jan1-13-2026, Apr14-28-2026 and Apr29-May13-2026 all carry "BRANCH: C2"
+--   in their day sheets, so the whole known archive imports into this one row.
 --
--- ⚠ These three branches are the development set. The real workbooks carry a
--- "BRANCH:" cell — Apr14-28-2026.xlsx reads "C2" — so the live branch names
--- and codes should be confirmed with the client before importing history
--- against them. Importing into the wrong branch is not silently detectable.
+-- WHY id = 1
+--   PRODUCTION_BRANCH_ID defaults to 1 and is currently set to 1 in .env.
+--   production.service.ts and production-orders.service.ts treat that branch
+--   as the production kitchen. With a single branch, C2 is both the selling
+--   branch and the production branch, which is consistent. When a second
+--   branch is added, decide deliberately which id is the kitchen and set
+--   PRODUCTION_BRANCH_ID to match — do NOT let it stay 1 by accident.
+--
+-- address / phone are left NULL rather than invented. Fill them in when the
+-- real details are known; both columns are nullable.
 -- ---------------------------------------------------------------------------
 
 BEGIN;
 
 INSERT INTO "Branch" (id, name, address, phone, "isActive", "createdAt", "updatedAt") VALUES
-  (1, 'Marikina Branch', '123 Shoe Ave, Marikina City', '028712345', true, NOW(), NOW()),
-  (2, 'Cubao Branch',    '45 Araneta Center, Quezon City', '028719876', true, NOW(), NOW()),
-  (3, 'Antipolo Branch', '88 Sumulong Hwy, Antipolo', '028765432', true, NOW(), NOW())
-ON CONFLICT (id) DO NOTHING;
+  (1, 'C2', NULL, NULL, true, NOW(), NOW())
+ON CONFLICT (id) DO UPDATE SET
+  name        = EXCLUDED.name,
+  "isActive"  = true,
+  "updatedAt" = NOW();
 
 SELECT setval(pg_get_serial_sequence('"Branch"', 'id'), COALESCE(MAX(id), 1)) FROM "Branch";
 

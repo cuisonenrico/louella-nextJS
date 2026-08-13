@@ -11,13 +11,18 @@ are the only source of inventory.
 | # | File | Owns | Notes |
 |---|------|------|-------|
 | 0 | `truncate.sql` | — | Wipes everything. Cascades through `Branch` to users. |
-| 1 | `seed-branches.sql` | `Branch` | ⚠ Dev branch names. Confirm the real ones first — the workbooks carry a `BRANCH:` cell (`C2` in Apr14-28). |
+| 1 | `seed-branches.sql` | `Branch` | Seeds **C2 only**, at id 1. Every workbook on disk carries `BRANCH: C2`, so the whole known archive imports into it. Add C3/B1 here as they come online. |
 | 2 | `seed-users.sql` | `User` | Idempotent and authoritative: re-running RESETS passwords to the documented values. See `SEED_CREDENTIALS.md`. |
 | 3 | `seed-features.sql` | `Feature` | Optional. Only powers the admin permissions matrix; permissions themselves come from code defaults. |
 | 4 | `seed-materials.sql` | `Material`, `Supplier`, `UnitConversion`, `MaterialInventory`, `MaterialPriceHistory`, `MaterialAdjustment` | No product dependency. |
 | 5 | `seed-products-apr2026.sql` | `Product` | 169 products from `Apr14-28-2026.xlsx`. Same-named variants separated by price. |
 | 6 | `seed-product-price-history.sql` | `ProductPriceHistory` | **Required, not optional** — see below. |
 | 7 | `seed-product-aliases.sql` | `ProductAlias` | Currently seeds **no rows**, and that is correct — the catalog plus price history resolve the whole known archive. Run it anyway so the table is in a known state. |
+
+Import every workbook against **branch 1 (C2)** — they all carry `BRANCH: C2`.
+Note that `PRODUCTION_BRANCH_ID` is `1`, so with a single branch C2 is also the
+production kitchen. When a second branch is added, set that variable
+deliberately rather than leaving it at its default.
 
 Then import the workbooks **chronologically, oldest first**, per
 `docs/HISTORICAL_IMPORT_RUNBOOK.md` (once written) and the plan in
