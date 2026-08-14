@@ -106,8 +106,11 @@ export default function InventorySummaryPanel({
               <CardContent className="p-3">
                 <p className="text-[10px] font-semibold text-amber-700 tracking-wider">NO SALES ({summary.zeroSales.length})</p>
                 <div className="flex flex-wrap gap-1 mt-1">
+                  {/* Keyed by productId, not name: two products share the name
+                      "Bonette" (₱30 and ₱8), so a name key makes React drop or
+                      duplicate badges. */}
                   {summary.zeroSales.map((r) => (
-                    <Badge key={r.name} variant="outline" className="border-amber-400 text-amber-700">{r.name}</Badge>
+                    <Badge key={r.productId} variant="outline" className="border-amber-400 text-amber-700">{r.name}</Badge>
                   ))}
                 </div>
               </CardContent>

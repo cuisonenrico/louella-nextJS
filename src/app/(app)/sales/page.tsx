@@ -393,7 +393,10 @@ export default function SalesPage() {
               <Card className="mt-6">
                 <CardHeader><CardTitle className="text-sm text-destructive">Zero Sales Products</CardTitle></CardHeader>
                 <div className="flex flex-wrap gap-2 p-4 pt-0">
-                  {dashboard.zeroSales.map((z) => <Badge key={z.name} variant="outline">{z.name}</Badge>)}
+                  {/* Keyed by productId, not name: the catalog deliberately holds
+                      two products called "Bonette" (₱30 and ₱8), so a name key
+                      makes React drop or duplicate badges. */}
+                  {dashboard.zeroSales.map((z) => <Badge key={z.productId} variant="outline">{z.name}</Badge>)}
                 </div>
               </Card>
             )}

@@ -268,6 +268,42 @@ describe('InventoryService', () => {
 
       expect(result.zeroSales).toHaveLength(1);
       expect(result.zeroSales[0].name).toBe('Unsold');
+      // productId is what the UI keys React children on. Names are NOT unique
+      // — the catalog deliberately seeds two products called "Bonette",
+      // separated only by price — so a name-keyed list drops or duplicates
+      // entries. See prisma/seed-products-apr2026.sql.
+      expect(result.zeroSales[0].productId).toBe(1);
+    });
+
+    it('gives each same-named product its own zeroSales entry, distinguishable by productId', async () => {
+      // Two real SKUs share the name "Bonette" at different prices.
+      const rows = [
+        makeInvRow({
+          productId: 120,
+          quantity: 0,
+          delivery: 0,
+          leftover: 0,
+          reject: 0,
+          product: { id: 120, type: 'SPECIAL', price: 30, name: 'Bonette' },
+        }),
+        makeInvRow({
+          productId: 124,
+          quantity: 0,
+          delivery: 0,
+          leftover: 0,
+          reject: 0,
+          product: { id: 124, type: 'SPECIAL', price: 8, name: 'Bonette' },
+        }),
+      ];
+      prisma.inventory.findMany.mockResolvedValue(rows);
+      prisma.productPriceHistory.findMany.mockResolvedValue([]);
+
+      const result = await service.getSummary(null, '2024-01-01');
+
+      expect(result.zeroSales).toHaveLength(2);
+      expect(result.zeroSales.map((z) => z.productId).sort()).toEqual([120, 124]);
+      // Both carry the same name, which is exactly why the id is required.
+      expect(result.zeroSales.every((z) => z.name === 'Bonette')).toBe(true);
     });
   });
 

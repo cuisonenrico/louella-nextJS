@@ -238,7 +238,7 @@ export class InventoryService {
     revenueByType: Record<string, number>;
     revenueByProduct: Map<
       number,
-      { name: string; revenue: number; sold: number }
+      { productId: number; name: string; revenue: number; sold: number }
     >;
   } {
     let totalRevenue = 0;
@@ -252,9 +252,13 @@ export class InventoryService {
       SPECIAL: 0,
       MISCELLANEOUS: 0,
     };
+    // Keyed by productId, and the VALUE carries productId too: consumers take
+    // .values() and hand the result to the UI, which needs a unique React key.
+    // Product names are deliberately not unique (two "Bonette" rows, ₱30 and
+    // ₱8), so a name-keyed list drops or duplicates entries.
     const revenueByProduct = new Map<
       number,
-      { name: string; revenue: number; sold: number }
+      { productId: number; name: string; revenue: number; sold: number }
     >();
 
     for (const inv of rows) {
@@ -277,6 +281,7 @@ export class InventoryService {
         revenueByType[inv.product.type] += revenue;
       const prev = revenueByProduct.get(inv.productId);
       revenueByProduct.set(inv.productId, {
+        productId: inv.productId,
         name: inv.product.name,
         revenue: (prev?.revenue ?? 0) + revenue,
         sold: (prev?.sold ?? 0) + sold,
@@ -557,7 +562,7 @@ export class InventoryService {
         totalReject: 0,
         revenueByType: { BREAD: 0, CAKE: 0, SPECIAL: 0, MISCELLANEOUS: 0 },
         topProduct: null,
-        zeroSales: [] as { name: string; revenue: number; sold: number }[],
+        zeroSales: [] as { productId: number; name: string; revenue: number; sold: number }[],
       };
     }
 
@@ -638,7 +643,7 @@ export class InventoryService {
         totalReject: 0,
         revenueByType: { BREAD: 0, CAKE: 0, SPECIAL: 0, MISCELLANEOUS: 0 },
         topProduct: null,
-        zeroSales: [] as { name: string; revenue: number; sold: number }[],
+        zeroSales: [] as { productId: number; name: string; revenue: number; sold: number }[],
         dailyBreakdown: [] as {
           date: string;
           revenue: number;

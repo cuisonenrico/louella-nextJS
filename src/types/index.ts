@@ -484,8 +484,8 @@ export interface InventorySummaryData {
   totalLeftover: number;
   totalReject: number;
   revenueByType: Record<ProductType, number>;
-  topProduct: { name: string; revenue: number; sold: number } | null;
-  zeroSales: { name: string; revenue: number; sold: number }[];
+  topProduct: { productId: number; name: string; revenue: number; sold: number } | null;
+  zeroSales: { productId: number; name: string; revenue: number; sold: number }[];
 }
 
 export interface InventoryDashboardData {
@@ -497,8 +497,8 @@ export interface InventoryDashboardData {
   totalLeftover: number;
   totalReject: number;
   revenueByType: Record<ProductType, number>;
-  topProduct: { name: string; revenue: number; sold: number } | null;
-  zeroSales: { name: string; revenue: number; sold: number }[];
+  topProduct: { productId: number; name: string; revenue: number; sold: number } | null;
+  zeroSales: { productId: number; name: string; revenue: number; sold: number }[];
   dailyBreakdown: { date: string; revenue: number; sold: number; delivery: number; leftover: number }[];
 }
 
