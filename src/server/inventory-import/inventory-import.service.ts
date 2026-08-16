@@ -13,9 +13,42 @@ import {
 } from './label-resolver';
 import {
   isIgnoredLabel,
+  pageForRow,
   sectionForRow,
+  suggestedTypeFor,
+  type ProductType,
   type SheetSection,
 } from './sheet-sections';
+
+/**
+ * A sheet label that matched no product, described richly enough that the
+ * operator can turn it into a Product without retyping anything.
+ *
+ * Deduplicated per label across the whole workbook: the same name appears on
+ * every day sheet, and one product is created for it, not eighteen.
+ */
+/** One unmatched row, before rows are folded together per label. */
+interface UnmatchedDetail {
+  label: string;
+  price: number;
+  page: number;
+  section: SheetSection;
+}
+
+export interface UnknownProduct {
+  label: string; // verbatim column A text
+  price: number; // price at the earliest sheet that names it
+  page: number; // which PAGE block it sits under
+  // Derived from page and section; the operator confirms it before anything
+  // is written.
+  suggestedType: ProductType;
+  occurrences: number; // how many day sheets name it
+  firstSeen: string; // YYYY-MM-DD of the earliest such sheet
+  // Every distinct price the label carries, in date order. A label seen at two
+  // prices is one product that was repriced, not two SKUs, so these become
+  // ProductPriceHistory rows rather than extra products.
+  priceChanges: { price: number; effectiveAt: string }[];
+}
 
 export interface DryRunSheet {
   sheetName: string;
@@ -35,6 +68,17 @@ export interface DryRunSheet {
 // 'skip' leaves the day untouched, 'overwrite' replaces it with the sheet.
 export type ImportConflictMode = 'skip' | 'overwrite';
 
+/**
+ * An operator's decision to turn an unmatched sheet label into a product.
+ *
+ * Only the type is theirs to choose; name and price are read from the workbook
+ * so the created product cannot fail to match the label that requested it.
+ */
+export interface CreateProductRequest {
+  label: string;
+  type: ProductType;
+}
+
 export interface DryRunResult {
   fileName: string;
   branch: { id: number; name: string } | null;
@@ -47,6 +91,9 @@ export interface DryRunResult {
     datesDetected: string[];
   };
   sheets: DryRunSheet[];
+  // Every unmatched label in the workbook, deduplicated and enriched so the
+  // operator can create the missing products before importing.
+  unknownProducts: UnknownProduct[];
 }
 
 export interface SheetImportResult {
@@ -336,14 +383,18 @@ export class InventoryImportService {
   ): {
     accumulator: Map<number, Counts>;
     unmatched: string[];
+    unmatchedDetails: UnmatchedDetail[];
     ambiguous: string[];
     ambiguousLabels: string[];
   } {
     const accumulator = new Map<number, Counts>();
     const unmatched: string[] = [];
+    const unmatchedDetails: UnmatchedDetail[] = [];
     const ambiguous: string[] = [];
     const ambiguousLabels: string[] = [];
     let section: SheetSection = 'main';
+    // Page 1 is implicit — it has no "PAGE 1" row, only a column heading.
+    let page = 1;
     const yloKey = findYesterdayLeftoverKey(rows);
 
     for (const row of rows) {
@@ -351,9 +402,10 @@ export class InventoryImportService {
       if (typeof rawName !== 'string') continue;
       const productName = rawName.trim();
 
-      // Section headers are themselves skippable labels, so update the
-      // section before the skip test discards the row.
+      // Section and page headers are themselves skippable labels, so update
+      // both before the skip test discards the row.
       section = sectionForRow(productName, section);
+      page = pageForRow(productName, page);
 
       if (isSkippableLabel(productName)) continue;
       if (isIgnoredLabel(productName)) continue;
@@ -369,6 +421,12 @@ export class InventoryImportService {
       }
       if (res.kind === 'unmatched') {
         unmatched.push(productName);
+        unmatchedDetails.push({
+          label: productName,
+          price: price ?? 0,
+          page,
+          section,
+        });
         continue;
       }
 
@@ -391,7 +449,170 @@ export class InventoryImportService {
         });
       }
     }
-    return { accumulator, unmatched, ambiguous, ambiguousLabels };
+    return {
+      accumulator,
+      unmatched,
+      unmatchedDetails,
+      ambiguous,
+      ambiguousLabels,
+    };
+  }
+
+  /**
+   * Folds per-sheet unmatched rows into one entry per label.
+   *
+   * Sheets are visited in date order so `firstSeen`, the product's price and
+   * the price-change series all come out chronological. A repeated price on a
+   * later date is not a change and is dropped, which keeps the series to the
+   * days the price actually moved.
+   */
+  private collapseUnknownProducts(
+    perSheet: {
+      date: string;
+      details: UnmatchedDetail[];
+    }[],
+  ): UnknownProduct[] {
+    const byLabel = new Map<string, UnknownProduct>();
+
+    for (const { date, details } of [...perSheet].sort((a, b) =>
+      a.date.localeCompare(b.date),
+    )) {
+      // One sheet names a label on several rows only when the bakery splits a
+      // product across pages; the first row is the one that describes it.
+      const seenThisSheet = new Set<string>();
+      for (const { label, price, page, section } of details) {
+        const key = label.toLowerCase();
+        if (seenThisSheet.has(key)) continue;
+        seenThisSheet.add(key);
+
+        const existing = byLabel.get(key);
+        if (!existing) {
+          byLabel.set(key, {
+            label,
+            price,
+            page,
+            suggestedType: suggestedTypeFor(page, section),
+            occurrences: 1,
+            firstSeen: date,
+            priceChanges: [{ price, effectiveAt: date }],
+          });
+          continue;
+        }
+        existing.occurrences += 1;
+        const last = existing.priceChanges[existing.priceChanges.length - 1];
+        if (Math.round(last.price * 100) !== Math.round(price * 100)) {
+          existing.priceChanges.push({ price, effectiveAt: date });
+        }
+      }
+    }
+
+    return [...byLabel.values()];
+  }
+
+  /**
+   * Refuses unless every unknown label is either being created or knowingly
+   * skipped, and every requested creation names a label the workbook contains.
+   *
+   * The second half guards a stale preview: an operator confirms a set of
+   * labels, then uploads a different file. Creating products for labels this
+   * workbook never mentions would quietly pollute the catalog.
+   */
+  private assertUnknownLabelsResolved(
+    unknownProducts: UnknownProduct[],
+    createProducts: CreateProductRequest[],
+    acknowledgeUnmatched: string[],
+  ): void {
+    const known = new Set(unknownProducts.map((u) => u.label.toLowerCase()));
+
+    const notInFile = createProducts
+      .map((c) => c.label)
+      .filter((label) => !known.has(label.trim().toLowerCase()));
+    if (notInFile.length > 0) {
+      throw new ConflictException(
+        `Cannot create ${notInFile.map((l) => `"${l}"`).join(', ')}: ` +
+          `${notInFile.length > 1 ? 'those labels are' : 'that label is'} not ` +
+          `an unmatched name in this workbook. Re-run the preview against the ` +
+          `file you are importing.`,
+      );
+    }
+
+    const resolved = new Set([
+      ...createProducts.map((c) => c.label.trim().toLowerCase()),
+      ...acknowledgeUnmatched.map((l) => l.trim().toLowerCase()),
+    ]);
+    const unresolved = unknownProducts
+      .filter((u) => !resolved.has(u.label.toLowerCase()))
+      .map((u) => u.label);
+
+    if (unresolved.length > 0) {
+      throw new ConflictException(
+        `${unresolved.length} sheet label${unresolved.length > 1 ? 's match' : ' matches'} ` +
+          `no product: ${unresolved.map((l) => `"${l}"`).join(', ')}. ` +
+          `Create ${unresolved.length > 1 ? 'them' : 'it'} from the import ` +
+          `preview, or acknowledge ${unresolved.length > 1 ? 'them' : 'it'} to ` +
+          `import without ${unresolved.length > 1 ? 'those products' : 'that product'}.`,
+      );
+    }
+  }
+
+  /**
+   * Creates one Product per requested label, plus its observed price history.
+   *
+   * Name and price come from the workbook, never from the caller — only the
+   * type is the operator's to choose. That keeps the created product
+   * guaranteed to match the label that asked for it.
+   *
+   * A label seen at several prices is one product that was repriced, so the
+   * extra prices become ProductPriceHistory rows. Without them
+   * getEffectivePrice() would fall back to Product.price and resolve an old
+   * sheet against a modern price.
+   */
+  private async createProductsForLabels(
+    unknownProducts: UnknownProduct[],
+    createProducts: CreateProductRequest[],
+  ): Promise<void> {
+    const byLabel = new Map(
+      unknownProducts.map((u) => [u.label.toLowerCase(), u]),
+    );
+
+    await this.prisma.$transaction(async (tx) => {
+      // sortOrder is per type, so the next slot has to be read per type and
+      // advanced locally for a batch that adds several of the same type.
+      const nextSortOrder = new Map<ProductType, number>();
+
+      for (const request of createProducts) {
+        const unknown = byLabel.get(request.label.trim().toLowerCase())!;
+        const type = request.type;
+
+        let sortOrder = nextSortOrder.get(type);
+        if (sortOrder === undefined) {
+          const agg = await tx.product.aggregate({
+            where: { type, deletedAt: null },
+            _max: { sortOrder: true },
+          });
+          sortOrder = (agg._max.sortOrder ?? 0) + 1;
+        }
+        nextSortOrder.set(type, sortOrder + 1);
+
+        const product = await tx.product.create({
+          data: {
+            name: unknown.label,
+            type,
+            price: unknown.price,
+            sortOrder,
+            date: new Date(`${unknown.firstSeen}T00:00:00.000Z`),
+          },
+        });
+
+        await tx.productPriceHistory.createMany({
+          data: unknown.priceChanges.map((c) => ({
+            productId: product.id,
+            price: c.price,
+            effectiveAt: new Date(`${c.effectiveAt}T00:00:00.000Z`),
+          })),
+        });
+      }
+    });
   }
 
   private async upsertAccumulated(
@@ -447,6 +668,10 @@ export class InventoryImportService {
     const resolver = await this.buildResolver();
     const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
     const sheets: DryRunSheet[] = [];
+    const unknownsPerSheet: {
+      date: string;
+      details: UnmatchedDetail[];
+    }[] = [];
 
     for (const sheetName of workbook.SheetNames) {
       if (!isDaySheet(sheetName)) continue;
@@ -485,12 +710,17 @@ export class InventoryImportService {
         continue;
       }
 
-      const { accumulator, unmatched, ambiguous } = this.collectSheetEntries(
-        rows,
-        dateMeta.dateKey,
-        resolver,
-        dateMeta.sheetDate,
-      );
+      const { accumulator, unmatched, unmatchedDetails, ambiguous } =
+        this.collectSheetEntries(
+          rows,
+          dateMeta.dateKey,
+          resolver,
+          dateMeta.sheetDate,
+        );
+      unknownsPerSheet.push({
+        date: toDateStr(dateMeta.sheetDate),
+        details: unmatchedDetails,
+      });
       const distinct = [...new Set(unmatched)];
       const allZero = accumulator.size > 0 && !hasNonZeroCounts(accumulator);
       const sheetEntry: DryRunSheet = {
@@ -550,6 +780,7 @@ export class InventoryImportService {
         datesDetected,
       },
       sheets,
+      unknownProducts: this.collapseUnknownProducts(unknownsPerSheet),
     };
   }
 
@@ -559,6 +790,8 @@ export class InventoryImportService {
     originalName: string,
     userId?: number,
     conflictMode: ImportConflictMode = 'skip',
+    createProducts: CreateProductRequest[] = [],
+    acknowledgeUnmatched: string[] = [],
   ): Promise<ImportResult> {
     await this.assertBranchExists(branchId);
 
@@ -576,7 +809,7 @@ export class InventoryImportService {
       );
     }
 
-    const resolver = await this.buildResolver();
+    let resolver = await this.buildResolver();
     const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
     const sheetResults: SheetImportResult[] = [];
     const blockedLabels = new Set<string>();
@@ -602,6 +835,44 @@ export class InventoryImportService {
         )
         .map((p) => p.dateMeta!.sheetDate),
     );
+
+    // Every label that resolves to nothing must be accounted for before a
+    // single row is written — either the operator asked for it to become a
+    // product, or they explicitly acknowledged skipping it. The check lives
+    // here rather than only in the UI because the Flutter client and plain
+    // curl never see a disabled button, and the failure it prevents is
+    // silent: an unmatched label loses that product's data for the whole file
+    // while the summary still reports a cheerful success.
+    const importableSheets = parsedSheets.filter(
+      (p) =>
+        p.dateMeta && p.dateMeta.sheetDate.getUTCFullYear() >= MIN_PLAUSIBLE_YEAR,
+    );
+    const unknownProducts = this.collapseUnknownProducts(
+      importableSheets.map((p) => ({
+        date: toDateStr(p.dateMeta!.sheetDate),
+        details: this.collectSheetEntries(
+          p.rows,
+          p.dateMeta!.dateKey,
+          resolver,
+          p.dateMeta!.sheetDate,
+        ).unmatchedDetails,
+      })),
+    );
+
+    if (createProducts.length > 0 || unknownProducts.length > 0) {
+      this.assertUnknownLabelsResolved(
+        unknownProducts,
+        createProducts,
+        acknowledgeUnmatched,
+      );
+    }
+
+    if (createProducts.length > 0) {
+      await this.createProductsForLabels(unknownProducts, createProducts);
+      // The catalog changed, so the labels that triggered the creation now
+      // resolve. Everything downstream must see the new products.
+      resolver = await this.buildResolver();
+    }
 
     for (const { sheetName, rows, dateMeta } of parsedSheets) {
       const result: SheetImportResult = {

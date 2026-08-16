@@ -405,6 +405,21 @@ export interface DryRunSheet {
   error?: string; // sheet-level problem (e.g. no date header)
 }
 
+// A sheet label that matched no product, described richly enough to create the
+// product without retyping anything. Deduplicated per label across the whole
+// workbook — the same name appears on every day sheet.
+export interface UnknownProduct {
+  label: string; // verbatim column A text
+  price: number; // price at the earliest sheet that names it
+  page: number; // which PAGE block it sits under
+  suggestedType: ProductType; // derived from `page`; the operator confirms it
+  occurrences: number; // how many day sheets name it
+  firstSeen: string; // YYYY-MM-DD of the earliest such sheet
+  // Every distinct price the label carries, in date order. A label seen at two
+  // prices is one product that was repriced, not two SKUs.
+  priceChanges: { price: number; effectiveAt: string }[];
+}
+
 export interface DryRunResult {
   fileName: string;
   branch: { id: number; name: string } | null;
@@ -417,7 +432,14 @@ export interface DryRunResult {
     datesDetected: string[];
   };
   sheets: DryRunSheet[];
+  unknownProducts: UnknownProduct[];
 }
+
+// The operator's decision for one unknown label: create it as a product of
+// this type, or skip it. Name and price always come from the sheet.
+export type UnknownDecision =
+  | { kind: 'create'; type: ProductType }
+  | { kind: 'skip' };
 
 // ────────────────────────────────────────────────────────────────
 // Pagination

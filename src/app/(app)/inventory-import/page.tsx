@@ -6,7 +6,7 @@ import { useMutation } from '@tanstack/react-query';
 import { Loader2, Upload, FileSpreadsheet, CheckCircle, AlertTriangle } from 'lucide-react';
 import { inventoryImportApi, branchesApi, importLogsApi } from '@/lib/apiServices';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import type { Branch, DryRunResult, InventoryImportResult } from '@/types';
+import type { Branch, DryRunResult, InventoryImportResult, ProductType, UnknownDecision } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,8 +14,18 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { resolveDecisions } from './lib/unknownDecisions';
 
 type Step = 'upload' | 'branch' | 'preview' | 'result';
+
+const PRODUCT_TYPES: ProductType[] = ['BREAD', 'CAKE', 'SPECIAL', 'MISCELLANEOUS'];
+
+const TYPE_LABEL: Record<ProductType, string> = {
+  BREAD: 'Bread',
+  CAKE: 'Cake',
+  SPECIAL: 'Special',
+  MISCELLANEOUS: 'Misc',
+};
 
 function extractError(err: unknown): string {
   const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
@@ -31,6 +41,11 @@ export default function InventoryImportPage() {
   const [branchId, setBranchId] = useState('');
   const [result, setResult] = useState<InventoryImportResult | null>(null);
   const [error, setError] = useState('');
+  // One decision per unknown label, keyed by the label. Deliberately starts
+  // empty rather than pre-filled with the suggested type: an operator must
+  // look at every unknown name before the import can run, because the common
+  // cause of one is a typo in the sheet, not a genuinely new product.
+  const [decisions, setDecisions] = useState<Record<string, UnknownDecision>>({});
 
   const { data: branches = [] } = useQuery({ queryKey: ['branches'], queryFn: () => branchesApi.list().then((r) => r.data) });
 
@@ -44,13 +59,13 @@ export default function InventoryImportPage() {
 
   const previewMut = useMutation({
     mutationFn: ({ f, bid }: { f: File; bid: number }) => inventoryImportApi.preview(f, bid),
-    onSuccess: (res) => { setPreview(res.data); setStep('preview'); setError(''); },
+    onSuccess: (res) => { setPreview(res.data); setDecisions({}); setStep('preview'); setError(''); },
     onError: (err) => setError(extractError(err)),
   });
 
   const importMut = useMutation({
     mutationFn: ({ f, bid, mode }: { f: File; bid: number; mode?: 'skip' | 'overwrite' }) =>
-      inventoryImportApi.importFile(f, bid, mode),
+      inventoryImportApi.importFile(f, bid, mode, createProducts, acknowledgeUnmatched),
     onSuccess: (res) => { setResult(res.data); setStep('result'); setError(''); },
     onError: (err) => setError(extractError(err)),
   });
@@ -83,6 +98,26 @@ export default function InventoryImportPage() {
   // until every ambiguous label is resolved with a ProductAlias — otherwise
   // an operator can launch an import that silently skips whole sheets.
   const hasAmbiguous = (preview?.sheets ?? []).some((s) => s.ambiguous.length > 0);
+
+  // Labels that matched no product. Each needs a decision before importing:
+  // the server refuses outright otherwise, so an unmatched label can no longer
+  // cost a product its whole history while the summary still reads "success".
+  const unknownProducts = preview?.unknownProducts ?? [];
+  const { createProducts, acknowledgeUnmatched, undecided } = resolveDecisions(
+    unknownProducts,
+    decisions,
+  );
+
+  const decide = (label: string, decision: UnknownDecision) =>
+    setDecisions((prev) => ({ ...prev, [label]: decision }));
+
+  const importBlocked =
+    !preview ||
+    preview.summary.totalSheets === 0 ||
+    !!preview.alreadyImported ||
+    hasAmbiguous ||
+    undecided.length > 0 ||
+    importMut.isPending;
 
   const reset = () => {
     setStep('upload'); setFile(null); setPreview(null); setBranchId(''); setResult(null); setError('');
@@ -195,15 +230,89 @@ export default function InventoryImportPage() {
                     </TableBody>
                   </Table>
                 </div>
-                {preview.summary.totalUnmatched > 0 && (
-                  <Alert variant="destructive" className="mt-4">
-                    <AlertTriangle className="h-4 w-4" />
-                    <AlertDescription>
-                      <p className="font-medium mb-1">These names did not match any product and will be skipped:</p>
-                      <p className="text-xs">{[...new Set(preview.sheets.flatMap((s) => s.unmatched))].join(', ')}</p>
-                      <p className="text-xs mt-1">Add them to the product catalog first if they should be imported.</p>
-                    </AlertDescription>
-                  </Alert>
+                {unknownProducts.length > 0 && (
+                  <div className="mt-4 border rounded-lg">
+                    <div className="px-4 py-3 border-b bg-muted/40">
+                      <p className="font-medium text-sm">
+                        {unknownProducts.length} name{unknownProducts.length > 1 ? 's' : ''} in this file{' '}
+                        {unknownProducts.length > 1 ? 'do' : 'does'} not match any product
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Add each one to the catalog, or skip it. The name and price come from the sheet — only the
+                        type is yours to set. A name you don&apos;t recognise is usually a typo in the spreadsheet.
+                      </p>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Name in sheet</TableHead>
+                            <TableHead className="text-right">Price</TableHead>
+                            <TableHead className="text-right">Days</TableHead>
+                            <TableHead>First seen</TableHead>
+                            <TableHead>Type</TableHead>
+                            <TableHead className="text-right">Decision</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {unknownProducts.map((u) => {
+                            const d = decisions[u.label];
+                            return (
+                              <TableRow key={u.label} className={d ? '' : 'bg-destructive/5'}>
+                                <TableCell className="font-medium">
+                                  {u.label}
+                                  {u.priceChanges.length > 1 && (
+                                    <span className="block text-[11px] text-muted-foreground">
+                                      {u.priceChanges.length} price changes — recorded as history
+                                    </span>
+                                  )}
+                                </TableCell>
+                                <TableCell className="text-right">₱{u.price.toLocaleString()}</TableCell>
+                                <TableCell className="text-right">{u.occurrences}</TableCell>
+                                <TableCell className="text-muted-foreground">{u.firstSeen}</TableCell>
+                                <TableCell>
+                                  <Select
+                                    value={d?.kind === 'create' ? d.type : u.suggestedType}
+                                    onValueChange={(v) => decide(u.label, { kind: 'create', type: v as ProductType })}
+                                    disabled={d?.kind === 'skip'}
+                                  >
+                                    <SelectTrigger className="h-8 w-[130px]"><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                      {PRODUCT_TYPES.map((t) => (
+                                        <SelectItem key={t} value={t}>{TYPE_LABEL[t]}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </TableCell>
+                                <TableCell className="text-right whitespace-nowrap">
+                                  <Button
+                                    size="sm"
+                                    variant={d?.kind === 'create' ? 'default' : 'outline'}
+                                    onClick={() => decide(u.label, { kind: 'create', type: d?.kind === 'create' ? d.type : u.suggestedType })}
+                                  >
+                                    Add
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant={d?.kind === 'skip' ? 'secondary' : 'ghost'}
+                                    className="ml-1"
+                                    onClick={() => decide(u.label, { kind: 'skip' })}
+                                  >
+                                    Skip
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                    {undecided.length > 0 && (
+                      <p className="px-4 py-2 text-xs text-destructive border-t">
+                        Decide on {undecided.length} more name{undecided.length > 1 ? 's' : ''} to enable importing.
+                      </p>
+                    )}
+                  </div>
                 )}
                 {hasAmbiguous && (
                   <Alert variant="destructive" className="mt-4">
@@ -245,7 +354,7 @@ export default function InventoryImportPage() {
                 <>
                   <Button
                     onClick={() => handleImport('skip')}
-                    disabled={preview.summary.totalSheets === 0 || !!preview.alreadyImported || hasAmbiguous || importMut.isPending}
+                    disabled={importBlocked}
                   >
                     {importMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
                     Import (skip {conflictDates.length} existing day{conflictDates.length > 1 ? 's' : ''})
@@ -253,7 +362,7 @@ export default function InventoryImportPage() {
                   <Button
                     variant="destructive"
                     onClick={() => handleImport('overwrite')}
-                    disabled={preview.summary.totalSheets === 0 || !!preview.alreadyImported || hasAmbiguous || importMut.isPending}
+                    disabled={importBlocked}
                   >
                     {importMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <AlertTriangle className="mr-2 h-4 w-4" />}
                     Overwrite existing days
@@ -262,7 +371,7 @@ export default function InventoryImportPage() {
               ) : (
                 <Button
                   onClick={() => handleImport()}
-                  disabled={preview.summary.totalSheets === 0 || !!preview.alreadyImported || hasAmbiguous || importMut.isPending}
+                  disabled={importBlocked}
                 >
                   {importMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}Import
                 </Button>

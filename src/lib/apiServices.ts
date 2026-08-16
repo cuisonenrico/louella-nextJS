@@ -25,6 +25,7 @@ import type {
   PlannedYield,
   Product,
   ProductPriceHistory,
+  ProductType,
   Production,
   ProductionEfficiencyItem,
   ProductionOrder,
@@ -193,11 +194,22 @@ export const inventoryImportApi = {
     file: File,
     branchId: number,
     conflictMode?: 'skip' | 'overwrite',
+    // Decisions for labels that matched no product. The server refuses the
+    // import unless every unknown label appears in one of these two lists.
+    createProducts?: { label: string; type: ProductType }[],
+    acknowledgeUnmatched?: string[],
   ) => {
     const form = new FormData();
     form.append('file', file);
     form.append('branchId', String(branchId));
     if (conflictMode) form.append('conflictMode', conflictMode);
+    if (createProducts?.length)
+      form.append('createProducts', JSON.stringify(createProducts));
+    if (acknowledgeUnmatched?.length)
+      form.append(
+        'acknowledgeUnmatched',
+        JSON.stringify(acknowledgeUnmatched),
+      );
     return api.post<InventoryImportResult>('/inventory-import/import', form);
   },
 };

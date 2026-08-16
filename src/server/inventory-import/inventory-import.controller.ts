@@ -19,9 +19,68 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/user.decorator';
 import {
   InventoryImportService,
+  type CreateProductRequest,
   type ImportConflictMode,
 } from './inventory-import.service';
+import type { ProductType } from './sheet-sections';
 import type { Express } from 'express';
+
+const PRODUCT_TYPES: readonly ProductType[] = [
+  'BREAD',
+  'CAKE',
+  'SPECIAL',
+  'MISCELLANEOUS',
+];
+
+/**
+ * Multipart bodies carry only strings, so both resolution fields arrive as
+ * JSON text. Anything malformed is rejected here rather than reaching the
+ * service, where a bad shape would be indistinguishable from "no decisions
+ * supplied" and the import would refuse with a confusing message.
+ */
+function parseJsonArray(raw: string | undefined, field: string): unknown[] {
+  if (raw === undefined || raw === '') return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new BadRequestException(`${field} must be valid JSON.`);
+  }
+  if (!Array.isArray(parsed))
+    throw new BadRequestException(`${field} must be a JSON array.`);
+  return parsed;
+}
+
+function parseLabelList(raw: string | undefined, field: string): string[] {
+  const items = parseJsonArray(raw, field);
+  for (const item of items) {
+    if (typeof item !== 'string' || item.trim() === '')
+      throw new BadRequestException(
+        `${field} must contain only non-empty strings.`,
+      );
+  }
+  return items as string[];
+}
+
+function parseCreateProducts(raw: string | undefined): CreateProductRequest[] {
+  const items = parseJsonArray(raw, 'createProducts');
+  return items.map((item) => {
+    if (typeof item !== 'object' || item === null)
+      throw new BadRequestException(
+        'createProducts must contain { label, type } objects.',
+      );
+    const { label, type } = item as { label?: unknown; type?: unknown };
+    if (typeof label !== 'string' || label.trim() === '')
+      throw new BadRequestException(
+        'Each createProducts entry needs a non-empty label.',
+      );
+    if (!PRODUCT_TYPES.includes(type as ProductType))
+      throw new BadRequestException(
+        `Each createProducts entry needs a type of ${PRODUCT_TYPES.join(', ')}.`,
+      );
+    return { label, type: type as ProductType };
+  });
+}
 
 @Controller('inventory-import')
 @UseGuards(RolesGuard)
@@ -71,6 +130,8 @@ export class InventoryImportController {
     @Body('branchId') branchIdStr: string,
     @CurrentUser() user: { id: number },
     @Body('conflictMode') conflictMode?: string,
+    @Body('createProducts') createProducts?: string,
+    @Body('acknowledgeUnmatched') acknowledgeUnmatched?: string,
   ) {
     this.validateFile(file);
     if (!branchIdStr) throw new BadRequestException('branchId is required.');
@@ -91,6 +152,8 @@ export class InventoryImportController {
       file.originalname,
       user?.id,
       (conflictMode as ImportConflictMode) ?? 'skip',
+      parseCreateProducts(createProducts),
+      parseLabelList(acknowledgeUnmatched, 'acknowledgeUnmatched'),
     );
   }
 
