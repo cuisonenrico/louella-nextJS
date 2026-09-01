@@ -5,8 +5,11 @@ import { DashboardQueryDto } from './dto/dashboard-query.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { BranchGuard } from '../common/guards/branch.guard';
+import { RequireFeature } from '../common/decorators/require-feature.decorator';
+import { CurrentUser } from '../common/decorators/user.decorator';
 
 @Controller('dashboard')
+@RequireFeature('dashboard')
 @Roles(UserRole.VIEWER)
 @UseGuards(RolesGuard, BranchGuard)
 export class DashboardController {
@@ -14,6 +17,7 @@ export class DashboardController {
 
   @Get('summary')
   getSummary(
+    @CurrentUser() user: { permissions: string[] },
     @Query() query: DashboardQueryDto,
     @Query('branchId') branchIdStr?: string,
   ) {
@@ -24,9 +28,12 @@ export class DashboardController {
       branchIdStr != null && branchIdStr !== ''
         ? parseInt(branchIdStr, 10)
         : undefined;
+    // Panels are resolved inside the service so a denied panel's data is never
+    // assembled, rather than assembled and then filtered on the way out.
     return this.dashboardService.getSummary(
       date,
       Number.isFinite(branchId as number) ? branchId : undefined,
+      user.permissions,
     );
   }
 }

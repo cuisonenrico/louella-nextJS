@@ -14,8 +14,10 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/user.decorator';
 import { PermissionsService } from './permissions.service';
 import { SetPermissionDto } from './dto/set-permission.dto';
+import { RequireFeature } from '../common/decorators/require-feature.decorator';
 
 @Controller('permissions')
+@RequireFeature('permissions')
 @UseGuards(RolesGuard)
 export class PermissionsController {
   constructor(private readonly permissionsService: PermissionsService) {}
@@ -33,6 +35,7 @@ export class PermissionsController {
   }
 
   @Put('roles/:role')
+  @RequireFeature('permissions:edit')
   @Roles(UserRole.ADMIN)
   setRolePermission(
     @Param('role') role: string,
@@ -48,6 +51,7 @@ export class PermissionsController {
   }
 
   @Put('users/:userId')
+  @RequireFeature('permissions:edit')
   @Roles(UserRole.ADMIN)
   setUserPermission(
     @Param('userId', ParseIntPipe) userId: number,
@@ -63,6 +67,7 @@ export class PermissionsController {
   }
 
   @Delete('users/:userId/:featureKey')
+  @RequireFeature('permissions:edit')
   @Roles(UserRole.ADMIN)
   resetUserPermission(
     @Param('userId', ParseIntPipe) userId: number,

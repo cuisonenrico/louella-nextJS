@@ -15,12 +15,15 @@ import { RecipesService } from './recipes.service';
 import { CreateRecipeDto } from './dto/create-recipe.dto';
 import { UpdateRecipeDto } from './dto/update-recipe.dto';
 import { Roles } from '../common/decorators/roles.decorator';
+import { RequireFeature } from '../common/decorators/require-feature.decorator';
 
 @Controller('recipes')
+@RequireFeature('recipes')
 export class RecipesController {
   constructor(private readonly recipesService: RecipesService) {}
 
   @Post()
+  @RequireFeature('recipes:create')
   @Roles(UserRole.MANAGER)
   create(@Body() body: CreateRecipeDto) {
     return this.recipesService.create(body);
@@ -48,17 +51,20 @@ export class RecipesController {
   }
 
   @Get(':id/cost')
+  @RequireFeature('recipes:cost')
   calculateCost(@Param('id', ParseIntPipe) id: number) {
     return this.recipesService.calculateCost(id);
   }
 
   @Patch(':id')
+  @RequireFeature('recipes:edit')
   @Roles(UserRole.MANAGER)
   update(@Param('id', ParseIntPipe) id: number, @Body() body: UpdateRecipeDto) {
     return this.recipesService.update(id, body);
   }
 
   @Delete(':id')
+  @RequireFeature('recipes:delete')
   @Roles(UserRole.MANAGER)
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.recipesService.remove(id);

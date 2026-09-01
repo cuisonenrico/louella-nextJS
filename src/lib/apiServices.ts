@@ -3,6 +3,7 @@ import type {
   AuthResponse,
   Branch,
   PermissionsMatrixResponse,
+  UserPermissionsResponse,
   UserRole,
   ConsumptionSummary,
   DashboardSummary,
@@ -79,7 +80,7 @@ export const usersApi = {
 export const permissionsApi = {
   matrix: () => api.get<PermissionsMatrixResponse>('/permissions/matrix'),
   userMatrix: (userId: number) =>
-    api.get<PermissionsMatrixResponse>(`/permissions/users/${userId}/matrix`),
+    api.get<UserPermissionsResponse>(`/permissions/users/${userId}/matrix`),
   setRolePermission: (role: UserRole, featureKey: string, enabled: boolean) =>
     api.put(`/permissions/roles/${role}`, { featureKey, enabled }),
   setUserPermission: (userId: number, featureKey: string, enabled: boolean) =>

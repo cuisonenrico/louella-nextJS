@@ -24,6 +24,7 @@ import {
 } from './inventory-import.service';
 import type { ProductType } from './sheet-sections';
 import type { Express } from 'express';
+import { RequireFeature } from '../common/decorators/require-feature.decorator';
 
 const PRODUCT_TYPES: readonly ProductType[] = [
   'BREAD',
@@ -83,6 +84,7 @@ function parseCreateProducts(raw: string | undefined): CreateProductRequest[] {
 }
 
 @Controller('inventory-import')
+@RequireFeature('inventory-import')
 @UseGuards(RolesGuard)
 export class InventoryImportController {
   constructor(private readonly service: InventoryImportService) {}
@@ -102,6 +104,7 @@ export class InventoryImportController {
   }
 
   @Post('preview')
+  @RequireFeature('inventory-import:preview')
   @Roles(UserRole.MANAGER)
   @UseInterceptors(FileInterceptor('file'))
   preview(
@@ -123,6 +126,7 @@ export class InventoryImportController {
   }
 
   @Post('import')
+  @RequireFeature('inventory-import:import')
   @Roles(UserRole.MANAGER)
   @UseInterceptors(FileInterceptor('file'))
   async import(
@@ -181,6 +185,7 @@ export class InventoryImportController {
   }
 
   @Delete('logs/:id')
+  @RequireFeature('inventory-import:delete-log')
   @Roles(UserRole.ADMIN)
   deleteLog(@Param('id', ParseIntPipe) id: number) {
     return this.service.deleteLog(id);

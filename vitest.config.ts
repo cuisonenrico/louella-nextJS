@@ -10,9 +10,11 @@ export default defineConfig({
   test: {
     // The existing specs use bare describe/it/expect (Jest-style) globals.
     globals: true,
-    // Current suites cover pure helpers; node is enough. Switch to 'jsdom'
-    // (and add @testing-library/react) when component tests are introduced.
-    environment: 'node',
+    // Component tests (Sidebar, RouteGuard) need a DOM; the pure-helper suites
+    // are unaffected by running under jsdom.
+    environment: 'jsdom',
+    // Radix shims + jest-dom matchers; see vitest.setup.ts.
+    setupFiles: ['./vitest.setup.ts'],
     include: ['src/**/*.{spec,test}.{ts,tsx}'],
     // Everything under src/server runs on Jest instead (see jest.config.js):
     // those suites are Jest-based (jest.fn, @nestjs/testing) and carried over

@@ -33,6 +33,8 @@ export interface User {
   createdBy?: Pick<User, 'id' | 'email'> | null;
   createdAt: string;
   updatedAt: string;
+  /** Effective feature keys. Returned by GET /auth/me; absent elsewhere. */
+  permissions?: string[];
 }
 
 export interface AuthResponse {
@@ -467,33 +469,47 @@ export interface DashboardProductionBreakdown {
   totalYield: number;
 }
 
+export interface DashboardBranchSummary {
+  id: number;
+  name: string;
+  address: string | null;
+  isActive: boolean;
+}
+
+/**
+ * Every field is optional: the server omits the ones whose dashboard panel
+ * permission the caller does not hold, so a denied panel's data never reaches
+ * the browser. Read each through a presence check, not a `!`.
+ */
 export interface DashboardSummary {
-  stats: DashboardStats;
-  production: {
+  /** `dashboard:kpis` */
+  stats?: DashboardStats;
+  /** `dashboard:production-mix` */
+  production?: {
     date: string;
     totalYield: number;
     byType: DashboardProductionBreakdown[];
   };
-  lowStock: {
+  /** `dashboard:low-stock` */
+  lowStock?: {
     id: number;
     name: string;
     unit: string;
     currentStock: number;
     reorderLevel: number;
   }[];
-  products: {
+  /** `dashboard:kpis` */
+  products?: {
     id: number;
     name: string;
     type: ProductType;
     price: number;
     isActive: boolean;
   }[];
-  branches: {
-    id: number;
-    name: string;
-    address: string | null;
-    isActive: boolean;
-  }[];
+  /** `dashboard:branch-gaps` */
+  branches?: DashboardBranchSummary[];
+  /** `dashboard:branch-gaps` — active branches with no entry for the date. */
+  branchGaps?: DashboardBranchSummary[];
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -614,17 +630,70 @@ export interface RolePermissionState {
   default: boolean;
   effective: boolean;
   overridden: boolean;
+  /** ADMIN may not have this revoked; the switch renders disabled. */
+  locked: boolean;
+  /**
+   * False when the role sits below the `@Roles()` floor on this key's
+   * endpoints, so granting it would produce a control that 403s. The switch
+   * renders unavailable rather than offering an impossible grant.
+   */
+  available: boolean;
 }
 
-export interface PermissionsMatrixFeature {
+/** Metadata every matrix row carries, whether it is a screen, action or panel. */
+export interface PermissionRowMeta {
   key: string;
   label: string;
   description: string | null;
+  group: string | null;
+  platform: 'web' | 'mobile' | 'both';
+  /** Null for a screen; the owning screen's key for an action or panel. */
+  parent: string | null;
+  kind: 'feature' | 'action' | 'panel';
+  /** Actions only: the role floor its endpoints enforce. */
+  minRole: string | null;
+  /**
+   * Panels only. `sensitive` means the server withholds the data as well as the
+   * UI hiding it; `presentation` means the gate is layout only.
+   */
+  sensitivity: 'presentation' | 'sensitive' | null;
+}
+
+export interface PermissionsMatrixFeature extends PermissionRowMeta {
   roles: Record<string, RolePermissionState>;
 }
 
 export interface PermissionsMatrixResponse {
   features: PermissionsMatrixFeature[];
+}
+
+/**
+ * One row per feature for a single account.
+ *
+ * Replaces the previous shape, which stamped that user's override across every
+ * role column — it rendered correctly only because the UI read one column.
+ */
+export interface UserPermissionRow extends PermissionRowMeta {
+  /** What ROLE_DEFAULTS grants this user's role. */
+  roleDefault: boolean;
+  /** After any role-level override. */
+  roleEffective: boolean;
+  /** This user's own override, or null when they inherit the role. */
+  userOverride: boolean | null;
+  /** The net result actually enforced. */
+  effective: boolean;
+  /**
+   * Whether the owning screen is granted. A child key with this false is inert
+   * however it is toggled, so the UI shows it as blocked by its parent.
+   */
+  parentEffective: boolean;
+  available: boolean;
+  locked: boolean;
+}
+
+export interface UserPermissionsResponse {
+  user: { id: number; email: string; role: UserRole; isActive: boolean };
+  features: UserPermissionRow[];
 }
 
 export interface UserFeaturePermission {

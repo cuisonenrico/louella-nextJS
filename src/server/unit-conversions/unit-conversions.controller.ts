@@ -15,6 +15,7 @@ import { CreateUnitConversionDto } from './dto/create-unit-conversion.dto';
 import { UpdateUnitConversionDto } from './dto/update-unit-conversion.dto';
 import { ConvertQuantityDto } from './dto/convert-quantity.dto';
 import { Roles } from '../common/decorators/roles.decorator';
+import { RequireFeature } from '../common/decorators/require-feature.decorator';
 
 @Controller('unit-conversions')
 export class UnitConversionsController {
@@ -23,12 +24,14 @@ export class UnitConversionsController {
   ) {}
 
   @Post()
+  @RequireFeature('unit-conversions:create')
   @Roles(UserRole.MANAGER)
   create(@Body() body: CreateUnitConversionDto) {
     return this.unitConversionsService.create(body);
   }
 
   @Post('convert')
+  @RequireFeature('unit-conversions', 'material-stock', 'inventory-adjustments')
   @Roles(UserRole.INVENTORY)
   async convertQuantity(@Body() body: ConvertQuantityDto) {
     const result = await this.unitConversionsService.convert(
@@ -56,6 +59,7 @@ export class UnitConversionsController {
   }
 
   @Patch(':id')
+  @RequireFeature('unit-conversions:edit')
   @Roles(UserRole.MANAGER)
   update(
     @Param('id', ParseIntPipe) id: number,
@@ -65,6 +69,7 @@ export class UnitConversionsController {
   }
 
   @Delete(':id')
+  @RequireFeature('unit-conversions:delete')
   @Roles(UserRole.MANAGER)
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.unitConversionsService.remove(id);

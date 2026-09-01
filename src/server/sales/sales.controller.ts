@@ -12,8 +12,10 @@ import { SalesDateQueryDto } from './dto/sales-date-query.dto';
 import { SalesRangeQueryDto } from './dto/sales-range-query.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { BranchGuard } from '../common/guards/branch.guard';
+import { RequireFeature } from '../common/decorators/require-feature.decorator';
 
 @Controller('sales')
+@RequireFeature('analytics')
 @Roles(UserRole.VIEWER)
 @UseGuards(BranchGuard)
 export class SalesController {

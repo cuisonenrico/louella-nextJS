@@ -7,8 +7,9 @@ import Link from 'next/link';
 import {
   Store, ArrowRight, ClipboardList, CheckCircle2, FileEdit, Factory,
 } from 'lucide-react';
-import { dashboardApi, productionOrdersApi, branchesApi, inventoryApi } from '@/lib/apiServices';
-import type { DashboardSummary, InventoryDashboardData, ProductionOrder, Branch, Inventory } from '@/types';
+import { dashboardApi, productionOrdersApi, inventoryApi } from '@/lib/apiServices';
+import type { DashboardSummary, InventoryDashboardData, ProductionOrder } from '@/types';
+import { useCan } from '@/lib/rbac/useHasFeature';
 import RejectionByProductCard from '@/components/analytics/RejectionByProductCard';
 import KpiRow from './components/KpiRow';
 import RevenueTrendCard, { type TrendDay } from './components/RevenueTrendCard';
@@ -28,31 +29,35 @@ export default function DashboardPage() {
   const today = dayjs().format('YYYY-MM-DD');
   const weekAgo = dayjs().subtract(6, 'day').format('YYYY-MM-DD');
 
+  // Each card is a panel permission. The server omits the data for panels the
+  // account does not hold, so these flags decide layout — they are not the
+  // boundary. See `dashboard` in src/lib/rbac/features.ts.
+  const canKpis = useCan('dashboard:kpis');
+  const canRevenue = useCan('dashboard:revenue-trend');
+  const canMix = useCan('dashboard:production-mix');
+  const canOrders = useCan('dashboard:branch-orders');
+  const canGaps = useCan('dashboard:branch-gaps');
+  const canLowStock = useCan('dashboard:low-stock');
+  const canRejections = useCan('dashboard:rejections');
+
   const { data, isLoading, isError, error, refetch } = useQuery<DashboardSummary>({
     queryKey: ['dashboard-summary', today],
     queryFn: () => dashboardApi.summary(today).then((r) => r.data),
   });
 
-  // Revenue KPIs + trend; some roles may lack access — degrade quietly.
+  // Revenue KPIs + trend. Gated by its own panel key: the endpoint enforces it
+  // too, so without `enabled` this would fire a request that always 403s.
   const { data: revenueData, isError: revenueError } = useQuery<InventoryDashboardData>({
     queryKey: ['dashboard-revenue', weekAgo, today],
     queryFn: () => inventoryApi.dashboard(weekAgo, today).then((r) => r.data),
+    enabled: canRevenue,
     retry: false,
   });
 
   const { data: todayOrders = [] } = useQuery<ProductionOrder[]>({
     queryKey: ['dashboard-orders', today],
     queryFn: () => productionOrdersApi.byDate(today).then((r) => r.data),
-  });
-
-  const { data: allBranches = [] } = useQuery<Branch[]>({
-    queryKey: ['branches'],
-    queryFn: () => branchesApi.list().then((r) => r.data),
-  });
-
-  const { data: todayInventory = [] } = useQuery<Inventory[]>({
-    queryKey: ['dashboard-inventory', today],
-    queryFn: () => inventoryApi.byDateRange(today).then((r) => r.data),
+    enabled: canOrders,
   });
 
   const orderStats = {
@@ -61,9 +66,13 @@ export default function DashboardPage() {
     finalized: todayOrders.filter((o) => o.status === 'FINALIZED').length,
   };
 
-  const activeBranches = allBranches.filter((b) => b.isActive);
-  const branchesWithInventory = new Set(todayInventory.map((inv) => inv.branchId));
-  const branchesMissingInventory = activeBranches.filter((b) => !branchesWithInventory.has(b.id));
+  // Both come from the summary endpoint now. They used to be derived in the
+  // browser from an ungated `GET /branches` cross-referenced against
+  // inventory, which showed every branch manager the full branch roster and
+  // which branches were behind — cross-branch data BranchGuard never saw,
+  // because the leak was in the second, unscoped query rather than the first.
+  const activeBranches = (data?.branches ?? []).filter((b) => b.isActive);
+  const branchesMissingInventory = data?.branchGaps ?? [];
 
   const trendDays: TrendDay[] = (revenueData?.dailyBreakdown ?? []).map((d) => ({
     date: d.date,
@@ -73,7 +82,7 @@ export default function DashboardPage() {
     leftover: d.leftover,
   }));
   const todayEntry = trendDays.find((d) => dayjs(d.date).format('YYYY-MM-DD') === today);
-  const revenueUnavailable = revenueError || !revenueData;
+  const revenueUnavailable = !canRevenue || revenueError || !revenueData;
 
   return (
     <>
@@ -92,20 +101,24 @@ export default function DashboardPage() {
           />
         ) : (
           <>
-            <KpiRow
-              revenue={revenueUnavailable ? null : (todayEntry?.revenue ?? 0)}
-              sold={revenueUnavailable ? null : (todayEntry?.sold ?? 0)}
-              productionYield={data.production.totalYield}
-              lowStockCount={data.lowStock.length}
-            />
+            {canKpis && (
+              <KpiRow
+                revenue={revenueUnavailable ? null : (todayEntry?.revenue ?? 0)}
+                sold={revenueUnavailable ? null : (todayEntry?.sold ?? 0)}
+                productionYield={data.production?.totalYield ?? 0}
+                lowStockCount={data.lowStock?.length ?? 0}
+              />
+            )}
 
             {/* Charts row */}
+            {(canRevenue || canMix) && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
               {!revenueUnavailable && trendDays.length >= 2 && (
                 <RevenueTrendCard days={trendDays} />
               )}
 
               {/* Production mix */}
+              {canMix && data.production && (
               <Card className={revenueUnavailable || trendDays.length < 2 ? 'lg:col-span-3' : ''}>
                 <CardContent className="p-6">
                   <div className="flex items-center gap-2 mb-4">
@@ -162,11 +175,15 @@ export default function DashboardPage() {
                   )}
                 </CardContent>
               </Card>
+              )}
             </div>
+            )}
 
             {/* Operations row */}
+            {(canOrders || canGaps || canLowStock) && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
               {/* Branch Orders Today */}
+              {canOrders && (
               <Card>
                 <CardContent className="p-6">
                   <div className="flex items-center gap-2 mb-4">
@@ -217,8 +234,10 @@ export default function DashboardPage() {
                   )}
                 </CardContent>
               </Card>
+              )}
 
               {/* Inventory Coverage */}
+              {canGaps && (
               <Card className={branchesMissingInventory.length > 0 ? 'border-amber-400' : ''}>
                 <CardContent className="p-6">
                   <div className="flex items-center gap-2 mb-4">
@@ -247,18 +266,22 @@ export default function DashboardPage() {
                   )}
                 </CardContent>
               </Card>
+              )}
 
-              <LowStockCard items={data.lowStock} />
+              {canLowStock && <LowStockCard items={data.lowStock ?? []} />}
             </div>
+            )}
 
             {/* Wastage Analysis */}
-            <div className="mb-6">
-              <RejectionByProductCard
-                showFilters
-                branches={activeBranches}
-                title="Wastage Analysis"
-              />
-            </div>
+            {canRejections && (
+              <div className="mb-6">
+                <RejectionByProductCard
+                  showFilters
+                  branches={activeBranches}
+                  title="Wastage Analysis"
+                />
+              </div>
+            )}
           </>
         )}
       </>

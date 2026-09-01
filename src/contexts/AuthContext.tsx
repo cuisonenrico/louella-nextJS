@@ -21,7 +21,8 @@ interface AuthState {
 }
 
 interface AuthContextValue extends AuthState {
-  login: (email: string, password: string) => Promise<void>;
+  /** Resolves with the permissions granted, so callers can route accordingly. */
+  login: (email: string, password: string) => Promise<{ permissions: string[] }>;
   logout: () => Promise<void>;
   isAuthenticated: boolean;
 }
@@ -38,12 +39,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // On mount: the access token only ever lives in memory, so a reload always
   // starts empty. Silently exchange the HttpOnly refresh cookie for a new
-  // access token, then verify it with /auth/me.
+  // access token, then verify it with /auth/me — which now returns the
+  // effective permissions alongside the profile, since the server resolves them
+  // during authentication anyway. That folds what used to be two requests into
+  // one on every page load.
   useEffect(() => {
     refreshAccessToken()
-      .then((token) => Promise.all([authApi.me(), usersApi.myPermissions()]).then(([meRes, permRes]) => {
-        setState({ user: meRes.data, permissions: permRes.data.features, accessToken: token, isLoading: false });
-      }))
+      .then((token) =>
+        authApi.me().then(({ data }) => {
+          const { permissions = [], ...user } = data;
+          setState({ user, permissions, accessToken: token, isLoading: false });
+        })
+      )
       .catch(() => {
         setAccessToken(null);
         setState({ user: null, permissions: [], accessToken: null, isLoading: false });
@@ -53,8 +60,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     const { data } = await authApi.login(email, password);
     setAccessToken(data.accessToken);
+    // The login response predates feature permissions and is consumed by the
+    // Flutter client too, so its shape is left alone; permissions come from a
+    // follow-up call that costs no database query server-side.
     const { data: permData } = await usersApi.myPermissions();
-    setState({ user: data.user, permissions: permData.features, accessToken: data.accessToken, isLoading: false });
+    setState({
+      user: data.user,
+      permissions: permData.features,
+      accessToken: data.accessToken,
+      isLoading: false,
+    });
+    return { permissions: permData.features };
   }, []);
 
   const logout = useCallback(async () => {

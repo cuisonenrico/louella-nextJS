@@ -34,14 +34,17 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { Autofill } from '../common/decorators/autofill.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { BranchGuard } from '../common/guards/branch.guard';
+import { RequireFeature } from '../common/decorators/require-feature.decorator';
 
 @Controller('inventory')
+@RequireFeature('inventory-history')
 @Roles(UserRole.VIEWER)
 @UseGuards(RolesGuard, BranchGuard)
 export class InventoryController {
   constructor(private readonly inventoryService: InventoryService) {}
 
   @Post()
+  @RequireFeature('inventory-history:create')
   @Roles(UserRole.INVENTORY)
   create(
     @Body() body: CreateInventoryDto,
@@ -51,6 +54,7 @@ export class InventoryController {
   }
 
   @Post('bulk')
+  @RequireFeature('inventory-history:create')
   @Roles(UserRole.INVENTORY)
   createBulk(
     @Body(new ParseArrayPipe({ items: CreateInventoryDto }))
@@ -116,6 +120,9 @@ export class InventoryController {
   // which is what the 11 PM cron used to do.
   @Autofill('inventory')
   @Get('date')
+    // The dashboard aggregates this, so a role holding `dashboard` but not the
+    // owning screen's key must still be able to read it.
+  @RequireFeature('inventory-history', 'dashboard')
   findByDateAllBranches(
     @Query() query: InventoryDateRangeQueryDto,
     @Query('branchId') branchIdStr?: string,
@@ -155,6 +162,10 @@ export class InventoryController {
   }
 
   @Get('dashboard')
+  @RequireFeature('inventory-history', 'dashboard:revenue-trend')
+    // The dashboard aggregates this, so a role holding `dashboard` but not the
+    // owning screen's key must still be able to read it.
+  @RequireFeature('inventory-history', 'dashboard')
   getDashboard(@Query() query: InventoryDashboardQueryDto) {
     const branchId = query.branchId ? parseInt(query.branchId, 10) : null;
     return this.inventoryService.getDashboard(
@@ -175,6 +186,7 @@ export class InventoryController {
   }
 
   @Get('export-sales')
+  @RequireFeature('inventory-history:export-sales')
   async exportSales(
     @Query() query: InventoryDashboardQueryDto,
     @Res({ passthrough: true }) res: Response,
@@ -196,6 +208,7 @@ export class InventoryController {
   }
 
   @Get('gaps')
+  @RequireFeature('inventory-history:gaps')
   getGaps(@Query() query: InventoryGapsQueryDto) {
     const branchId = query.branchId ? parseInt(query.branchId, 10) : null;
     return this.inventoryService.getGaps(
@@ -206,6 +219,7 @@ export class InventoryController {
   }
 
   @Post('recascade')
+  @RequireFeature('inventory-history:recascade')
   @Roles(UserRole.INVENTORY)
   recascade(@Body() body: RecascadeDto) {
     return this.inventoryService.recascadeLeftovers(
@@ -216,6 +230,10 @@ export class InventoryController {
   }
 
   @Get('rejection-by-product')
+  @RequireFeature('inventory-history', 'dashboard:rejections')
+    // The dashboard aggregates this, so a role holding `dashboard` but not the
+    // owning screen's key must still be able to read it.
+  @RequireFeature('inventory-history', 'dashboard')
   getRejectionByProduct(@Query() query: RejectionQueryDto) {
     const branchId = query.branchId ? parseInt(query.branchId, 10) : null;
     return this.inventoryService.getRejectionByProduct(
@@ -235,6 +253,7 @@ export class InventoryController {
   }
 
   @Patch(':id')
+  @RequireFeature('inventory-history:edit')
   @Roles(UserRole.INVENTORY)
   update(
     @Param('id', ParseIntPipe) id: number,
@@ -245,6 +264,7 @@ export class InventoryController {
   }
 
   @Delete(':id')
+  @RequireFeature('inventory-history:delete')
   @Roles(UserRole.INVENTORY)
   remove(
     @Param('id', ParseIntPipe) id: number,

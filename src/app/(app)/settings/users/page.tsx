@@ -8,7 +8,8 @@ import {
   Search, Plus, Pencil, KeyRound, Power, ShieldCheck, Loader2, GitBranch,
 } from 'lucide-react';
 import { usersApi, branchesApi, permissionsApi } from '@/lib/apiServices';
-import type { Branch, User, UserRole, PermissionsMatrixFeature } from '@/types';
+import type { Branch, User, UserRole, UserPermissionRow } from '@/types';
+import { ROLE_DEFAULTS, FEATURE_LIST, type RoleName } from '@/lib/rbac/features';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -21,6 +22,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { cn } from '@/lib/utils';
 import QueryError from '@/components/QueryError';
 import { TableRowsSkeleton } from '@/components/loading/Skeletons';
 
@@ -64,6 +66,10 @@ export default function UsersPage() {
   const [createForm, setCreateForm] = useState({
     email: '', password: '', role: 'VIEWER' as UserRole, branchId: '' as string, mustChangePassword: true,
   });
+  // Per-user overrides ticked before the account exists. Applied immediately
+  // after creation, so an admin never has to go and find the Permissions tab to
+  // finish provisioning someone.
+  const [createOverrides, setCreateOverrides] = useState<Record<string, boolean>>({});
   const [createError, setCreateError] = useState('');
   const [generatedPw, setGeneratedPw] = useState('');
 
@@ -97,9 +103,16 @@ export default function UsersPage() {
     queryFn: () => branchesApi.list().then((r) => r.data),
   });
 
+  // Drives the create dialog's access preview, so it is fetched up front rather
+  // than only when the permissions drawer opens.
   const { data: matrix } = useQuery({
     queryKey: ['permissions-matrix'],
     queryFn: () => permissionsApi.matrix().then((r) => r.data),
+  });
+
+  const { data: userMatrix, isLoading: userMatrixLoading } = useQuery({
+    queryKey: ['user-matrix', permTarget?.id],
+    queryFn: () => permissionsApi.userMatrix(permTarget!.id).then((r) => r.data),
     enabled: !!permTarget,
   });
 
@@ -176,24 +189,29 @@ export default function UsersPage() {
     },
   });
 
+  const permErr = (err: unknown) => {
+    const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+    toast.error(msg ?? 'Failed to update permission');
+  };
+
   const permMutation = useMutation({
     mutationFn: ({ userId, featureKey, enabled }: { userId: number; featureKey: string; enabled: boolean }) =>
       permissionsApi.setUserPermission(userId, featureKey, enabled),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['permissions-matrix'] });
+      qc.invalidateQueries({ queryKey: ['user-matrix'] });
       toast.success('Permission updated');
     },
-    onError: () => toast.error('Failed to update permission'),
+    onError: permErr,
   });
 
   const resetPermMutation = useMutation({
     mutationFn: ({ userId, featureKey }: { userId: number; featureKey: string }) =>
       permissionsApi.resetUserPermission(userId, featureKey),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['permissions-matrix'] });
+      qc.invalidateQueries({ queryKey: ['user-matrix'] });
       toast.success('Permission reset to role default');
     },
-    onError: () => toast.error('Failed to reset permission'),
+    onError: permErr,
   });
 
   // ── Handlers ──
@@ -211,9 +229,27 @@ export default function UsersPage() {
         : {}),
     };
     createMutation.mutate(data, {
-      onSuccess: () => {
+      onSuccess: async (res) => {
+        // Overrides can only be written once the account has an id, so they are
+        // applied here rather than being part of the create payload. A failure
+        // is surfaced but does not undo the account, which already exists.
+        const created = res.data;
+        const pending = Object.entries(createOverrides);
+        if (pending.length > 0) {
+          try {
+            await Promise.all(
+              pending.map(([featureKey, enabled]) =>
+                permissionsApi.setUserPermission(created.id, featureKey, enabled),
+              ),
+            );
+            toast.success(`Applied ${pending.length} permission override(s)`);
+          } catch {
+            toast.error('Account created, but some permission overrides failed to apply');
+          }
+        }
         setGeneratedPw(createForm.password);
         setCreateForm({ email: '', password: '', role: 'VIEWER', branchId: '', mustChangePassword: true });
+        setCreateOverrides({});
       },
     });
   };
@@ -222,6 +258,7 @@ export default function UsersPage() {
     setCreateError('');
     setGeneratedPw('');
     setCreateForm({ email: '', password: '', role: 'VIEWER', branchId: '', mustChangePassword: true });
+    setCreateOverrides({});
     setCreateOpen(true);
   };
 
@@ -359,7 +396,7 @@ export default function UsersPage() {
 
         {/* ─── Create User Dialog ──────────────────────────── */}
         <Dialog open={createOpen} onOpenChange={(o) => { if (!o) setGeneratedPw(''); setCreateOpen(o); }}>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle>Create User</DialogTitle></DialogHeader>
             {generatedPw ? (
               <div className="space-y-4 py-2">
@@ -420,6 +457,22 @@ export default function UsersPage() {
                   />
                   <Label htmlFor="mcp">Require password change on first login</Label>
                 </div>
+
+                <AccessPreview
+                  role={createForm.role}
+                  roleMatrix={matrix?.features ?? []}
+                  overrides={createOverrides}
+                  onToggle={(key, enabled, roleGrants) =>
+                    setCreateOverrides((prev) => {
+                      const next = { ...prev };
+                      // Ticking a box back to what the role already gives is not
+                      // an override — drop it so the account keeps inheriting.
+                      if (enabled === roleGrants) delete next[key];
+                      else next[key] = enabled;
+                      return next;
+                    })
+                  }
+                />
               </div>
             )}
             <DialogFooter>
@@ -545,7 +598,8 @@ export default function UsersPage() {
             </SheetHeader>
             <UserPermissionsPanel
               user={permTarget}
-              matrix={matrix?.features ?? []}
+              rows={userMatrix?.features ?? []}
+              isLoading={userMatrixLoading}
               onToggle={(featureKey, enabled) => permTarget && permMutation.mutate({ userId: permTarget.id, featureKey, enabled })}
               onReset={(featureKey) => permTarget && resetPermMutation.mutate({ userId: permTarget.id, featureKey })}
               isPending={permMutation.isPending || resetPermMutation.isPending}
@@ -556,54 +610,147 @@ export default function UsersPage() {
   );
 }
 
+/**
+ * Shows what an account will be able to reach, before it exists.
+ *
+ * The baseline comes from the live role matrix so that any role-level override
+ * an admin has already made is reflected; ROLE_DEFAULTS is the fallback for the
+ * moment before that query resolves. Ticking a box records a per-user override,
+ * which is written straight after the account is created.
+ */
+function AccessPreview({
+  role,
+  roleMatrix,
+  overrides,
+  onToggle,
+}: {
+  role: UserRole;
+  roleMatrix: { key: string; label: string; group: string | null; platform: string; roles: Record<string, { effective: boolean }> }[];
+  overrides: Record<string, boolean>;
+  onToggle: (key: string, enabled: boolean, roleGrants: boolean) => void;
+}) {
+  const roleGrantsKey = (key: string): boolean => {
+    const row = roleMatrix.find((f) => f.key === key);
+    if (row) return row.roles[role]?.effective ?? false;
+    return (ROLE_DEFAULTS[role as RoleName] ?? []).includes(key as never);
+  };
+
+  const screens = FEATURE_LIST.filter((f) => f.nav);
+  const granted = screens.filter((f) => overrides[f.key] ?? roleGrantsKey(f.key));
+  const overrideCount = Object.keys(overrides).length;
+
+  return (
+    <div className="rounded-lg border bg-muted/20 p-3">
+      <div className="mb-2 flex items-baseline justify-between gap-2">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+          This account will see
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {granted.length} of {screens.length} screens
+          {overrideCount > 0 && ` · ${overrideCount} override${overrideCount === 1 ? '' : 's'}`}
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+        {screens.map((f) => {
+          const roleGrants = roleGrantsKey(f.key);
+          const checked = overrides[f.key] ?? roleGrants;
+          const isOverride = f.key in overrides;
+          return (
+            <label
+              key={f.key}
+              className="flex cursor-pointer items-center gap-2 text-xs"
+              title={f.description}
+            >
+              <input
+                type="checkbox"
+                className="h-3.5 w-3.5 shrink-0 accent-primary"
+                checked={checked}
+                aria-label={f.label}
+                onChange={(e) => onToggle(f.key, e.target.checked, roleGrants)}
+              />
+              <span className={cn('truncate', isOverride && 'font-semibold text-amber-600')}>
+                {f.nav?.label ?? f.label}
+              </span>
+            </label>
+          );
+        })}
+      </div>
+
+      <p className="mt-2.5 text-[11px] leading-relaxed text-muted-foreground">
+        Unticked boxes come from the <strong>{ROLE_LABELS[role]}</strong> role.
+        Changing one here creates an override for this account only.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Per-user override drawer.
+ *
+ * Reads GET /permissions/users/:id/matrix, which returns one row per feature for
+ * this account. It previously read the ROLE matrix and indexed it by the user's
+ * role, which rendered plausibly but could not distinguish "inherited from the
+ * role" from "overridden for this person".
+ */
 function UserPermissionsPanel({
   user,
-  matrix,
+  rows,
+  isLoading,
   onToggle,
   onReset,
   isPending,
 }: {
   user: User | null;
-  matrix: PermissionsMatrixFeature[];
+  rows: UserPermissionRow[];
+  isLoading: boolean;
   onToggle: (featureKey: string, enabled: boolean) => void;
   onReset: (featureKey: string) => void;
   isPending: boolean;
 }) {
   if (!user) return null;
 
-  const role = user.role;
-
   return (
     <div className="mt-4 space-y-3">
       <p className="text-sm text-muted-foreground">
-        Overrides apply on top of the <strong>{role}</strong> role defaults. Toggle to override; reset to restore the role default.
+        Overrides apply on top of the <strong>{user.role}</strong> role defaults.
+        Toggle to override; reset to restore the role default.
       </p>
-      {matrix.length === 0 && (
-        <div className="flex items-center justify-center py-8 text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin" /></div>
+
+      {isLoading && (
+        <div className="flex items-center justify-center py-8 text-muted-foreground">
+          <Loader2 className="h-5 w-5 animate-spin" />
+        </div>
       )}
-      {matrix.map((f) => {
-        const roleState = f.roles[role];
-        if (!roleState) return null;
-        const { effective, overridden, default: def } = roleState;
+
+      {rows.map((f) => {
+        const overridden = f.userOverride !== null;
         return (
-          <div key={f.key} className="flex items-center justify-between rounded-lg border px-3 py-2 gap-3">
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{f.label}</p>
-              <p className="text-xs text-muted-foreground truncate">{f.description}</p>
+          <div key={f.key} className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium">{f.label}</p>
+              <p className="truncate text-xs text-muted-foreground">{f.description}</p>
               {overridden && (
                 <span className="text-[10px] font-semibold uppercase text-amber-600">
-                  Overridden (default: {def ? 'on' : 'off'})
+                  Overridden (role default: {f.roleEffective ? 'on' : 'off'})
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex shrink-0 items-center gap-2">
               <Switch
-                checked={effective}
-                disabled={isPending}
+                checked={f.effective}
+                disabled={isPending || f.locked}
+                aria-label={f.label}
                 onCheckedChange={(v) => onToggle(f.key, v)}
               />
-              {overridden && (
-                <Button variant="ghost" size="sm" className="h-7 text-xs px-2" disabled={isPending} onClick={() => onReset(f.key)}>
+              {overridden && !f.locked && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  disabled={isPending}
+                  onClick={() => onReset(f.key)}
+                >
                   Reset
                 </Button>
               )}

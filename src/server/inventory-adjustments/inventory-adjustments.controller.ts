@@ -15,8 +15,10 @@ import { CreateInventoryAdjustmentDto } from './dto/create-inventory-adjustment.
 import { UpdateInventoryAdjustmentDto } from './dto/update-inventory-adjustment.dto';
 import { CreateTransferDto } from './dto/create-transfer.dto';
 import { Roles } from '../common/decorators/roles.decorator';
+import { RequireFeature } from '../common/decorators/require-feature.decorator';
 
 @Controller('inventory-adjustments')
+@RequireFeature('inventory-adjustments')
 @ApiTags('inventory-adjustments')
 @ApiBearerAuth()
 export class InventoryAdjustmentsController {
@@ -25,12 +27,14 @@ export class InventoryAdjustmentsController {
   ) {}
 
   @Post()
+  @RequireFeature('inventory-adjustments:create')
   @Roles(UserRole.INVENTORY)
   create(@Body() dto: CreateInventoryAdjustmentDto) {
     return this.inventoryAdjustmentsService.create(dto);
   }
 
   @Post('transfer')
+  @RequireFeature('inventory-adjustments:transfer')
   @Roles(UserRole.INVENTORY)
   @ApiOperation({
     summary: 'Transfer stock between two branches',
@@ -47,6 +51,7 @@ export class InventoryAdjustmentsController {
   }
 
   @Patch(':id')
+  @RequireFeature('inventory-adjustments:edit')
   @Roles(UserRole.INVENTORY)
   update(
     @Param('id', ParseIntPipe) id: number,
@@ -56,6 +61,7 @@ export class InventoryAdjustmentsController {
   }
 
   @Delete(':id')
+  @RequireFeature('inventory-adjustments:delete')
   @Roles(UserRole.INVENTORY)
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.inventoryAdjustmentsService.remove(id);

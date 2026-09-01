@@ -43,12 +43,38 @@ export interface DashboardBranch {
   isActive: boolean;
 }
 
+/**
+ * Every field is optional because each maps to a dashboard panel permission and
+ * is omitted entirely when the caller does not hold that panel's key.
+ *
+ * Omitted, not blanked: a `dashboard:revenue-trend` denial has to mean the
+ * numbers never left the server, otherwise the panel gate is decoration that
+ * anyone can defeat with devtools. Field names live here in typed code rather
+ * than as strings in the manifest, so renaming one is a compile error instead
+ * of a strip that silently stops matching.
+ */
 export interface DashboardSummaryResponse {
-  stats: DashboardStats;
-  production: DashboardProduction;
-  lowStock: LowStockItem[];
-  products: DashboardProduct[];
-  branches: DashboardBranch[];
+  /** `dashboard:kpis` */
+  stats?: DashboardStats;
+  /** `dashboard:production-mix` */
+  production?: DashboardProduction;
+  /** `dashboard:low-stock` */
+  lowStock?: LowStockItem[];
+  /** `dashboard:kpis` */
+  products?: DashboardProduct[];
+  /** `dashboard:branch-gaps` */
+  branches?: DashboardBranch[];
+  /**
+   * Active branches with no inventory entered for the date.
+   *
+   * Computed here rather than in the browser. The dashboard used to derive this
+   * by calling the ungated `GET /branches` and cross-referencing inventory
+   * client-side, which handed every branch manager a roster of every branch and
+   * which ones were behind - cross-branch information BranchGuard could not
+   * intercept, because the leak was in a second, unscoped query rather than in
+   * the guarded one. Computing it server-side puts it back inside the scope.
+   */
+  branchGaps?: DashboardBranch[];
 }
 
 @Injectable()
@@ -57,9 +83,11 @@ export class DashboardService {
 
   async getSummary(
     date: string,
-    branchId?: number,
+    branchId: number | undefined,
+    permissions: readonly string[],
   ): Promise<DashboardSummaryResponse> {
     const targetDate = new Date(date);
+    const can = (key: string) => permissions.includes(key);
 
     const [
       totalProducts,
@@ -101,30 +129,83 @@ export class DashboardService {
         take: 8,
       }),
       this.prisma.branch.findMany({
-        where: { deletedAt: null },
+        where: {
+          deletedAt: null,
+          // Scoped callers see only their own branch here, so neither the
+          // roster nor the gap list can name anyone else's.
+          ...(branchId != null ? { id: branchId } : {}),
+        },
         select: { id: true, name: true, address: true, isActive: true },
         orderBy: { name: 'asc' },
       }),
     ]);
 
-    const lowStock = await this.resolveLowStock(materialsWithReorder);
-    const production = this.aggregateProduction(date, productionRecords);
+    const response: DashboardSummaryResponse = {};
 
-    return {
-      stats: {
+    if (can('dashboard:kpis')) {
+      response.stats = {
         products: { total: totalProducts, active: activeProducts },
         branches: { total: totalBranches, active: activeBranches },
         materials: { total: totalMaterials },
         recipes: { total: totalRecipes },
-      },
-      production,
-      lowStock,
-      products: recentProducts.map((p) => ({
+      };
+      response.products = recentProducts.map((p) => ({
         ...p,
         price: p.price.toNumber(),
-      })),
-      branches: allBranches,
-    };
+      }));
+    }
+
+    if (can('dashboard:production-mix')) {
+      response.production = this.aggregateProduction(date, productionRecords);
+    }
+
+    if (can('dashboard:low-stock')) {
+      response.lowStock = await this.resolveLowStock(materialsWithReorder);
+    }
+
+    // The branch roster also backs the rejections card's branch filter, so it
+    // travels with either panel. It is already narrowed to the caller's scope.
+    if (can('dashboard:branch-gaps') || can('dashboard:rejections')) {
+      response.branches = allBranches;
+    }
+
+    if (can('dashboard:branch-gaps')) {
+      response.branchGaps = await this.resolveBranchGaps(
+        targetDate,
+        branchId,
+        allBranches,
+      );
+    }
+
+    return response;
+  }
+
+  /**
+   * Active branches with nothing entered for the date.
+   *
+   * `branches` is already narrowed to the caller's scope, so a manager confined
+   * to one branch can only ever learn about that branch.
+   */
+  private async resolveBranchGaps(
+    targetDate: Date,
+    branchId: number | undefined,
+    branches: DashboardBranch[],
+  ): Promise<DashboardBranch[]> {
+    const active = branches.filter((b) => b.isActive);
+    if (active.length === 0) return [];
+
+    const entered = await this.prisma.inventory.findMany({
+      where: {
+        date: targetDate,
+        deletedAt: null,
+        ...(branchId != null ? { branchId } : {}),
+      },
+      select: { branchId: true },
+      distinct: ['branchId'],
+    });
+    const withEntries = new Set(entered.map((row) => row.branchId));
+
+    return active.filter((b) => !withEntries.has(b.id));
   }
 
   private aggregateProduction(

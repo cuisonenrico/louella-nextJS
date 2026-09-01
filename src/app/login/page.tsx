@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { firstPermittedRoute } from '@/lib/rbac/features';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -11,7 +12,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2 } from 'lucide-react';
 
 export default function LoginPage() {
-  const { login, isAuthenticated } = useAuth();
+  const { login, isAuthenticated, permissions } = useAuth();
   const router = useRouter();
 
   const [email, setEmail] = useState('');
@@ -19,11 +20,14 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Land on the first destination this account actually holds, not a hardcoded
+  // /dashboard. Roles without the `dashboard` permission were previously sent
+  // to a route they were denied, and bounced straight back.
   useEffect(() => {
     if (isAuthenticated) {
-      router.replace('/dashboard');
+      router.replace(firstPermittedRoute(permissions));
     }
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated, permissions, router]);
 
   if (isAuthenticated) return null;
 
@@ -32,8 +36,8 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
     try {
-      await login(email, password);
-      router.replace('/dashboard');
+      const { permissions: granted } = await login(email, password);
+      router.replace(firstPermittedRoute(granted));
     } catch {
       setError('Invalid email or password.');
     } finally {

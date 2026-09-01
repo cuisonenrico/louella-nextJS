@@ -23,14 +23,20 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { Autofill } from '../common/decorators/autofill.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { BranchGuard } from '../common/guards/branch.guard';
+import { RequireFeature } from '../common/decorators/require-feature.decorator';
 
 @Controller('production')
+// The production-cost and production-efficiency SCREENS have their own keys and
+// are gated client-side; their underlying data is served from here under
+// 'production', so enabling either page does not require a second grant.
+@RequireFeature('production')
 @Roles(UserRole.VIEWER)
 @UseGuards(RolesGuard, BranchGuard)
 export class ProductionController {
   constructor(private readonly productionService: ProductionService) {}
 
   @Post()
+  @RequireFeature('production:create')
   @Roles(UserRole.MANAGER)
   create(
     @Body() body: CreateProductionDto,
@@ -40,6 +46,7 @@ export class ProductionController {
   }
 
   @Post('bulk')
+  @RequireFeature('production:create')
   @Roles(UserRole.MANAGER)
   createBulk(
     @Body(new ParseArrayPipe({ items: CreateProductionDto }))
@@ -50,6 +57,7 @@ export class ProductionController {
   }
 
   @Post('upsert-bulk')
+  @RequireFeature('production:create')
   @Roles(UserRole.MANAGER)
   upsertBulk(
     @Body()
@@ -127,6 +135,9 @@ export class ProductionController {
   }
 
   @Get('material-consumption/summary')
+  // Serves a screen with its own key, which is off by default. Accepting that
+  // key means enabling the page is a single grant rather than two.
+  @RequireFeature('production', 'production-cost')
   getConsumptionSummary(
     @Query('date') date: string,
     @Query('branchId') branchIdStr?: string,
@@ -136,6 +147,9 @@ export class ProductionController {
   }
 
   @Get('efficiency')
+  // Serves a screen with its own key, which is off by default. Accepting that
+  // key means enabling the page is a single grant rather than two.
+  @RequireFeature('production', 'production-efficiency')
   getEfficiency(
     @Query('startDate') startDate: string,
     @Query('endDate') endDate: string,
@@ -165,6 +179,7 @@ export class ProductionController {
   }
 
   @Patch(':id')
+  @RequireFeature('production:edit')
   @Roles(UserRole.MANAGER)
   update(
     @Param('id', ParseIntPipe) id: number,
@@ -179,6 +194,7 @@ export class ProductionController {
   }
 
   @Delete(':id')
+  @RequireFeature('production:delete')
   @Roles(UserRole.MANAGER)
   remove(
     @Param('id', ParseIntPipe) id: number,

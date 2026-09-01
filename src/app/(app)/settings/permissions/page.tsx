@@ -4,9 +4,13 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { usePageHeader } from '@/components/layout/usePageHeader';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { Info, Loader2, RotateCcw } from 'lucide-react';
+import {
+  ChevronDown, ChevronRight, EyeOff, Loader2, Lock, Pencil, RotateCcw, Smartphone,
+} from 'lucide-react';
 import { permissionsApi, usersApi } from '@/lib/apiServices';
-import type { UserRole, PermissionsMatrixFeature } from '@/types';
+import type {
+  UserRole, PermissionsMatrixFeature, PermissionRowMeta, UserPermissionRow,
+} from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
@@ -22,63 +26,118 @@ const ROLE_LABELS: Record<string, string> = {
   VIEWER: 'Viewer', INVENTORY: 'Inventory', MANAGER: 'Manager', ADMIN: 'Admin',
 };
 
-// What each permission key unlocks in the UI
-const FEATURE_HINTS: Record<string, { nav: string[]; detail: string }> = {
-  'dashboard':         { nav: ['Dashboard'],                              detail: 'KPI summary cards and daily overview.' },
-  'analytics':         { nav: ['Revenue'],                                detail: 'Sales charts, revenue trends, and product performance.' },
-  'inventory-history': { nav: ['Inventory'],                              detail: 'Daily inventory history and submission.' },
-  'quick-entry':       { nav: [],                                         detail: 'Mobile quick-entry form for daily inventory submission.' },
-  'notifications':     { nav: [],                                         detail: 'Push notification delivery and notification history log.' },
-  'branch-comparison': { nav: [],                                         detail: 'Side-by-side branch performance comparison in the dashboard.' },
-  'waste-report':      { nav: [],                                         detail: 'Waste rate report with rejection and spoilage analytics.' },
-  'low-stock':         { nav: [],                                         detail: 'Low stock list showing materials below reorder level.' },
-  'approval-queue':    { nav: [],                                         detail: 'Approval queue for reviewing large inventory adjustments.' },
-  'user-management':   { nav: ['Settings › Users', 'Settings › Permissions'], detail: 'User management and role/permission configuration.' },
-};
+/** Section headings, in the order the sidebar renders them. */
+const GROUP_ORDER = ['Overview', 'Operations', 'Stock', 'Catalog', 'Config', 'Settings'];
 
-export default function PermissionsPage() {
-  usePageHeader({ title: 'Permissions' });
-  return (
-    <>
-        <Tabs defaultValue="matrix">
-          <TabsList className="mb-4">
-            <TabsTrigger value="matrix">Role Permissions</TabsTrigger>
-            <TabsTrigger value="users">User Overrides</TabsTrigger>
-          </TabsList>
-          <TabsContent value="matrix"><RoleMatrixTab /></TabsContent>
-          <TabsContent value="users"><UserOverridesTab /></TabsContent>
-        </Tabs>
-      </>
-  );
+type Node<T> = { row: T; children: T[] };
+
+/**
+ * Nest actions and panels under the screen they belong to.
+ *
+ * The API returns one flat list because the keys themselves are flat -
+ * `products:delete` is stored and enforced exactly like `products`. The tree is
+ * a presentation concern, rebuilt here from each row's `parent`.
+ */
+function buildTree<T extends PermissionRowMeta>(rows: T[]): Node<T>[] {
+  const byParent = new Map<string, T[]>();
+  const roots: T[] = [];
+  for (const row of rows) {
+    if (row.parent === null) {
+      roots.push(row);
+    } else {
+      byParent.set(row.parent, [...(byParent.get(row.parent) ?? []), row]);
+    }
+  }
+  return roots.map((row) => ({ row, children: byParent.get(row.key) ?? [] }));
 }
 
-function FeatureHintTooltip({ featureKey }: { featureKey: string }) {
-  const hint = FEATURE_HINTS[featureKey];
-  if (!hint) return null;
+function groupNodes<T extends PermissionRowMeta>(rows: T[]) {
+  const buckets = new Map<string, Node<T>[]>();
+  for (const node of buildTree(rows)) {
+    // Mobile-only features have no sidebar group; they get their own section so
+    // it is obvious they unlock nothing on the web.
+    const key = node.row.group ?? 'Mobile app';
+    buckets.set(key, [...(buckets.get(key) ?? []), node]);
+  }
+  return [...GROUP_ORDER, 'Mobile app']
+    .filter((g) => buckets.has(g))
+    .map((group) => ({ group, nodes: buckets.get(group)! }));
+}
+
+/** "3 actions · 2 panels", or null when a screen has no children. */
+function childSummary(children: PermissionRowMeta[]): string | null {
+  const actions = children.filter((c) => c.kind === 'action').length;
+  const panels = children.filter((c) => c.kind === 'panel').length;
+  const parts: string[] = [];
+  if (actions) parts.push(`${actions} action${actions === 1 ? '' : 's'}`);
+  if (panels) parts.push(`${panels} panel${panels === 1 ? '' : 's'}`);
+  return parts.length ? parts.join(' · ') : null;
+}
+
+function MobileBadge({ platform }: { platform: string }) {
+  if (platform !== 'mobile') return null;
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Info className="h-3.5 w-3.5 text-muted-foreground/60 shrink-0 cursor-help" />
+        <Smartphone className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
       </TooltipTrigger>
-      <TooltipContent side="right" className="max-w-[220px] space-y-1.5 p-3">
-        <p className="text-xs text-foreground">{hint.detail}</p>
-        {hint.nav.length > 0 && (
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">Unlocks nav</p>
-            <div className="flex flex-wrap gap-1">
-              {hint.nav.map((n) => (
-                <span key={n} className="text-[10px] bg-muted rounded px-1.5 py-0.5 font-medium">{n}</span>
-              ))}
-            </div>
-          </div>
-        )}
+      <TooltipContent side="right">Mobile app only — unlocks no web screen</TooltipContent>
+    </Tooltip>
+  );
+}
+
+function LockedBadge() {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Lock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+      </TooltipTrigger>
+      <TooltipContent side="left" className="max-w-[220px]">
+        Admins cannot have this revoked — without it, the screen that undoes the
+        change would be unreachable.
       </TooltipContent>
     </Tooltip>
   );
 }
 
+/** Marks a panel whose data the server withholds, not merely hides. */
+function SensitiveBadge({ sensitivity }: { sensitivity: PermissionRowMeta['sensitivity'] }) {
+  if (sensitivity !== 'sensitive') return null;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <EyeOff className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
+      </TooltipTrigger>
+      <TooltipContent side="right" className="max-w-[240px]">
+        Withheld by the server, not just hidden — the data never reaches the
+        browser when this is off.
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function KindIcon({ kind }: { kind: PermissionRowMeta['kind'] }) {
+  if (kind !== 'action') return null;
+  return <Pencil className="h-3 w-3 shrink-0 text-muted-foreground/60" />;
+}
+
+export default function PermissionsPage() {
+  usePageHeader({ title: 'Permissions' });
+  return (
+    <Tabs defaultValue="matrix">
+      <TabsList className="mb-4">
+        <TabsTrigger value="matrix">Role Permissions</TabsTrigger>
+        <TabsTrigger value="users">User Overrides</TabsTrigger>
+      </TabsList>
+      <TabsContent value="matrix"><RoleMatrixTab /></TabsContent>
+      <TabsContent value="users"><UserOverridesTab /></TabsContent>
+    </Tabs>
+  );
+}
+
 function RoleMatrixTab() {
   const qc = useQueryClient();
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['permissions-matrix'],
@@ -92,18 +151,21 @@ function RoleMatrixTab() {
       qc.invalidateQueries({ queryKey: ['permissions-matrix'] });
       toast.success('Permission updated');
     },
-    onError: () => toast.error('Failed to update permission'),
+    onError: (err: { response?: { data?: { message?: string } } }) =>
+      toast.error(err?.response?.data?.message ?? 'Failed to update permission'),
   });
 
-  if (isLoading) {
-    return <TableSkeleton rows={8} columns={5} className="py-4" />;
-  }
+  if (isLoading) return <TableSkeleton rows={10} columns={5} className="py-4" />;
+  if (isError) return <QueryError error={error} onRetry={() => refetch()} />;
 
-  if (isError) {
-    return <QueryError error={error} onRetry={() => refetch()} />;
-  }
-
-  const features = data?.features ?? [];
+  const groups = groupNodes(data?.features ?? []);
+  const toggleExpanded = (key: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
 
   return (
     <Card className="overflow-hidden">
@@ -111,7 +173,7 @@ function RoleMatrixTab() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-muted/50">
-              <th className="text-left px-4 py-3 font-semibold w-64">Feature</th>
+              <th className="text-left px-4 py-3 font-semibold w-80">Feature</th>
               {DISPLAY_ROLES.map((r) => (
                 <th key={r} className="text-center px-4 py-3 font-semibold min-w-[120px]">
                   {ROLE_LABELS[r]}
@@ -120,41 +182,196 @@ function RoleMatrixTab() {
             </tr>
           </thead>
           <tbody>
-            {features.map((f, i) => (
-              <tr key={f.key} className={cn('border-b last:border-0', i % 2 === 1 && 'bg-muted/20')}>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-1.5">
-                    <p className="font-medium">{f.label}</p>
-                    <FeatureHintTooltip featureKey={f.key} />
-                  </div>
-                  {f.description && <p className="text-xs text-muted-foreground">{f.description}</p>}
-                </td>
-                {DISPLAY_ROLES.map((role) => {
-                  const state = f.roles[role];
-                  if (!state) return <td key={role} />;
-                  return (
-                    <td key={role} className="text-center px-4 py-3">
-                      <div className="flex flex-col items-center gap-1">
-                        <Switch
-                          checked={state.effective}
-                          disabled={mutation.isPending}
-                          onCheckedChange={(v) => mutation.mutate({ role, featureKey: f.key, enabled: v })}
-                        />
-                        {state.overridden && (
-                          <span className="text-[10px] font-semibold text-amber-600 uppercase">
-                            Overridden
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                  );
-                })}
-              </tr>
+            {groups.map(({ group, nodes }) => (
+              <FeatureGroup
+                key={group}
+                group={group}
+                nodes={nodes}
+                expanded={expanded}
+                onToggleExpanded={toggleExpanded}
+                pending={mutation.isPending}
+                onToggle={(role, featureKey, enabled) =>
+                  mutation.mutate({ role, featureKey, enabled })
+                }
+              />
             ))}
           </tbody>
         </table>
       </div>
     </Card>
+  );
+}
+
+function FeatureGroup({
+  group,
+  nodes,
+  expanded,
+  onToggleExpanded,
+  pending,
+  onToggle,
+}: {
+  group: string;
+  nodes: Node<PermissionsMatrixFeature>[];
+  expanded: Set<string>;
+  onToggleExpanded: (key: string) => void;
+  pending: boolean;
+  onToggle: (role: UserRole, featureKey: string, enabled: boolean) => void;
+}) {
+  return (
+    <>
+      <tr className="border-b bg-muted/30">
+        <td colSpan={DISPLAY_ROLES.length + 1} className="px-4 py-1.5">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+            {group}
+          </span>
+        </td>
+      </tr>
+      {nodes.map(({ row: f, children }) => {
+        const isOpen = expanded.has(f.key);
+        const summary = childSummary(children);
+        return (
+          <>
+            <tr key={f.key} className="border-b last:border-0">
+              <td className="px-4 py-3">
+                <div className="flex items-center gap-1.5">
+                  {children.length > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => onToggleExpanded(f.key)}
+                      aria-expanded={isOpen}
+                      aria-label={`${isOpen ? 'Collapse' : 'Expand'} ${f.label}`}
+                      className="-ml-1 rounded p-0.5 text-muted-foreground hover:bg-muted"
+                    >
+                      {isOpen
+                        ? <ChevronDown className="h-3.5 w-3.5" />
+                        : <ChevronRight className="h-3.5 w-3.5" />}
+                    </button>
+                  ) : (
+                    <span className="w-[18px]" />
+                  )}
+                  <p className="font-medium">{f.label}</p>
+                  <MobileBadge platform={f.platform} />
+                </div>
+                {f.description && (
+                  <p className="ml-[18px] text-xs text-muted-foreground">{f.description}</p>
+                )}
+                {summary && !isOpen && (
+                  <button
+                    type="button"
+                    onClick={() => onToggleExpanded(f.key)}
+                    className="ml-[18px] text-xs text-primary hover:underline"
+                  >
+                    {summary}
+                  </button>
+                )}
+              </td>
+              {DISPLAY_ROLES.map((role) => (
+                <MatrixCell
+                  key={role}
+                  role={role}
+                  label={f.label}
+                  featureKey={f.key}
+                  state={f.roles[role]}
+                  pending={pending}
+                  onToggle={onToggle}
+                />
+              ))}
+            </tr>
+
+            {isOpen && children.map((c) => (
+              <tr key={c.key} className="border-b bg-muted/20 last:border-0">
+                <td className="py-2 pl-12 pr-4">
+                  <div className="flex items-center gap-1.5">
+                    <KindIcon kind={c.kind} />
+                    <p className="text-[13px]">{c.label}</p>
+                    <SensitiveBadge sensitivity={c.sensitivity} />
+                  </div>
+                  {c.description && (
+                    <p className="text-xs text-muted-foreground">{c.description}</p>
+                  )}
+                </td>
+                {DISPLAY_ROLES.map((role) => (
+                  <MatrixCell
+                    key={role}
+                    role={role}
+                    label={c.label}
+                    featureKey={c.key}
+                    state={c.roles[role]}
+                    parentGranted={f.roles[role]?.effective ?? false}
+                    minRole={c.minRole}
+                    pending={pending}
+                    onToggle={onToggle}
+                  />
+                ))}
+              </tr>
+            ))}
+          </>
+        );
+      })}
+    </>
+  );
+}
+
+function MatrixCell({
+  role,
+  label,
+  featureKey,
+  state,
+  parentGranted = true,
+  minRole,
+  pending,
+  onToggle,
+}: {
+  role: UserRole;
+  label: string;
+  featureKey: string;
+  state: PermissionsMatrixFeature['roles'][string] | undefined;
+  parentGranted?: boolean;
+  minRole?: string | null;
+  pending: boolean;
+  onToggle: (role: UserRole, featureKey: string, enabled: boolean) => void;
+}) {
+  if (!state) return <td />;
+
+  // Two different reasons a switch cannot be used, and they need different
+  // explanations: the role hierarchy would refuse the grant outright, or the
+  // screen it belongs to is not granted so the child is inert either way.
+  const unavailable = !state.available;
+  const blockedByParent = !unavailable && !parentGranted;
+  const disabled = pending || state.locked || unavailable || blockedByParent;
+
+  const control = (
+    <Switch
+      checked={state.effective}
+      disabled={disabled}
+      aria-label={`${label} for ${ROLE_LABELS[role]}`}
+      onCheckedChange={(v) => onToggle(role, featureKey, v)}
+    />
+  );
+
+  return (
+    <td className="text-center px-4 py-3">
+      <div className="flex flex-col items-center gap-1">
+        <div className="flex items-center gap-1.5">
+          {unavailable || blockedByParent ? (
+            <Tooltip>
+              <TooltipTrigger asChild><span>{control}</span></TooltipTrigger>
+              <TooltipContent side="left" className="max-w-[220px]">
+                {unavailable
+                  ? `Endpoints for this action require ${minRole} or higher, so this role cannot hold it.`
+                  : 'The screen this belongs to is not granted to this role, so this has no effect.'}
+              </TooltipContent>
+            </Tooltip>
+          ) : control}
+          {state.locked && <LockedBadge />}
+        </div>
+        {state.overridden && (
+          <span className="text-[10px] font-semibold uppercase text-amber-600">
+            Overridden
+          </span>
+        )}
+      </div>
+    </td>
   );
 }
 
@@ -167,44 +384,50 @@ function UserOverridesTab() {
     queryFn: () => usersApi.list(1, 100).then((r) => r.data),
   });
 
-  // Per-user query — uses userId in the key so each user gets fresh data
-  const { data: userMatrix, isLoading: matrixLoading, isError: matrixError, error: matrixErrorObj, refetch: refetchMatrix } = useQuery({
+  const {
+    data: userMatrix,
+    isLoading: matrixLoading,
+    isError: matrixError,
+    error: matrixErrorObj,
+    refetch: refetchMatrix,
+  } = useQuery({
     queryKey: ['user-matrix', selectedUserId],
     queryFn: () => permissionsApi.userMatrix(selectedUserId!).then((r) => r.data),
     enabled: selectedUserId !== null,
     placeholderData: keepPreviousData,
   });
 
-  const invalidateUserMatrix = () =>
-    qc.invalidateQueries({ queryKey: ['user-matrix', selectedUserId] });
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['user-matrix', selectedUserId] });
+  const onError = (err: { response?: { data?: { message?: string } } }) =>
+    toast.error(err?.response?.data?.message ?? 'Failed to update permission');
 
   const permMutation = useMutation({
     mutationFn: ({ userId, featureKey, enabled }: { userId: number; featureKey: string; enabled: boolean }) =>
       permissionsApi.setUserPermission(userId, featureKey, enabled),
-    onSuccess: () => { invalidateUserMatrix(); toast.success('Permission updated'); },
-    onError: () => toast.error('Failed to update permission'),
+    onSuccess: () => { invalidate(); toast.success('Permission updated'); },
+    onError,
   });
 
   const resetMutation = useMutation({
     mutationFn: ({ userId, featureKey }: { userId: number; featureKey: string }) =>
       permissionsApi.resetUserPermission(userId, featureKey),
-    onSuccess: () => { invalidateUserMatrix(); toast.success('Permission reset'); },
-    onError: () => toast.error('Failed to reset permission'),
+    onSuccess: () => { invalidate(); toast.success('Reset to role default'); },
+    onError,
   });
 
   const users = usersData?.data ?? [];
-  const selectedUser = users.find((u) => u.id === selectedUserId);
-  const features = userMatrix?.features ?? [];
+  const selected = userMatrix?.user;
   const isPending = permMutation.isPending || resetMutation.isPending;
 
   return (
     <div className="flex gap-4">
-      {/* User list */}
       <Card className="w-64 shrink-0 overflow-hidden">
         <div className="p-3 border-b">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Select User</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Select User
+          </p>
         </div>
-        <div className="overflow-y-auto max-h-[600px]">
+        <div className="max-h-[600px] overflow-y-auto">
           {usersLoading ? (
             <div className="flex justify-center py-4"><Loader2 className="h-4 w-4 animate-spin" /></div>
           ) : (
@@ -212,7 +435,7 @@ function UserOverridesTab() {
               <button
                 key={u.id}
                 className={cn(
-                  'w-full text-left px-3 py-2.5 text-sm border-b last:border-0 transition-colors hover:bg-muted/50',
+                  'w-full border-b px-3 py-2.5 text-left text-sm transition-colors last:border-0 hover:bg-muted/50',
                   selectedUserId === u.id && 'bg-primary/10 font-semibold',
                 )}
                 onClick={() => setSelectedUserId(u.id)}
@@ -225,36 +448,68 @@ function UserOverridesTab() {
         </div>
       </Card>
 
-      {/* Permission panel */}
       <div className="flex-1">
-        {!selectedUser ? (
-          <div className="flex items-center justify-center h-48 text-muted-foreground text-sm">
+        {selectedUserId === null ? (
+          <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
             Select a user to view and edit their permission overrides.
           </div>
         ) : (
           <Card>
-            <div className="p-4 border-b flex items-center gap-3">
-              <div>
-                <p className="font-semibold">{selectedUser.email}</p>
+            {selected && (
+              <div className="border-b p-4">
+                <p className="font-semibold">{selected.email}</p>
                 <p className="text-xs text-muted-foreground">
-                  Role: {selectedUser.role} · {selectedUser.isActive ? 'Active' : 'Disabled'}
+                  Role: {selected.role} · {selected.isActive ? 'Active' : 'Disabled'}
                 </p>
               </div>
-            </div>
-            <div className="p-4 space-y-2">
+            )}
+            <div className="space-y-2 p-4">
               {matrixLoading ? (
                 <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin" /></div>
               ) : matrixError ? (
                 <QueryError error={matrixErrorObj} onRetry={() => refetchMatrix()} />
               ) : (
-                <UserFeatureList
-                  features={features}
-                  userRole={selectedUser.role}
-                  userId={selectedUser.id}
-                  onToggle={(fk, v) => permMutation.mutate({ userId: selectedUser.id, featureKey: fk, enabled: v })}
-                  onReset={(fk) => resetMutation.mutate({ userId: selectedUser.id, featureKey: fk })}
-                  isPending={isPending}
-                />
+                groupNodes(userMatrix?.features ?? []).map(({ group, nodes }) => (
+                  <div key={group}>
+                    <p className="mb-1 mt-3 px-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground first:mt-0">
+                      {group}
+                    </p>
+                    <div className="space-y-2">
+                      {nodes.map(({ row, children }) => (
+                        <div key={row.key} className="space-y-1">
+                          <UserFeatureRow
+                            row={row}
+                            isPending={isPending}
+                            onToggle={(enabled) =>
+                              permMutation.mutate({ userId: selectedUserId, featureKey: row.key, enabled })
+                            }
+                            onReset={() =>
+                              resetMutation.mutate({ userId: selectedUserId, featureKey: row.key })
+                            }
+                          />
+                          {children.length > 0 && (
+                            <div className="ml-6 space-y-1">
+                              {children.map((c) => (
+                                <UserFeatureRow
+                                  key={c.key}
+                                  row={c}
+                                  nested
+                                  isPending={isPending}
+                                  onToggle={(enabled) =>
+                                    permMutation.mutate({ userId: selectedUserId, featureKey: c.key, enabled })
+                                  }
+                                  onReset={() =>
+                                    resetMutation.mutate({ userId: selectedUserId, featureKey: c.key })
+                                  }
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))
               )}
             </div>
           </Card>
@@ -264,60 +519,97 @@ function UserOverridesTab() {
   );
 }
 
-function UserFeatureList({
-  features,
-  userRole,
-  userId: _userId,
+function UserFeatureRow({
+  row,
+  nested = false,
+  isPending,
   onToggle,
   onReset,
-  isPending,
 }: {
-  features: PermissionsMatrixFeature[];
-  userRole: string;
-  userId: number;
-  onToggle: (featureKey: string, enabled: boolean) => void;
-  onReset: (featureKey: string) => void;
+  row: UserPermissionRow;
+  nested?: boolean;
   isPending: boolean;
+  onToggle: (enabled: boolean) => void;
+  onReset: () => void;
 }) {
+  const overridden = row.userOverride !== null;
+  const unavailable = !row.available;
+  const blockedByParent = !unavailable && !row.parentEffective;
+  const disabled = isPending || row.locked || unavailable || blockedByParent;
+
+  const control = (
+    <Switch
+      checked={row.effective}
+      disabled={disabled}
+      aria-label={row.label}
+      onCheckedChange={onToggle}
+    />
+  );
+
   return (
-    <>
-      {features.map((f) => {
-        const state = f.roles[userRole];
-        if (!state) return null;
-        const { effective, overridden, default: def } = state;
-        return (
-          <div key={f.key} className="flex items-center justify-between rounded-lg border px-3 py-2 gap-3">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5">
-                <p className="text-sm font-medium truncate">{f.label}</p>
-                {overridden && (
-                  <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-300 px-1 py-0 shrink-0">
-                    Override
-                  </Badge>
-                )}
-                <FeatureHintTooltip featureKey={f.key} />
-              </div>
-              {f.description && <p className="text-xs text-muted-foreground truncate">{f.description}</p>}
-              {overridden && (
-                <p className="text-xs text-muted-foreground">Role default: {def ? 'enabled' : 'disabled'}</p>
-              )}
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <Switch checked={effective} disabled={isPending} onCheckedChange={(v) => onToggle(f.key, v)} />
-              {overridden && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-7 w-7" disabled={isPending} onClick={() => onReset(f.key)}>
-                      <RotateCcw className="h-3.5 w-3.5" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Reset to role default</TooltipContent>
-                </Tooltip>
-              )}
-            </div>
-          </div>
-        );
-      })}
-    </>
+    <div
+      className={cn(
+        'flex items-center justify-between gap-3 rounded-lg border px-3 py-2',
+        nested && 'border-dashed bg-muted/20 py-1.5',
+      )}
+    >
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          <KindIcon kind={row.kind} />
+          <p className={cn('truncate font-medium', nested ? 'text-[13px]' : 'text-sm')}>
+            {row.label}
+          </p>
+          <MobileBadge platform={row.platform} />
+          <SensitiveBadge sensitivity={row.sensitivity} />
+          {overridden && (
+            <Badge variant="outline" className="shrink-0 border-amber-300 px-1 py-0 text-[10px] text-amber-600">
+              Override
+            </Badge>
+          )}
+        </div>
+        {row.description && (
+          <p className="truncate text-xs text-muted-foreground">{row.description}</p>
+        )}
+        {overridden && (
+          <p className="text-xs text-muted-foreground">
+            Role default: {row.roleEffective ? 'enabled' : 'disabled'}
+          </p>
+        )}
+        {blockedByParent && (
+          <p className="text-xs text-muted-foreground">
+            No effect while the screen it belongs to is not granted.
+          </p>
+        )}
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        {unavailable ? (
+          <Tooltip>
+            <TooltipTrigger asChild><span>{control}</span></TooltipTrigger>
+            <TooltipContent side="left" className="max-w-[220px]">
+              Endpoints for this action require {row.minRole} or higher, so this
+              account&apos;s role cannot hold it.
+            </TooltipContent>
+          </Tooltip>
+        ) : control}
+        {row.locked && <LockedBadge />}
+        {overridden && !row.locked && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                disabled={isPending}
+                onClick={onReset}
+                aria-label={`Reset ${row.label} to role default`}
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Reset to role default</TooltipContent>
+          </Tooltip>
+        )}
+      </div>
+    </div>
   );
 }

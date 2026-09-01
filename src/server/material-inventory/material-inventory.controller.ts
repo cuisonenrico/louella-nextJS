@@ -19,14 +19,17 @@ import { MaterialGapsQueryDto } from './dto/material-gaps-query.dto';
 import { CurrentUser } from '../common/decorators/user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Autofill } from '../common/decorators/autofill.decorator';
+import { RequireFeature } from '../common/decorators/require-feature.decorator';
 
 @Controller('material-inventory')
+@RequireFeature('material-stock')
 export class MaterialInventoryController {
   constructor(
     private readonly materialInventoryService: MaterialInventoryService,
   ) {}
 
   @Post()
+  @RequireFeature('material-stock:create')
   @Roles(UserRole.INVENTORY)
   create(
     @Body() body: CreateMaterialInventoryDto,
@@ -36,6 +39,7 @@ export class MaterialInventoryController {
   }
 
   @Post('bulk')
+  @RequireFeature('material-stock:create')
   @Roles(UserRole.INVENTORY)
   createBulk(
     @Body(new ParseArrayPipe({ items: CreateMaterialInventoryDto }))
@@ -46,12 +50,14 @@ export class MaterialInventoryController {
   }
 
   @Post('init')
+  @RequireFeature('material-stock:init')
   @Roles(UserRole.INVENTORY)
   initDate(@Query('date') date: string, @CurrentUser() user: { id: number }) {
     return this.materialInventoryService.initDate(date, user?.id);
   }
 
   @Post('init-range')
+  @RequireFeature('material-stock:init')
   @Roles(UserRole.INVENTORY)
   initDateRange(
     @Query('startDate') startDate: string,
@@ -100,6 +106,7 @@ export class MaterialInventoryController {
   }
 
   @Patch(':id')
+  @RequireFeature('material-stock:edit')
   @Roles(UserRole.INVENTORY)
   update(
     @Param('id', ParseIntPipe) id: number,
@@ -109,6 +116,7 @@ export class MaterialInventoryController {
   }
 
   @Delete(':id')
+  @RequireFeature('material-stock:delete')
   @Roles(UserRole.INVENTORY)
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.materialInventoryService.remove(id);

@@ -65,10 +65,17 @@ export class AuthController {
     return result;
   }
 
+  // Returns the effective feature permissions alongside the profile. JwtStrategy
+  // has already resolved them as part of the auth lookup, so folding them in
+  // here costs nothing and saves the client a second round trip on every load.
   @Get('me')
   @UseGuards(JwtAuthGuard)
-  async me(@CurrentUser() user: { id: number; email: string; role: string }) {
-    return this.authService.me(user.id);
+  async me(
+    @CurrentUser()
+    user: { id: number; email: string; role: string; permissions: string[] },
+  ) {
+    const profile = await this.authService.me(user.id);
+    return { ...profile, permissions: user.permissions };
   }
 
   @Patch('change-password')

@@ -2,84 +2,26 @@
 
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
-import type { LucideIcon } from 'lucide-react';
-import {
-  LayoutDashboard, Store, Package, Layers, BookOpen, TrendingUp,
-  Warehouse, FlaskConical, Factory, ChevronLeft, Menu, ClipboardList, Settings, Upload,
-  Users, ShieldCheck, Activity,
-} from 'lucide-react';
+import { ChevronLeft, Menu, Settings, ShieldCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
+import { featureForPath, navigationFor, type NavGroup } from '@/lib/rbac/features';
+import { DEFAULT_NAV_ICON, NAV_ICONS } from './navIcons';
 
 export const DRAWER_WIDTH = 240;
 export const COLLAPSED_WIDTH = 64;
 
-type NavItem = {
-  label: string;
-  href: string;
-  icon: LucideIcon;
-  exact?: boolean;
-  activePrefix?: string;
-  featureKey?: string;
-  minRole?: string;
+/**
+ * Groups that render with their own heading and icon rather than a plain
+ * separator, preserving the previous visual treatment of Config and Settings.
+ */
+const DECORATED_GROUPS: Partial<Record<NavGroup, { icon: typeof Settings }>> = {
+  Config: { icon: Settings },
+  Settings: { icon: ShieldCheck },
 };
-
-const ROLE_ORDER: Record<string, number> = {
-  USER: 0, VIEWER: 1, INVENTORY: 2, MANAGER: 3, ADMIN: 4,
-};
-
-function canSee(item: NavItem, permissions: string[], role: string): boolean {
-  if (item.featureKey) return permissions.includes(item.featureKey);
-  if (item.minRole) return (ROLE_ORDER[role] ?? -1) >= (ROLE_ORDER[item.minRole] ?? Infinity);
-  return true;
-}
-
-const navGroups: { label: string | null; items: NavItem[] }[] = [
-  {
-    label: null,
-    items: [
-      { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, featureKey: 'dashboard' },
-    ],
-  },
-  {
-    label: 'Operations',
-    items: [
-      { label: 'Revenue', href: '/sales', icon: TrendingUp, featureKey: 'analytics' },
-      { label: 'Inventory', href: '/inventory/details', icon: Package, featureKey: 'inventory-history', activePrefix: '/inventory' },
-      { label: 'Production', href: '/production', icon: Factory, exact: true, minRole: 'MANAGER' },
-      { label: 'Prod. Orders', href: '/production/orders', icon: ClipboardList, minRole: 'MANAGER' },
-      { label: 'Import History', href: '/inventory-import/history', icon: Upload, minRole: 'MANAGER' },
-    ],
-  },
-  {
-    label: 'Stock',
-    items: [
-      { label: 'Material Stock', href: '/material-inventory', icon: Warehouse, minRole: 'MANAGER' },
-    ],
-  },
-  {
-    label: 'Catalog',
-    items: [
-      { label: 'Products', href: '/products', icon: Layers, minRole: 'MANAGER' },
-      { label: 'Materials', href: '/materials', icon: FlaskConical, minRole: 'MANAGER' },
-      { label: 'Recipes', href: '/recipes', icon: BookOpen, minRole: 'MANAGER' },
-      { label: 'Branches', href: '/branches', icon: Store, minRole: 'MANAGER' },
-    ],
-  },
-];
-
-const configNavItems: NavItem[] = [
-  { label: 'Product Order', href: '/config/product-order', icon: Layers, minRole: 'ADMIN' },
-];
-
-const settingsNavItems: NavItem[] = [
-  { label: 'Users', href: '/settings/users', icon: Users, minRole: 'ADMIN' },
-  { label: 'Permissions', href: '/settings/permissions', icon: ShieldCheck, minRole: 'ADMIN' },
-  { label: 'Jobs', href: '/settings/jobs', icon: Activity, minRole: 'MANAGER' },
-];
 
 export default function Sidebar({
   collapsed,
@@ -90,16 +32,24 @@ export default function Sidebar({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, permissions } = useAuth();
-  const role = user?.role ?? '';
+  const { permissions } = useAuth();
   const width = collapsed ? COLLAPSED_WIDTH : DRAWER_WIDTH;
 
-  function renderItem(item: NavItem) {
-    const matchBase = item.activePrefix ?? item.href;
-    const active = pathname === item.href
-      || (!item.exact && pathname === matchBase)
-      || (!item.exact && pathname.startsWith(matchBase + '/'));
-    const Icon = item.icon;
+  // Derived entirely from the shared RBAC manifest and the user's effective
+  // permissions. The sidebar deliberately knows nothing about roles: role is
+  // resolved into permissions server-side, so there is exactly one place where
+  // "who may see what" is decided.
+  const groups = navigationFor(permissions);
+
+  // Which feature owns the current URL. Resolving this once, by longest prefix,
+  // is what keeps exactly one item highlighted: /production/orders belongs to
+  // `production-orders`, not to `production`, even though both prefixes match.
+  const activeKey = featureForPath(pathname)?.key ?? null;
+
+  function renderItem(item: { key: string; href: string; label: string }) {
+    const active = item.key === activeKey;
+    const Icon = NAV_ICONS[item.key] ?? DEFAULT_NAV_ICON;
+
     const btn = (
       <li key={item.href}>
         <button
@@ -112,7 +62,12 @@ export default function Sidebar({
               : 'text-white/70 hover:bg-white/10 hover:text-white'
           )}
         >
-          <Icon className={cn('h-[18px] w-[18px] shrink-0', active ? 'text-primary-foreground' : 'text-white/60')} />
+          <Icon
+            className={cn(
+              'h-[18px] w-[18px] shrink-0',
+              active ? 'text-primary-foreground' : 'text-white/60'
+            )}
+          />
           {!collapsed && <span>{item.label}</span>}
         </button>
       </li>
@@ -128,16 +83,6 @@ export default function Sidebar({
     }
     return btn;
   }
-
-  const visibleGroups = navGroups
-    .map((group) => ({
-      ...group,
-      items: group.items.filter((item) => canSee(item, permissions, role)),
-    }))
-    .filter((group) => group.items.length > 0);
-
-  const visibleConfig = configNavItems.filter((item) => canSee(item, permissions, role));
-  const visibleSettings = settingsNavItems.filter((item) => canSee(item, permissions, role));
 
   return (
     <aside
@@ -183,95 +128,32 @@ export default function Sidebar({
 
       <Separator className="bg-white/15 mx-2" />
 
-      {/* Nav Items */}
-      <nav className={cn('flex-1 overflow-y-auto pb-2', collapsed ? 'px-1 mt-2' : 'px-2 mt-1')}>
-        {visibleGroups.map((group, gi) => (
-          <div key={gi}>
-            {gi > 0 && (
-              collapsed
-                ? <Separator className="bg-white/15 mx-1 my-1.5" />
-                : (
+      {/* Nav */}
+      <nav
+        aria-label="Main"
+        className={cn('flex-1 overflow-y-auto pb-2', collapsed ? 'px-1 mt-2' : 'px-2 mt-1')}
+      >
+        {groups.map(({ group, items }, gi) => {
+          const decoration = DECORATED_GROUPS[group];
+          const GroupIcon = decoration?.icon;
+          return (
+            <div key={group} className={gi > 0 ? 'mt-1' : undefined}>
+              {gi > 0 &&
+                (collapsed ? (
+                  <Separator className="bg-white/15 mx-1 my-1.5" />
+                ) : (
                   <div className="mt-3 mb-1 px-2 flex items-center gap-1.5">
+                    {GroupIcon && <GroupIcon className="h-3 w-3 text-white/50" />}
                     <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-white/50">
-                      {group.label}
+                      {group}
                     </span>
                     <div className="flex-1 h-px bg-white/15" />
                   </div>
-                )
-            )}
-            <ul className="space-y-0.5">
-              {group.items.map((item) => renderItem(item))}
-            </ul>
-          </div>
-        ))}
-
-        {/* Config section */}
-        {visibleConfig.length > 0 && (
-          <div className="mt-1">
-            {collapsed
-              ? <Separator className="bg-white/15 mx-1 my-1.5" />
-              : (
-                <div className="mt-3 mb-1 px-2 flex items-center gap-1.5">
-                  <Settings className="h-3 w-3 text-white/50" />
-                  <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-white/50">Config</span>
-                  <div className="flex-1 h-px bg-white/15" />
-                </div>
-              )
-            }
-            <ul className="space-y-0.5">
-              {visibleConfig.map((item) => {
-                const active = pathname === item.href || pathname.startsWith(item.href + '/');
-                const Icon = item.icon;
-                const btn = (
-                  <li key={item.href}>
-                    <button
-                      onClick={() => router.push(item.href)}
-                      className={cn(
-                        'flex w-full items-center rounded-lg text-sm transition-colors',
-                        collapsed ? 'justify-center px-2 py-2' : 'px-3 py-2 gap-3',
-                        active
-                          ? 'bg-white/20 text-white font-bold'
-                          : 'text-white/75 hover:bg-white/10 hover:text-white'
-                      )}
-                    >
-                      <Icon className={cn('h-[18px] w-[18px] shrink-0', active ? 'text-primary-foreground' : 'text-white/60')} />
-                      {!collapsed && <span>{item.label}</span>}
-                    </button>
-                  </li>
-                );
-
-                if (collapsed) {
-                  return (
-                    <Tooltip key={item.href} delayDuration={0}>
-                      <TooltipTrigger asChild>{btn}</TooltipTrigger>
-                      <TooltipContent side="right">Config: {item.label}</TooltipContent>
-                    </Tooltip>
-                  );
-                }
-                return btn;
-              })}
-            </ul>
-          </div>
-        )}
-
-        {/* Settings section — per-item role gating (Jobs is MANAGER+, others ADMIN) */}
-        {visibleSettings.length > 0 && (
-          <div className="mt-1">
-            {collapsed
-              ? <Separator className="bg-white/15 mx-1 my-1.5" />
-              : (
-                <div className="mt-3 mb-1 px-2 flex items-center gap-1.5">
-                  <ShieldCheck className="h-3 w-3 text-white/50" />
-                  <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-white/50">Settings</span>
-                  <div className="flex-1 h-px bg-white/15" />
-                </div>
-              )
-            }
-            <ul className="space-y-0.5">
-              {visibleSettings.map((item) => renderItem(item))}
-            </ul>
-          </div>
-        )}
+                ))}
+              <ul className="space-y-0.5">{items.map(renderItem)}</ul>
+            </div>
+          );
+        })}
       </nav>
     </aside>
   );

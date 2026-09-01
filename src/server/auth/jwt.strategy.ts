@@ -3,6 +3,20 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
+import { resolvePermissions } from '../permissions/resolve-permissions';
+import type { RoleName } from '@/lib/rbac/features';
+
+type Override = { k: string; e: boolean };
+
+type AuthRow = {
+  id: number;
+  email: string;
+  role: string;
+  branchId: number | null;
+  isActive: boolean;
+  role_overrides: Override[];
+  user_overrides: Override[];
+};
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -33,18 +47,32 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     branchId?: number | null;
   }) {
     // Re-resolve the user from the database on every request so that
-    // deactivations, role changes, and branch reassignments take effect
-    // immediately instead of lingering for the lifetime of the access token.
-    const user = await this.prisma.user.findUnique({
-      where: { id: Number(payload.sub) },
-      select: {
-        id: true,
-        email: true,
-        role: true,
-        branchId: true,
-        isActive: true,
-      },
-    });
+    // deactivations, role changes, branch reassignments and permission changes
+    // take effect immediately instead of lingering for the lifetime of the
+    // access token.
+    //
+    // The two override sets come back as aggregated JSON rather than joined
+    // rows: joining both tables directly would produce their cartesian product
+    // (10 role overrides x 5 user overrides = 50 rows for one user). Both
+    // subqueries are served by the existing indexes on RoleFeaturePermission.role
+    // and UserFeaturePermission.userId, so this remains a single round trip —
+    // which matters, since the database is cross-region and every statement
+    // costs real latency.
+    const rows = await this.prisma.$queryRaw<AuthRow[]>`
+      SELECT u.id, u.email, u.role, u."branchId", u."isActive",
+        COALESCE((
+          SELECT json_agg(json_build_object('k', r."featureKey", 'e', r.enabled))
+          FROM "RoleFeaturePermission" r WHERE r.role = u.role
+        ), '[]'::json) AS role_overrides,
+        COALESCE((
+          SELECT json_agg(json_build_object('k', p."featureKey", 'e', p.enabled))
+          FROM "UserFeaturePermission" p WHERE p."userId" = u.id
+        ), '[]'::json) AS user_overrides
+      FROM "User" u
+      WHERE u.id = ${Number(payload.sub)}
+    `;
+
+    const user = rows[0];
 
     if (!user || !user.isActive) {
       throw new UnauthorizedException('Account is no longer active');
@@ -55,6 +83,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       email: user.email,
       role: user.role,
       branchId: user.branchId ?? null,
+      permissions: resolvePermissions(
+        user.role as RoleName,
+        user.role_overrides,
+        user.user_overrides,
+      ),
     };
   }
 }

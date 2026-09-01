@@ -22,8 +22,10 @@ import { SuggestionsService } from './suggestions.service';
 import { CreateProductionOrderDto } from './dto/create-production-order.dto';
 import { UpdateProductionOrderDto } from './dto/update-production-order.dto';
 import { SuggestionsQueryDto } from './dto/suggestions-query.dto';
+import { RequireFeature } from '../common/decorators/require-feature.decorator';
 
 @Controller('production-orders')
+@RequireFeature('production-orders')
 @ApiTags('production-orders')
 @ApiBearerAuth()
 @UseGuards(RolesGuard, BranchGuard)
@@ -40,6 +42,7 @@ export class ProductionOrdersController {
   }
 
   @Post()
+  @RequireFeature('production-orders:create')
   @Roles(UserRole.MANAGER)
   create(
     @Body() dto: CreateProductionOrderDto,
@@ -62,6 +65,10 @@ export class ProductionOrdersController {
   }
 
   @Get('by-date')
+  @RequireFeature('production-orders', 'dashboard:branch-orders')
+    // The dashboard aggregates this, so a role holding `dashboard` but not the
+    // owning screen's key must still be able to read it.
+  @RequireFeature('production-orders', 'dashboard')
   findByDate(
     @Query('date') date: string,
     @Query('branchId') branchId?: string,
@@ -70,6 +77,7 @@ export class ProductionOrdersController {
   }
 
   @Get('planned-yield')
+  @RequireFeature('production-orders:planned-yield')
   getPlannedYield(
     @Query('date') date: string,
     @Query('branchId') branchId?: string,
@@ -81,6 +89,7 @@ export class ProductionOrdersController {
   }
 
   @Get('suggestions')
+  @RequireFeature('production-orders:suggestions')
   @Roles(UserRole.VIEWER)
   getSuggestions(@Query() query: SuggestionsQueryDto) {
     return this.suggestionsService.getSuggestions(
@@ -99,6 +108,7 @@ export class ProductionOrdersController {
   }
 
   @Patch(':id')
+  @RequireFeature('production-orders:edit')
   @Roles(UserRole.MANAGER)
   update(
     @Param('id', ParseIntPipe) id: number,
@@ -109,6 +119,7 @@ export class ProductionOrdersController {
   }
 
   @Delete(':id')
+  @RequireFeature('production-orders:delete')
   @Roles(UserRole.MANAGER)
   remove(
     @Param('id', ParseIntPipe) id: number,

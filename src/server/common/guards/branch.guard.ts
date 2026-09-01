@@ -5,43 +5,71 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { Request } from 'express';
-import { UserRole } from '@prisma/client';
+import { ALL_BRANCHES_KEY } from '@/lib/rbac/features';
 
 /**
- * Enforces branch-level data isolation for MANAGER-role users.
- * MANAGERs are assigned to exactly one branch; they may only access that branch's data.
+ * Enforces branch-level data isolation.
  *
- * When branchId appears in the request path or query:
- *   - If it matches the manager's own branchId → allow
- *   - If it does not match → 403 Forbidden
+ * Scope is driven by the `all-branches` permission, not by the role:
  *
- * When no branchId is present (all-branches endpoint):
- *   - The manager's own branchId is injected into req.query so downstream
- *     handlers and services automatically scope the query to their branch.
+ *   holds `all-branches`            -> unscoped, every branch visible
+ *   lacks it, `branchId` assigned   -> confined to that branch
+ *   lacks it, no `branchId`         -> 403
  *
- * For write requests the branchId travels in the body, not the path/query, so
- * the guard also inspects req.body (object or array). A body that targets a
- * different branch is rejected; a body with no branchId is stamped with the
- * manager's own branchId. This closes the write-side isolation bypass.
+ * That last line is the important one. This guard previously keyed off
+ * `role === MANAGER` and returned true for everyone else, which meant a MANAGER
+ * created without a branch assignment - `User.branchId` is nullable - fell
+ * through unscoped and could read every branch in the business. Absence of
+ * scope information now denies rather than permits.
  *
- * Non-MANAGER roles and MANAGER users without an assigned branch pass through unchanged.
+ * Making scope a permission also means an admin can grant one senior manager
+ * cross-branch visibility without promoting them to ADMIN, and that the rule is
+ * visible in the permission matrix instead of buried here. `ROLE_DEFAULTS`
+ * grants `all-branches` to every role except MANAGER, exactly reproducing the
+ * behaviour this guard had before.
+ *
+ * When scoped:
+ *   - a `branchId` in the path or query must match the user's own, else 403
+ *   - a request carrying no `branchId` has the user's own injected into
+ *     `req.query`, so downstream services scope automatically
+ *   - for writes the branchId travels in the body, so the body is checked too:
+ *     a mismatch is rejected, an absent value is stamped. This closes the
+ *     write-side isolation bypass.
  */
 @Injectable()
 export class BranchGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
-    const req = context
-      .switchToHttp()
-      .getRequest<
-        Request & { user?: { role: string; branchId?: number | null } }
-      >();
+    const req = context.switchToHttp().getRequest<
+      Request & {
+        user?: { role: string; branchId?: number | null; permissions?: string[] };
+      }
+    >();
     const user = req.user;
 
-    if (!user || user.role !== UserRole.MANAGER || user.branchId == null) {
-      return true;
+    // No authenticated user means a @Public route: JwtAuthGuard runs globally
+    // and ahead of this one, so there is nothing to scope. Scoping is not this
+    // guard's authentication decision to make.
+    if (!user) return true;
+
+    if (user.permissions?.includes(ALL_BRANCHES_KEY)) return true;
+
+    // Scoped, but with nothing to scope to. Deny rather than fall through.
+    if (user.branchId == null) {
+      throw new ForbiddenException(
+        'This account is limited to a single branch but has no branch assigned. Ask an administrator to assign one.',
+      );
     }
 
+    this.enforceScope(req, user.branchId);
+    return true;
+  }
+
+  private enforceScope(
+    req: Request & { user?: unknown },
+    branchId: number,
+  ): void {
     // Validate / stamp the branchId carried in the request body (writes).
-    this.enforceBodyBranch(req.body, user.branchId);
+    this.enforceBodyBranch(req.body, branchId);
 
     const paramBranchIdRaw = req.params?.branchId;
     const paramBranchId =
@@ -66,41 +94,39 @@ export class BranchGuard implements CanActivate {
     const requestedBranchId = paramBranchId ?? queryBranchId;
 
     if (requestedBranchId != null) {
-      if (requestedBranchId !== user.branchId) {
+      if (requestedBranchId !== branchId) {
         throw new ForbiddenException('Access to this branch is not permitted');
       }
     } else if (req.query) {
-      (req.query as Record<string, unknown>).branchId = String(user.branchId);
+      (req.query as Record<string, unknown>).branchId = String(branchId);
     }
-
-    return true;
   }
 
   /**
-   * For a manager, every record in the body must belong to their branch.
-   * Reject an explicit mismatch; stamp the manager's branchId when absent.
+   * Every record in the body must belong to the user's branch.
+   * Reject an explicit mismatch; stamp the branchId when absent.
    * Handles both a single object body and an array body (bulk endpoints).
    */
-  private enforceBodyBranch(body: unknown, managerBranchId: number): void {
+  private enforceBodyBranch(body: unknown, branchId: number): void {
     if (Array.isArray(body)) {
       for (const item of body) {
-        this.enforceItemBranch(item, managerBranchId);
+        this.enforceItemBranch(item, branchId);
       }
     } else {
-      this.enforceItemBranch(body, managerBranchId);
+      this.enforceItemBranch(body, branchId);
     }
   }
 
-  private enforceItemBranch(item: unknown, managerBranchId: number): void {
+  private enforceItemBranch(item: unknown, branchId: number): void {
     if (item == null || typeof item !== 'object') return;
     const record = item as Record<string, unknown>;
     const raw = record.branchId;
     if (raw == null || raw === '') {
-      record.branchId = managerBranchId;
+      record.branchId = branchId;
       return;
     }
-    const branchId = typeof raw === 'number' ? raw : parseInt(String(raw), 10);
-    if (branchId !== managerBranchId) {
+    const value = typeof raw === 'number' ? raw : parseInt(String(raw), 10);
+    if (value !== branchId) {
       throw new ForbiddenException('Access to this branch is not permitted');
     }
   }

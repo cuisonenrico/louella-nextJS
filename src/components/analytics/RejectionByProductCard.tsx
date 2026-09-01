@@ -6,7 +6,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { ArrowRight, Loader2 } from 'lucide-react';
 import dayjs from 'dayjs';
 import { inventoryApi } from '@/lib/apiServices';
-import type { Branch, RejectionByProductItem, ProductType } from '@/types';
+import type { RejectionByProductItem, ProductType } from '@/types';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -23,7 +23,8 @@ interface Props {
   type?: ProductType;
   title?: string;
   showFilters?: boolean;
-  branches?: Branch[];
+  /** Only `id` and `name` are read, so any branch-shaped row will do. */
+  branches?: { id: number; name: string }[];
 }
 
 const TOP_COUNT = 5;

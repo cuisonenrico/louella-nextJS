@@ -6,6 +6,7 @@ import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tansta
 import { Loader2, AlertTriangle, CheckCircle } from 'lucide-react';
 import dayjs from 'dayjs';
 import { inventoryApi, branchesApi, jobsApi } from '@/lib/apiServices';
+import { useHasFeature } from '@/lib/rbac/useHasFeature';
 import { extractError } from '@/lib/errors';
 import type { Branch, GapEntry } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -21,6 +22,7 @@ import { TableRowsSkeleton } from '@/components/loading/Skeletons';
 
 export default function InventoryGapsPage() {
   usePageHeader({ title: 'Inventory Gaps' });
+  const canRunJobs = useHasFeature('jobs');
   const qc = useQueryClient();
   const today = dayjs().format('YYYY-MM-DD');
   const weekAgo = dayjs().subtract(7, 'day').format('YYYY-MM-DD');
@@ -68,12 +70,19 @@ export default function InventoryGapsPage() {
               </SelectContent>
             </Select>
           </div>
-          <Button variant="outline" onClick={() => fillTodayMut.mutate()} disabled={fillTodayMut.isPending}>
-            {fillTodayMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}Fill Today
-          </Button>
-          <Button onClick={() => backfillMut.mutate()} disabled={backfillMut.isPending}>
-            {backfillMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Backfill Range
-          </Button>
+          {/* Autofill belongs to `jobs`, not to this page's own key. A role that
+              can read the gaps report cannot necessarily run the job, so the
+              controls are hidden rather than left to fail with a 403. */}
+          {canRunJobs && (
+            <>
+              <Button variant="outline" onClick={() => fillTodayMut.mutate()} disabled={fillTodayMut.isPending}>
+                {fillTodayMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}Fill Today
+              </Button>
+              <Button onClick={() => backfillMut.mutate()} disabled={backfillMut.isPending}>
+                {backfillMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Backfill Range
+              </Button>
+            </>
+          )}
         </div>
 
         {message && <Alert className="mb-4"><AlertDescription>{message}</AlertDescription></Alert>}

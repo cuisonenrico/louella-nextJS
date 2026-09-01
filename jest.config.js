@@ -9,6 +9,10 @@
 module.exports = {
   rootDir: 'src/server',
   moduleFileExtensions: ['js', 'json', 'ts'],
+  // Server code shares the RBAC manifest with the frontend via the `@/` alias
+  // (tsconfig paths). rootDir is src/server, so Jest needs the mapping spelled
+  // out or those imports fail to resolve under ts-jest.
+  moduleNameMapper: { '^@/(.*)$': '<rootDir>/../$1' },
   testRegex: '.*\\.spec\\.ts$',
   transform: {
     '^.+\\.(t|j)s$': ['ts-jest', { tsconfig: '<rootDir>/../../tsconfig.server.json' }],

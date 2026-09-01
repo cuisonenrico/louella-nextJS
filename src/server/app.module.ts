@@ -5,6 +5,7 @@ import { CacheModule } from '@nestjs/cache-manager';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
+import { FeatureGuard } from './common/guards/feature.guard';
 import { AutofillInterceptor } from './common/interceptors/autofill.interceptor';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -70,6 +71,9 @@ import { CacheNamespaceModule } from './common/cache/cache-namespace.module';
     AppService,
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
+    // Must follow JwtAuthGuard: it reads the permissions that guard resolves
+    // onto req.user. Handlers without @RequireFeature() pass straight through.
+    { provide: APP_GUARD, useClass: FeatureGuard },
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     // Registered globally so any module can opt in with @Autofill() metadata
     // alone, without importing JobsModule (which would create a cycle through
