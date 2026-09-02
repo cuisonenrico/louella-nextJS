@@ -9,7 +9,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from '@/components/ui/responsive-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { extractError } from '@/lib/errors';
@@ -82,9 +88,9 @@ export function StockCardDialog({ open, editRecord, filterDate, materials, suppl
   const set = (field: keyof StockForm) => (e: React.ChangeEvent<HTMLInputElement>) => setForm((prev) => ({ ...prev, [field]: e.target.value }));
 
   return (
-    <Dialog open={open} onOpenChange={() => onClose()}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader><DialogTitle>{editRecord ? 'Edit Stock Card' : 'New Stock Card'}</DialogTitle></DialogHeader>
+    <ResponsiveDialog open={open} onOpenChange={() => onClose()}>
+      <ResponsiveDialogContent className="sm:max-w-md">
+        <ResponsiveDialogHeader><ResponsiveDialogTitle>{editRecord ? 'Edit Stock Card' : 'New Stock Card'}</ResponsiveDialogTitle></ResponsiveDialogHeader>
         <div className="space-y-3 py-2">
           <div className="space-y-1"><Label className="text-xs">Date</Label><Input type="date" value={form.date} onChange={set('date')} /></div>
           <div className="space-y-1">
@@ -123,13 +129,13 @@ export function StockCardDialog({ open, editRecord, filterDate, materials, suppl
           </div>
           {err && <Alert variant="destructive"><AlertDescription>{err}</AlertDescription></Alert>}
         </div>
-        <DialogFooter>
+        <ResponsiveDialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button disabled={!form.materialId || !form.date || saveMutation.isPending} onClick={() => saveMutation.mutate()}>
             {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }

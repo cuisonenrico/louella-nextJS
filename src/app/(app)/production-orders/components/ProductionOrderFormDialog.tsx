@@ -13,7 +13,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from '@/components/ui/responsive-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { extractError } from '@/lib/errors';
@@ -156,11 +162,11 @@ export function ProductionOrderFormDialog({
   const totalFormYield = useMemo(() => Array.from(formItems.values()).reduce((a, b) => a + b, 0), [formItems]);
 
   return (
-    <Dialog open={open} onOpenChange={() => onClose()}>
-      <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle>{editTarget ? `Edit PO #${editTarget.id}` : 'New Production Order'}</DialogTitle>
-        </DialogHeader>
+    <ResponsiveDialog open={open} onOpenChange={() => onClose()}>
+      <ResponsiveDialogContent className="sm:max-w-3xl md:max-h-[90dvh] flex flex-col">
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle>{editTarget ? `Edit PO #${editTarget.id}` : 'New Production Order'}</ResponsiveDialogTitle>
+        </ResponsiveDialogHeader>
 
         {formError && <Alert variant="destructive"><AlertDescription>{formError}</AlertDescription></Alert>}
 
@@ -291,14 +297,14 @@ export function ProductionOrderFormDialog({
           Total: {totalFormYield.toLocaleString()}
         </div>
 
-        <DialogFooter>
+        <ResponsiveDialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button onClick={handleSave} disabled={saving}>
             {saving && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
             {editTarget ? 'Save' : 'Create'}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }

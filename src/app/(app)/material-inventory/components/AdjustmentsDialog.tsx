@@ -10,7 +10,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from '@/components/ui/responsive-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
@@ -46,9 +52,9 @@ export function AdjustmentsDialog({ record, onClose }: { record: MaterialInvento
   if (!record) return null;
 
   return (
-    <Dialog open={!!record} onOpenChange={() => onClose()}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader><DialogTitle>Adjustments — {record.material?.name ?? `ID ${record.materialId}`}</DialogTitle></DialogHeader>
+    <ResponsiveDialog open={!!record} onOpenChange={() => onClose()}>
+      <ResponsiveDialogContent className="sm:max-w-md">
+        <ResponsiveDialogHeader><ResponsiveDialogTitle>Adjustments — {record.material?.name ?? `ID ${record.materialId}`}</ResponsiveDialogTitle></ResponsiveDialogHeader>
         <div className="space-y-4">
           {adjustments.length === 0 ? (
             <p className="text-sm text-muted-foreground">No adjustments yet.</p>
@@ -94,8 +100,8 @@ export function AdjustmentsDialog({ record, onClose }: { record: MaterialInvento
           </div>
           {formErr && <Alert variant="destructive"><AlertDescription>{formErr}</AlertDescription></Alert>}
         </div>
-        <DialogFooter><Button variant="outline" onClick={onClose}>Close</Button></DialogFooter>
-      </DialogContent>
-    </Dialog>
+        <ResponsiveDialogFooter><Button variant="outline" onClick={onClose}>Close</Button></ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }

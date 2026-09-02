@@ -11,7 +11,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from '@/components/ui/responsive-dialog';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel,
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
@@ -131,16 +137,16 @@ export default function InventoryAdjustmentsDialog({ inventory, productName, bra
 
   return (
     <>
-    <Dialog open={!!inventory} onOpenChange={() => onClose()}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
+    <ResponsiveDialog open={!!inventory} onOpenChange={() => onClose()}>
+      <ResponsiveDialogContent className="sm:max-w-md">
+        <ResponsiveDialogHeader>
           <div className="flex items-center justify-between">
-            <DialogTitle>Adjustments — {productName}</DialogTitle>
+            <ResponsiveDialogTitle>Adjustments — {productName}</ResponsiveDialogTitle>
             <div className={`w-12 h-12 rounded-full flex items-center justify-center text-sm font-bold ${adjSum > 0 ? 'bg-green-500 text-white' : adjSum < 0 ? 'bg-red-500 text-white' : 'bg-muted text-muted-foreground'}`}>
               {adjSum > 0 ? `+${adjSum}` : adjSum}
             </div>
           </div>
-        </DialogHeader>
+        </ResponsiveDialogHeader>
 
         <div className="space-y-4">
           {currentAdjustments.length === 0 ? (
@@ -217,15 +223,15 @@ export default function InventoryAdjustmentsDialog({ inventory, productName, bra
           </div>
         </div>
 
-        <DialogFooter>
+        <ResponsiveDialogFooter>
           <Button variant="outline" onClick={onClose}>Close</Button>
           <Button onClick={handleAdd} disabled={isPending || (isTransfer && !destInventory)}>
             {isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
             {isTransfer ? 'Transfer' : 'Add'}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
 
     <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
       <AlertDialogContent>
