@@ -15,11 +15,15 @@ const buttonVariants = cva(
         ghost: 'hover:bg-accent hover:text-accent-foreground',
         link: 'text-primary underline-offset-4 hover:underline',
       },
+      // Each size steps up below `md` to reach the 44px touch target
+      // (WCAG 2.5.5 / Apple HIG) and returns to its original desktop height
+      // from `md` up, so pointer-driven layouts are unchanged. Measured, not
+      // assumed: a 40px control is the most common miss in this app.
       size: {
-        default: 'h-10 px-4 py-2',
-        sm: 'h-9 rounded-md px-3',
-        lg: 'h-11 rounded-md px-8',
-        icon: 'h-10 w-10',
+        default: 'h-11 md:h-10 px-4 py-2',
+        sm: 'h-11 md:h-9 rounded-md px-3',
+        lg: 'h-12 md:h-11 rounded-md px-8',
+        icon: 'size-11 md:size-10',
       },
     },
     defaultVariants: {

@@ -13,10 +13,13 @@ const toggleVariants = cva(
         default: 'bg-transparent',
         outline: 'border border-input bg-transparent hover:bg-accent hover:text-accent-foreground',
       },
+      // Steps up below `md` to the 44px touch target, unchanged from `md` up —
+      // same treatment as Button. Toggle groups are the branch and date-mode
+      // pickers on the busiest screens, so they are real targets, not chrome.
       size: {
-        default: 'h-10 px-3',
-        sm: 'h-9 px-2.5',
-        lg: 'h-11 px-5',
+        default: 'h-11 min-w-11 md:h-10 md:min-w-0 px-3',
+        sm: 'h-11 min-w-11 md:h-9 md:min-w-0 px-2.5',
+        lg: 'h-12 min-w-12 md:h-11 md:min-w-0 px-5',
       },
     },
     defaultVariants: {

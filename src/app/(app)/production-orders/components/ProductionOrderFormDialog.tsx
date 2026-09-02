@@ -190,7 +190,7 @@ export function ProductionOrderFormDialog({
             <Sparkles className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
             <span className="text-xs text-muted-foreground">Suggestions from</span>
             <Select value={suggestPeriod} onValueChange={(v) => setSuggestPeriod(v as SuggestionPeriod)}>
-              <SelectTrigger className="h-8 w-[150px] text-xs">
+              <SelectTrigger className="h-11 md:h-8 w-[150px] text-base md:text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

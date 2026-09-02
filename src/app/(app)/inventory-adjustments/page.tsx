@@ -100,11 +100,11 @@ export default function InventoryAdjustmentsPage() {
           <div className="space-y-1">
             <Label className="text-xs">Date</Label>
             <div className="flex items-center gap-1">
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setDate(dayjs(date).subtract(1, 'day').format('YYYY-MM-DD'))}>
+              <Button variant="ghost" size="icon" className="size-11 md:size-8" onClick={() => setDate(dayjs(date).subtract(1, 'day').format('YYYY-MM-DD'))}>
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-40 h-8" />
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setDate(dayjs(date).add(1, 'day').format('YYYY-MM-DD'))}>
+              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-40 h-11 md:h-8" />
+              <Button variant="ghost" size="icon" className="size-11 md:size-8" onClick={() => setDate(dayjs(date).add(1, 'day').format('YYYY-MM-DD'))}>
                 <ChevronRight className="h-4 w-4" />
               </Button>
               {date !== today && (

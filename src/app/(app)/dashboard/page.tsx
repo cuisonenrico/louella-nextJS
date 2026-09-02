@@ -119,7 +119,13 @@ export default function DashboardPage() {
             // would otherwise get two cards in a three-column grid. 20rem is
             // the narrowest a card stays readable, so this also collapses to
             // one column on a phone for free.
-            <div data-testid="dashboard-charts-row" className="mb-6 grid gap-4 grid-cols-[repeat(auto-fit,minmax(20rem,1fr))]">
+            //
+            // 17rem, not 20: with the sidebar at 240px a 1280px window leaves
+            // ~985px of content, and three 20rem tracks plus two gaps need 992
+            // — so auto-fit dropped to two columns and wrapped the third card,
+            // which is worse than the fixed grid it replaced. Measured in a
+            // browser; jsdom cannot catch this.
+            <div data-testid="dashboard-charts-row" className="mb-6 grid gap-4 grid-cols-[repeat(auto-fit,minmax(17rem,1fr))]">
               {!revenueUnavailable && trendDays.length >= 2 && (
                 <RevenueTrendCard days={trendDays} />
               )}
@@ -189,7 +195,7 @@ export default function DashboardPage() {
             {/* Operations row */}
             {(canOrders || canGaps || canLowStock) && (
             // Same reason as the charts row above.
-            <div data-testid="dashboard-operations-row" className="mb-6 grid gap-4 grid-cols-[repeat(auto-fit,minmax(20rem,1fr))]">
+            <div data-testid="dashboard-operations-row" className="mb-6 grid gap-4 grid-cols-[repeat(auto-fit,minmax(17rem,1fr))]">
               {/* Branch Orders Today */}
               {canOrders && (
               <Card>

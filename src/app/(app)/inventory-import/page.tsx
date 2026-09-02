@@ -276,7 +276,7 @@ export default function InventoryImportPage() {
                                     onValueChange={(v) => decide(u.label, { kind: 'create', type: v as ProductType })}
                                     disabled={d?.kind === 'skip'}
                                   >
-                                    <SelectTrigger className="h-8 w-[130px]"><SelectValue /></SelectTrigger>
+                                    <SelectTrigger className="h-11 md:h-8 w-[130px]"><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                       {PRODUCT_TYPES.map((t) => (
                                         <SelectItem key={t} value={t}>{TYPE_LABEL[t]}</SelectItem>

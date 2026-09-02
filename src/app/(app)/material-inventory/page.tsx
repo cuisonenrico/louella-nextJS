@@ -144,11 +144,11 @@ export default function MaterialInventoryPage() {
           <SmallScreenNotice storageKey="material-inventory" />
           {/* Date navigation */}
           <div className="flex items-center gap-2 mb-3 flex-wrap">
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setFilterDate(addDays(filterDate, -1))}>
+            <Button variant="ghost" size="icon" className="size-11 md:size-8" onClick={() => setFilterDate(addDays(filterDate, -1))}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <Input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="w-[160px] h-8" />
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setFilterDate(addDays(filterDate, 1))} disabled={filterDate >= todayStr()}>
+            <Input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="w-[160px] h-11 md:h-8" />
+            <Button variant="ghost" size="icon" className="size-11 md:size-8" onClick={() => setFilterDate(addDays(filterDate, 1))} disabled={filterDate >= todayStr()}>
               <ChevronRight className="h-4 w-4" />
             </Button>
             {filterDate !== todayStr() && (

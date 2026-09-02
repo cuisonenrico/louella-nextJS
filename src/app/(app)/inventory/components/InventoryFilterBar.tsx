@@ -55,7 +55,7 @@ export default function InventoryFilterBar({
         </ToggleGroup>
 
         <Tooltip><TooltipTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Previous period" onClick={() => onStepDate(-1)}>
+          <Button variant="ghost" size="icon" className="size-11 md:size-8" aria-label="Previous period" onClick={() => onStepDate(-1)}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
         </TooltipTrigger><TooltipContent>Previous period</TooltipContent></Tooltip>
@@ -70,7 +70,7 @@ export default function InventoryFilterBar({
               onDraftToChange(v);
               onCommitDates(v, v);
             }}
-            className="w-[150px] h-8"
+            className="w-[150px] h-11 md:h-8"
           />
         ) : (
           <>
@@ -83,7 +83,7 @@ export default function InventoryFilterBar({
                 if (v > draftTo) onDraftToChange(v);
               }}
               onBlur={() => onCommitDates(draftFrom, draftTo)}
-              className="w-[150px] h-8"
+              className="w-[150px] h-11 md:h-8"
             />
             <span className="text-muted-foreground text-sm">—</span>
             <Input
@@ -95,13 +95,13 @@ export default function InventoryFilterBar({
                 if (v < draftFrom) onDraftFromChange(v);
               }}
               onBlur={() => onCommitDates(draftFrom, draftTo)}
-              className="w-[150px] h-8"
+              className="w-[150px] h-11 md:h-8"
             />
           </>
         )}
 
         <Tooltip><TooltipTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Next period" onClick={() => onStepDate(1)}>
+          <Button variant="ghost" size="icon" className="size-11 md:size-8" aria-label="Next period" onClick={() => onStepDate(1)}>
             <ChevronRight className="h-4 w-4" />
           </Button>
         </TooltipTrigger><TooltipContent>Next period</TooltipContent></Tooltip>

@@ -114,7 +114,7 @@ export default function RejectionByProductCard({
                   // keep range valid — clamp end date forward if needed
                   if (v > internalTo) setInternalTo(v);
                 }}
-                className="w-36 h-8 text-xs"
+                className="w-36 h-11 md:h-8 text-base md:text-xs"
               />
               <span className="text-xs text-muted-foreground">to</span>
               <Input

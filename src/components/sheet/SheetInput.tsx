@@ -95,7 +95,12 @@ export function SheetInput({
       type="text"
       inputMode={decimal ? 'decimal' : 'numeric'}
       className={cn(
-        'h-8 w-full bg-transparent px-2 text-right tabular-nums outline-none focus:bg-primary/10 focus:ring-2 focus:ring-inset focus:ring-primary',
+        // 16px below md. The 32px cell height is a deliberate exemption —
+        // sizing grid rows for touch would halve what fits on the desktop
+        // screens these are built for — but that exemption was about the
+        // target, never about accepting an iOS viewport zoom on focus,
+        // which a sub-16px font causes regardless of the row height.
+        'h-8 w-full bg-transparent px-2 text-base md:text-sm text-right tabular-nums outline-none focus:bg-primary/10 focus:ring-2 focus:ring-inset focus:ring-primary',
         className,
       )}
       value={text}

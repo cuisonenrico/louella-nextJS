@@ -342,21 +342,21 @@ export default function UsersPage() {
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
                       <Tooltip><TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openRole(u)}>
+                        <Button variant="ghost" size="icon" className="size-11 md:size-8" onClick={() => openRole(u)}>
                           <Pencil className="h-4 w-4" />
                         </Button>
                       </TooltipTrigger><TooltipContent>Edit Role</TooltipContent></Tooltip>
 
                       {u.role === 'MANAGER' && (
                         <Tooltip><TooltipTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openBranch(u)}>
+                          <Button variant="ghost" size="icon" className="size-11 md:size-8" onClick={() => openBranch(u)}>
                             <GitBranch className="h-4 w-4" />
                           </Button>
                         </TooltipTrigger><TooltipContent>Assign Branch</TooltipContent></Tooltip>
                       )}
 
                       <Tooltip><TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openReset(u)}>
+                        <Button variant="ghost" size="icon" className="size-11 md:size-8" onClick={() => openReset(u)}>
                           <KeyRound className="h-4 w-4" />
                         </Button>
                       </TooltipTrigger><TooltipContent>Reset Password</TooltipContent></Tooltip>
@@ -364,7 +364,7 @@ export default function UsersPage() {
                       <Tooltip><TooltipTrigger asChild>
                         <Button
                           variant="ghost" size="icon"
-                          className={`h-8 w-8 ${u.isActive ? 'text-destructive hover:text-destructive' : 'text-green-600 hover:text-green-700'}`}
+                          className={`size-11 md:size-8 ${u.isActive ? 'text-destructive hover:text-destructive' : 'text-green-600 hover:text-green-700'}`}
                           disabled={statusMutation.isPending}
                           onClick={() => statusMutation.mutate({ id: u.id, isActive: !u.isActive })}
                         >
@@ -373,7 +373,7 @@ export default function UsersPage() {
                       </TooltipTrigger><TooltipContent>{u.isActive ? 'Deactivate' : 'Activate'}</TooltipContent></Tooltip>
 
                       <Tooltip><TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setPermTarget(u)}>
+                        <Button variant="ghost" size="icon" className="size-11 md:size-8" onClick={() => setPermTarget(u)}>
                           <ShieldCheck className="h-4 w-4" />
                         </Button>
                       </TooltipTrigger><TooltipContent>Permissions</TooltipContent></Tooltip>

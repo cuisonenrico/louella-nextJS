@@ -78,7 +78,7 @@ export function AdjustmentsDialog({ record, onClose }: { record: MaterialInvento
             <div className="min-w-[120px]">
               <Label className="text-xs">Type</Label>
               <Select value={type} onValueChange={(v) => setType(v as typeof type)}>
-                <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-11 md:h-8"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="PULL_IN">Pull In</SelectItem>
                   <SelectItem value="PULL_OUT">Pull Out</SelectItem>
@@ -88,11 +88,11 @@ export function AdjustmentsDialog({ record, onClose }: { record: MaterialInvento
             </div>
             <div className="w-[100px]">
               <Label className="text-xs">Value</Label>
-              <Input type="number" value={value} onChange={(e) => setValue(e.target.value)} min={0} step={0.01} className="h-8" />
+              <Input type="number" value={value} onChange={(e) => setValue(e.target.value)} min={0} step={0.01} className="h-11 md:h-8" />
             </div>
             <div className="flex-grow min-w-[120px]">
               <Label className="text-xs">Notes</Label>
-              <Input value={notes} onChange={(e) => setNotes(e.target.value)} className="h-8" />
+              <Input value={notes} onChange={(e) => setNotes(e.target.value)} className="h-11 md:h-8" />
             </div>
             <Button size="sm" disabled={!value || parseFloat(value) <= 0 || createAdj.isPending} onClick={() => createAdj.mutate()}>
               {createAdj.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Add'}
