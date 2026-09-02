@@ -69,7 +69,16 @@ export function InventoryTableRow({
 
   return (
     <TableRow className={hasPending ? 'bg-amber-50/50' : ''}>
-      <TableCell className={cn(CELL, 'px-2 font-medium')}>
+      {/* Frozen identity column, mirroring ProductionSheet. The cell needs a
+          solid background that tracks the row tint — a transparent sticky cell
+          shows the columns scrolling under it. */}
+      <TableCell
+        className={cn(
+          CELL,
+          'sticky left-0 z-10 px-2 font-medium',
+          hasPending ? 'bg-amber-50' : 'bg-background'
+        )}
+      >
         {product?.name ?? `Product #${inv.productId}`}
       </TableCell>
       {!isRange && (

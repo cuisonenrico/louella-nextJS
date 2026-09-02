@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { usePageHeader } from '@/components/layout/usePageHeader';
+import SmallScreenNotice from '@/components/layout/SmallScreenNotice';
 import Link from 'next/link';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { TableSkeleton } from '@/components/loading/Skeletons';
@@ -168,6 +169,7 @@ export default function ProductionPage() {
   return (
     <>
         <TooltipProvider>
+          <SmallScreenNotice storageKey="production" />
           <ProductionTabNav />
           <ProductionDateToolbar
             filterDate={filterDate}

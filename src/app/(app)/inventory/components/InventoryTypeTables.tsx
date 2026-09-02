@@ -68,7 +68,7 @@ export default function InventoryTypeTables({
     <Table containerClassName={SHEET_CONTAINER} className={SHEET_TABLE}>
       <TableHeader>
         <TableRow className="hover:bg-transparent">
-          <TableHead className={cn(SHEET_HEAD, 'text-left min-w-[140px]')}>Product</TableHead>
+          <TableHead className={cn(SHEET_HEAD, 'sticky left-0 z-30 text-left min-w-[140px]')}>Product</TableHead>
           {!isRange && <TableHead className={cn(SHEET_HEAD, 'text-right w-[100px]')}>Prev. Leftover</TableHead>}
           <TableHead className={cn(SHEET_HEAD, 'text-right w-[90px]')}>Delivery</TableHead>
           {hasBranchFilter && <TableHead className={cn(SHEET_HEAD, 'text-center w-[110px]')}>Adjustments</TableHead>}

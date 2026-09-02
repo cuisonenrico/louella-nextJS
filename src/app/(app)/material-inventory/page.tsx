@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { usePageHeader } from '@/components/layout/usePageHeader';
+import SmallScreenNotice from '@/components/layout/SmallScreenNotice';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft, ChevronRight, Plus, Trash2, Pencil, Settings2 } from 'lucide-react';
 import QueryError from '@/components/QueryError';
@@ -140,6 +141,7 @@ export default function MaterialInventoryPage() {
   return (
     <>
         <TooltipProvider>
+          <SmallScreenNotice storageKey="material-inventory" />
           {/* Date navigation */}
           <div className="flex items-center gap-2 mb-3 flex-wrap">
             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setFilterDate(addDays(filterDate, -1))}>
@@ -196,7 +198,7 @@ export default function MaterialInventoryPage() {
             <Table containerClassName={SHEET_CONTAINER} className={SHEET_TABLE}>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
-                  <TableHead className={cn(SHEET_HEAD, 'text-left min-w-[130px]')}>Material</TableHead>
+                  <TableHead className={cn(SHEET_HEAD, 'sticky left-0 z-30 text-left min-w-[130px]')}>Material</TableHead>
                   <TableHead className={cn(SHEET_HEAD, 'text-left w-[60px]')}>Unit</TableHead>
                   <TableHead className={cn(SHEET_HEAD, 'text-right w-[90px]')}>Price/Unit</TableHead>
                   <TableHead className={cn(SHEET_HEAD, 'text-right w-[80px]')}>Opening</TableHead>
@@ -219,7 +221,17 @@ export default function MaterialInventoryPage() {
 
                   return (
                     <TableRow key={r.id} className={hasPending ? 'bg-amber-50/50' : ''}>
-                      <TableCell className={cn(SHEET_CELL, 'px-2 font-medium')}>{r.material?.name ?? `#${r.materialId}`}</TableCell>
+                      {/* Frozen identity column; solid background so the
+                          scrolling columns do not show through it. */}
+                      <TableCell
+                        className={cn(
+                          SHEET_CELL,
+                          'sticky left-0 z-10 px-2 font-medium',
+                          hasPending ? 'bg-amber-50' : 'bg-background'
+                        )}
+                      >
+                        {r.material?.name ?? `#${r.materialId}`}
+                      </TableCell>
                       <TableCell className={cn(SHEET_CELL, 'px-2')}><Badge variant="secondary" className="text-xs">{r.material?.unit ?? ''}</Badge></TableCell>
                       <TableCell className={cn(SHEET_CELL, 'px-2 text-right tabular-nums text-muted-foreground')}>₱{fmt(price)}</TableCell>
                       <TableCell className={cn(SHEET_CELL, 'px-2 text-right tabular-nums text-muted-foreground')}>{fmt(r.quantity)}</TableCell>

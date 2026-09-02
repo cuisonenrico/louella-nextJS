@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { usePageHeader } from '@/components/layout/usePageHeader';
+import SmallScreenNotice from '@/components/layout/SmallScreenNotice';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, AlertTriangle, Info } from 'lucide-react';
 import dayjs from 'dayjs';
@@ -209,6 +210,7 @@ export default function InventoryDetailsPage() {
   return (
     <>
         <TooltipProvider>
+          <SmallScreenNotice storageKey="inventory-details" />
           <InventoryFilterBar
             dateMode={dateMode}
             draftFrom={draftFrom}
