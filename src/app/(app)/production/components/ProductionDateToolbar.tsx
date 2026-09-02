@@ -34,7 +34,7 @@ export default function ProductionDateToolbar({
           type="date"
           value={filterDate}
           onChange={(e) => onDateChange(e.target.value)}
-          className="w-[150px] h-8"
+          className="w-[150px] h-11 md:h-8"
         />
 
         <Tooltip><TooltipTrigger asChild>

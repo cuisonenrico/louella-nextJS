@@ -104,7 +104,7 @@ export function BulkSetDialog({ open, filterDate, materials, existingRows, onClo
                       <div className="flex flex-col items-end gap-0.5">
                         <Input
                           ref={(el) => { if (el) inputRefs.current.set(m.id, el); else inputRefs.current.delete(m.id); }}
-                          type="number" min={0} step={0.01} className="h-8 w-24 text-right"
+                          type="number" min={0} step={0.01} className="h-11 md:h-8 w-24 text-base md:text-sm text-right"
                           value={deliveries.get(m.id) ?? '0'}
                           onChange={(e) => setDeliveries((prev) => { const next = new Map(prev); next.set(m.id, e.target.value); return next; })}
                           onKeyDown={(e) => handleKeyDown(e, m.id)}

@@ -128,10 +128,10 @@ export default function RejectionByProductCard({
                   // keep range valid — clamp start date back if needed
                   if (v < internalFrom) setInternalFrom(v);
                 }}
-                className="w-36 h-8 text-xs"
+                className="w-36 h-11 md:h-8 text-base md:text-xs"
               />
               <Select value={internalBranch} onValueChange={setInternalBranch}>
-                <SelectTrigger className="w-36 h-8 text-xs">
+                <SelectTrigger className="w-36 h-11 md:h-8 text-base md:text-xs">
                   <SelectValue placeholder="All branches" />
                 </SelectTrigger>
                 <SelectContent>

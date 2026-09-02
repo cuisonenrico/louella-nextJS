@@ -274,7 +274,7 @@ export function ProductionOrderFormDialog({
                           <Input
                             ref={(el) => { if (el) inputRefs.current.set(p.id, el); else inputRefs.current.delete(p.id); }}
                             type="number"
-                            className="h-8 w-28 ml-auto text-right"
+                            className="h-11 md:h-8 w-28 ml-auto text-base md:text-sm text-right"
                             min={0}
                             value={String(formItems.get(p.id) ?? 0)}
                             onChange={(e) => {

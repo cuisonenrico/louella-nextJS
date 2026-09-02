@@ -356,7 +356,7 @@ export default function SalesPage() {
                       placeholder="Search date..."
                       value={dateSearch}
                       onChange={(e) => setDateSearch(e.target.value)}
-                      className="h-8 w-40 text-xs shrink-0"
+                      className="h-11 md:h-8 w-40 text-base md:text-xs shrink-0"
                     />
                   </div>
                 </CardHeader>

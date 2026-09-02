@@ -22,7 +22,7 @@ export default function ProductionTabNav() {
           key={tab.href}
           href={tab.href}
           className={cn(
-            'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors',
+            'flex min-h-11 md:min-h-0 items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors',
             tab.active
               ? 'border-primary text-primary'
               : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/40'

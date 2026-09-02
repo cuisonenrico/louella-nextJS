@@ -97,7 +97,7 @@ export function ProductionSheet({
           <TableHead className={cn(SHEET_HEAD, 'z-20 text-right w-[90px]')}>Yield</TableHead>
           <TableHead className={cn(SHEET_HEAD, 'z-20 text-right w-[100px]')}>
             <Tooltip>
-              <TooltipTrigger className="underline decoration-dotted cursor-help">Discrepancy</TooltipTrigger>
+              <TooltipTrigger className="py-1 underline decoration-dotted cursor-help">Discrepancy</TooltipTrigger>
               <TooltipContent className="max-w-[200px] text-center">Yield minus Planned. Negative = under-produced vs plan.</TooltipContent>
             </Tooltip>
           </TableHead>
