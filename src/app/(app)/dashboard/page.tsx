@@ -112,14 +112,21 @@ export default function DashboardPage() {
 
             {/* Charts row */}
             {(canRevenue || canMix) && (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+            // `auto-fit` rather than a fixed column count: which cards render
+            // is a function of the viewer's panel permissions (see `dashboard`
+            // in src/lib/rbac/features.ts), so the column count has to be
+            // derived, not declared. A manager holding two of three panels
+            // would otherwise get two cards in a three-column grid. 20rem is
+            // the narrowest a card stays readable, so this also collapses to
+            // one column on a phone for free.
+            <div data-testid="dashboard-charts-row" className="mb-6 grid gap-4 grid-cols-[repeat(auto-fit,minmax(20rem,1fr))]">
               {!revenueUnavailable && trendDays.length >= 2 && (
                 <RevenueTrendCard days={trendDays} />
               )}
 
               {/* Production mix */}
               {canMix && data.production && (
-              <Card className={revenueUnavailable || trendDays.length < 2 ? 'lg:col-span-3' : ''}>
+              <Card>
                 <CardContent className="p-6">
                   <div className="flex items-center gap-2 mb-4">
                     <Factory className="h-5 w-5 text-primary" />
@@ -181,7 +188,8 @@ export default function DashboardPage() {
 
             {/* Operations row */}
             {(canOrders || canGaps || canLowStock) && (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+            // Same reason as the charts row above.
+            <div data-testid="dashboard-operations-row" className="mb-6 grid gap-4 grid-cols-[repeat(auto-fit,minmax(20rem,1fr))]">
               {/* Branch Orders Today */}
               {canOrders && (
               <Card>
