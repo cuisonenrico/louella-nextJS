@@ -28,7 +28,11 @@ export default function Sidebar({
 
   return (
     <aside
-      className="fixed inset-y-0 left-0 z-40 flex flex-col overflow-hidden border-r-0 text-white transition-all duration-200"
+      data-testid="sidebar-aside"
+      // `hidden md:flex`, not a JS breakpoint: below md the drawer renders this
+      // same content, and mounting it only when opened means the nav never
+      // exists twice and hydration has nothing to disagree about.
+      className="hidden md:flex sticky top-0 h-screen shrink-0 flex-col overflow-hidden border-r-0 text-white transition-all duration-200"
       style={{
         width,
         background: 'linear-gradient(180deg, #33200F 0%, #241407 100%)',

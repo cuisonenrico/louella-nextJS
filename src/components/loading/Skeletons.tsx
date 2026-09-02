@@ -120,8 +120,9 @@ export function AppShellSkeleton() {
           <Skeleton key={i} className="h-9 w-full" />
         ))}
       </aside>
-      {/* Main column */}
-      <div className="flex flex-1 flex-col">
+      {/* Main column — min-w-0 for the same reason AppShell needs it: a flex
+          child will not shrink below its content's intrinsic width. */}
+      <div className="flex min-w-0 flex-1 flex-col">
         {/* Header */}
         <div className="flex h-16 items-center gap-4 border-b px-6">
           <Skeleton className="h-6 w-40" />

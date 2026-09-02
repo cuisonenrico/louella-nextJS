@@ -3,8 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePageHeaderStore } from '@/lib/pageHeaderStore';
-import { DRAWER_WIDTH } from './Sidebar';
-import { LogOut } from 'lucide-react';
+import { LogOut, Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -15,7 +14,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-export default function Header({ sidebarWidth = DRAWER_WIDTH }: { sidebarWidth?: number }) {
+export default function Header({ onOpenNav }: { onOpenNav?: () => void }) {
   const { user, logout } = useAuth();
   const router = useRouter();
   const title = usePageHeaderStore((s) => s.title);
@@ -30,10 +29,20 @@ export default function Header({ sidebarWidth = DRAWER_WIDTH }: { sidebarWidth?:
   const initials = user?.email?.slice(0, 2).toUpperCase() ?? '??';
 
   return (
-    <header
-      className="fixed top-0 z-30 flex min-h-14 items-center border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-6 transition-all duration-200 gap-4"
-      style={{ left: sidebarWidth, width: `calc(100% - ${sidebarWidth}px)` }}
-    >
+    // A flow child of the content column, not a fixed bar measured against the
+    // sidebar's pixel width. `sticky` keeps it in view without taking it out of
+    // the layout, so `main` needs no compensating top padding.
+    <header className="sticky top-0 z-30 flex min-h-14 flex-wrap items-center gap-2 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60 md:flex-nowrap md:gap-4 md:px-6">
+      <Button
+        variant="ghost"
+        size="icon"
+        className="md:hidden size-11 shrink-0"
+        aria-label="Open navigation"
+        onClick={onOpenNav}
+      >
+        <Menu className="size-5" />
+      </Button>
+
       {title && <h2 className="font-display text-xl font-semibold tracking-tight shrink-0">{title}</h2>}
       {headerContent && <div className="flex items-center gap-4">{headerContent}</div>}
       <div className="flex-1" />
