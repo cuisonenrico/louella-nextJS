@@ -651,7 +651,7 @@ function AccessPreview({
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1.5">
         {screens.map((f) => {
           const roleGrants = roleGrantsKey(f.key);
           const checked = overrides[f.key] ?? roleGrants;

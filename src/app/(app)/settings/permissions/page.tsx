@@ -13,6 +13,14 @@ import type {
 } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -169,19 +177,24 @@ function RoleMatrixTab() {
 
   return (
     <Card className="overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b bg-muted/50">
-              <th className="text-left px-4 py-3 font-semibold w-80">Feature</th>
-              {DISPLAY_ROLES.map((r) => (
-                <th key={r} className="text-center px-4 py-3 font-semibold min-w-[120px]">
-                  {ROLE_LABELS[r]}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
+      {/* The matrix is six columns wide and the permission name is what makes a
+          row identifiable, so it is frozen while the role columns scroll. The
+          sticky cells carry a solid background — a translucent one shows the
+          scrolling columns through it. */}
+      <Table containerClassName="overflow-x-auto">
+        <TableHeader>
+          <TableRow className="border-b bg-muted/50 hover:bg-muted/50">
+            <TableHead className="w-80 bg-muted px-4 py-3 text-left font-semibold text-foreground sticky left-0 z-30 border-r border-border">
+              Feature
+            </TableHead>
+            {DISPLAY_ROLES.map((r) => (
+              <TableHead key={r} className="min-w-[120px] px-4 py-3 text-center font-semibold text-foreground">
+                {ROLE_LABELS[r]}
+              </TableHead>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
             {groups.map(({ group, nodes }) => (
               <FeatureGroup
                 key={group}
@@ -194,10 +207,9 @@ function RoleMatrixTab() {
                   mutation.mutate({ role, featureKey, enabled })
                 }
               />
-            ))}
-          </tbody>
-        </table>
-      </div>
+          ))}
+        </TableBody>
+      </Table>
     </Card>
   );
 }
@@ -219,20 +231,20 @@ function FeatureGroup({
 }) {
   return (
     <>
-      <tr className="border-b bg-muted/30">
-        <td colSpan={DISPLAY_ROLES.length + 1} className="px-4 py-1.5">
+      <TableRow className="border-b bg-muted/30 hover:bg-muted/30">
+        <TableCell colSpan={DISPLAY_ROLES.length + 1} className="px-4 py-1.5">
           <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
             {group}
           </span>
-        </td>
-      </tr>
+        </TableCell>
+      </TableRow>
       {nodes.map(({ row: f, children }) => {
         const isOpen = expanded.has(f.key);
         const summary = childSummary(children);
         return (
           <>
-            <tr key={f.key} className="border-b last:border-0">
-              <td className="px-4 py-3">
+            <TableRow key={f.key} className="border-b last:border-0">
+              <TableCell className="px-4 py-3 sticky left-0 z-20 border-r border-border bg-card">
                 <div className="flex items-center gap-1.5">
                   {children.length > 0 ? (
                     <button
@@ -264,7 +276,7 @@ function FeatureGroup({
                     {summary}
                   </button>
                 )}
-              </td>
+              </TableCell>
               {DISPLAY_ROLES.map((role) => (
                 <MatrixCell
                   key={role}
@@ -276,11 +288,11 @@ function FeatureGroup({
                   onToggle={onToggle}
                 />
               ))}
-            </tr>
+            </TableRow>
 
             {isOpen && children.map((c) => (
-              <tr key={c.key} className="border-b bg-muted/20 last:border-0">
-                <td className="py-2 pl-12 pr-4">
+              <TableRow key={c.key} className="border-b bg-muted/20 last:border-0">
+                <TableCell className="py-2 pl-12 pr-4 sticky left-0 z-20 border-r border-border bg-card">
                   <div className="flex items-center gap-1.5">
                     <KindIcon kind={c.kind} />
                     <p className="text-[13px]">{c.label}</p>
@@ -289,7 +301,7 @@ function FeatureGroup({
                   {c.description && (
                     <p className="text-xs text-muted-foreground">{c.description}</p>
                   )}
-                </td>
+                </TableCell>
                 {DISPLAY_ROLES.map((role) => (
                   <MatrixCell
                     key={role}
@@ -303,7 +315,7 @@ function FeatureGroup({
                     onToggle={onToggle}
                   />
                 ))}
-              </tr>
+              </TableRow>
             ))}
           </>
         );
@@ -331,7 +343,7 @@ function MatrixCell({
   pending: boolean;
   onToggle: (role: UserRole, featureKey: string, enabled: boolean) => void;
 }) {
-  if (!state) return <td />;
+  if (!state) return <TableCell />;
 
   // Two different reasons a switch cannot be used, and they need different
   // explanations: the role hierarchy would refuse the grant outright, or the
@@ -350,7 +362,7 @@ function MatrixCell({
   );
 
   return (
-    <td className="text-center px-4 py-3">
+    <TableCell className="text-center px-4 py-3">
       <div className="flex flex-col items-center gap-1">
         <div className="flex items-center gap-1.5">
           {unavailable || blockedByParent ? (
@@ -371,7 +383,7 @@ function MatrixCell({
           </span>
         )}
       </div>
-    </td>
+    </TableCell>
   );
 }
 

@@ -244,7 +244,7 @@ export default function RecipesPage() {
                     ))}
                   </TableBody>
                 </Table>
-                <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
                   <div className="p-2 rounded bg-muted"><p className="text-muted-foreground">Batch Cost</p><p className="font-semibold">₱{costTarget.totalBatchCost.toFixed(2)}</p></div>
                   <div className="p-2 rounded bg-muted"><p className="text-muted-foreground">Cost / Unit</p><p className="font-semibold">₱{costTarget.costPerUnit.toFixed(2)}</p></div>
                   <div className="p-2 rounded bg-muted"><p className="text-muted-foreground">Gross Profit / Unit</p><p className="font-semibold">₱{costTarget.grossProfitPerUnit.toFixed(2)}</p></div>

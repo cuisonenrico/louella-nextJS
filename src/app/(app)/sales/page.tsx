@@ -82,20 +82,25 @@ export default function SalesPage() {
     );
   }, [dashboard, dateSearch]);
 
-  const headerContent = (
-    <div className="flex items-center gap-5">
+  // Defined once and placed twice — in the shell header from md up, in the page
+  // body below it, where a wrapping flex row has somewhere to wrap to. One
+  // definition on purpose: these controls filter BranchGuard-scoped data, and a
+  // hand-written second copy is where a gate gets dropped the day this screen
+  // grows a panel key.
+  const controls = (
+    <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
       <div className="flex items-center gap-1.5">
         <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
         <div>
           <p className="text-[9px] uppercase tracking-widest text-muted-foreground leading-none mb-0.5">Start Date</p>
-          <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-6 text-xs border-0 shadow-none p-0 focus-visible:ring-0 w-28 cursor-pointer" />
+          <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-11 md:h-6 text-base md:text-xs border-0 shadow-none p-0 focus-visible:ring-0 w-28 cursor-pointer" />
         </div>
       </div>
       <div className="flex items-center gap-1.5">
         <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
         <div>
           <p className="text-[9px] uppercase tracking-widest text-muted-foreground leading-none mb-0.5">End Date</p>
-          <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="h-6 text-xs border-0 shadow-none p-0 focus-visible:ring-0 w-28 cursor-pointer" />
+          <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="h-11 md:h-6 text-base md:text-xs border-0 shadow-none p-0 focus-visible:ring-0 w-28 cursor-pointer" />
         </div>
       </div>
       <div className="flex items-center gap-1.5">
@@ -103,7 +108,7 @@ export default function SalesPage() {
         <div>
           <p className="text-[9px] uppercase tracking-widest text-muted-foreground leading-none mb-0.5">Branch</p>
           <Select value={branchId || '__all__'} onValueChange={(v) => setBranchId(v === '__all__' ? '' : v)}>
-            <SelectTrigger className="h-6 text-xs border-0 shadow-none p-0 focus:ring-0 w-28 gap-1">
+            <SelectTrigger className="h-11 md:h-6 text-base md:text-xs border-0 shadow-none p-0 focus:ring-0 w-28 gap-1">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -116,19 +121,25 @@ export default function SalesPage() {
     </div>
   );
 
+  const exportButton = (
+    <Button onClick={handleExport} disabled={isExporting} size="sm" className="h-11 md:h-9">
+      {isExporting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Download className="h-4 w-4 mr-2" />}
+      Export Revenue Report
+    </Button>
+  );
+
   usePageHeader({
     title: 'Revenue',
-    content: headerContent,
-    actions: (
-      <Button onClick={handleExport} disabled={isExporting} size="sm">
-        {isExporting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Download className="h-4 w-4 mr-2" />}
-        Export Revenue Report
-      </Button>
-    ),
+    content: <div className="hidden md:flex md:items-center">{controls}</div>,
+    actions: <div className="hidden md:block">{exportButton}</div>,
   });
 
   return (
     <>
+        <div className="mb-4 flex flex-wrap items-center gap-3 md:hidden">
+          {controls}
+          {exportButton}
+        </div>
         {isLoading ? (
           <DashboardSkeleton />
         ) : isError ? (
