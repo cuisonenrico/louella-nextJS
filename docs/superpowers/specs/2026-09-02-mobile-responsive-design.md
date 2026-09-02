@@ -1,7 +1,7 @@
 # Mobile-responsive web app
 
 **Date:** 2026-09-02 (revised after a full audit)
-**Status:** designed, not implemented
+**Status:** implemented and verified in a browser
 **Scope:** the Next.js web app only. No Flutter work.
 **Plan:** `docs/superpowers/plans/2026-09-02-mobile-responsive.md`
 
@@ -182,6 +182,112 @@ tap targets; 588 server + 294 frontend still green.
 - **AAA touch targets are a target below `md` only.** Desktop pointer input does
   not need them and widening every icon button globally would reflow the header
   and toolbars on the screens that are working today.
+
+## Verification
+
+Measured on a production build (`npm run build && npm start`) at 390 / 768 /
+1280, signed in as ADMIN and again as a branch MANAGER. Numbers are read out of
+the live DOM, not asserted against class strings.
+
+### Horizontal overflow
+
+`documentElement.scrollWidth <= clientWidth` — the objective form of "does it
+look broken". **No screen overflows the body at 390px.**
+
+Ten screens were walked with real navigations, chosen to cover every distinct
+pattern: all three grids, the widest table, the one header-injecting screen, a
+converted dialog, the shell and the dashboard.
+
+| Screen | Body overflow | Note |
+|---|---|---|
+| `/login` | none | inputs 16px / 44px tall, measured |
+| `/dashboard` | none | panel rows at 3 viewports, below |
+| `/settings/permissions` | none | 642px table scrolling inside a 341px container; 34 rows |
+| `/settings/users` | none | 26 controls, none under 44px |
+| `/products` | none | 165 rows, 334 controls, none under 44px |
+| `/materials` | none | 66 controls, none under 44px |
+| `/material-inventory` | none | 775px grid in a 326px container; notice shown |
+| `/inventory/details` | none | notice shown |
+| `/production` | none | 794px grid in a 326px container; sticky `Buns Big` cell, opaque background |
+| `/production-orders` | none | dialog opens as a bottom sheet |
+
+A wide table scrolling **inside its own container** is the intended behaviour
+and does not trip this; the body scrolling does.
+
+### Panel rows follow the granted panel count
+
+`grid-template-columns`, read live:
+
+| Viewport | Content width | Columns |
+|---|---|---|
+| 390px | 343px | `343px` — one |
+| 768px | 465px | `465px` — one |
+| 1280px | ~985px | `315px 315px 315px` — three |
+
+**This caught a regression a unit test could not.** At a 20rem floor, three
+tracks plus two gaps need 992px and only ~985px is available with the sidebar
+out, so `auto-fit` dropped to two columns and wrapped the third card — worse
+than the fixed grid it replaced. Lowered to 17rem. jsdom has no layout engine
+and reported the class string as correct throughout.
+
+### The drawer shows exactly what the sidebar shows
+
+At 390px the aside computes to `display: none`, the hamburger is visible, and
+opening the drawer mounts a second `nav[aria-label="Main"]`. Both lists were
+read from the DOM and compared: **18 items, identical.** This is the RBAC
+guarantee — one `navigationFor(permissions)` call, two mounts — confirmed in a
+real browser rather than only in jsdom.
+
+### Touch targets
+
+Every visible interactive control measured with `getBoundingClientRect` at
+390px.
+
+- **Nothing under 24×24 anywhere** — WCAG 2.2 AA (2.5.8) passes.
+- **Nothing under 44×44 outside the grid cells** — WCAG 2.5.5 AAA / Apple HIG.
+- The grid cells stay 32px by design (826 on `/production`, 124 on
+  `/material-inventory`), reachable only on the three screens the notice covers.
+
+The walk found four classes of miss that reading the source had not:
+`Button`'s own variants (40px default/icon, 36px `sm`), 24 icon buttons whose
+`h-8 w-8` override beat the variant through tailwind-merge, `ToggleGroupItem`
+at 36×36 (the branch and date-mode pickers), and eleven compact toolbar and
+dialog controls with their own `h-8`. All are fixed and `md:`-scoped, so
+pointer layouts are unchanged.
+
+### Form zoom
+
+No `input` or `textarea` anywhere renders below 16px at 390px — including the
+grid cells, which were raised even though their 32px height stays exempt. The
+height exemption was about the target, never about accepting a viewport zoom.
+
+Verified as a computed `font-size`, which is the mechanism iOS keys off.
+**The zoom behaviour itself was not reproduced on a device** — desktop Chrome's
+device emulation does not implement it. That is the one claim here resting on
+the mechanism rather than the symptom.
+
+### Suites
+
+- **588 server** (27 suites), **328 frontend + 1 skipped** (18 files) — up from
+  294 + 1; 34 new tests across 6 new spec files.
+- The 12 Sidebar and 13 RouteGuard tests pass **unedited**, which is the proof
+  this changed layout and not who sees what.
+- Typecheck clean. ESLint: 0 errors, the same 26 pre-existing warnings.
+- Production build compiles.
+
+### Not verified
+
+- iOS Safari's zoom on a real device (see above).
+- The narrowed-MANAGER panel set. The seeded manager account showed every
+  dashboard panel, so `ROLE_DEFAULTS` is not what is being applied to it — the
+  `RoleFeaturePermission` rows in this database predate the narrowing, and the
+  `20260902000000` migration is still unapplied. Unrelated to this work, but it
+  means the variable-card-count path was exercised by construction (the unit
+  tests) rather than by a live narrowed account.
+- The 13 remaining list screens were covered by an earlier sweep whose
+  `history.pushState` navigation proved unreliable; they share the primitives
+  fixed centrally here, but they were not individually re-walked.
+
 
 ## Risks
 
