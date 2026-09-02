@@ -15,8 +15,14 @@ export const SHEET_CELL = 'border-b border-r border-border last:border-r-0 h-8';
 export const SHEET_BANNER =
   'h-7 bg-muted/60 px-2 text-xs font-bold uppercase tracking-wider text-muted-foreground border-b border-border';
 
-/** Container classes for the scrollable sheet (pass as Table containerClassName). */
-export const SHEET_CONTAINER = 'max-h-[70vh] rounded-md border border-border bg-background';
+/**
+ * Container classes for the scrollable sheet (pass as Table containerClassName).
+ *
+ * `dvh` not `vh`: `vh` measures the large viewport, so a 70vh cap is taller than
+ * the screen while mobile browser chrome is showing and the grid overflows the
+ * page instead of scrolling inside itself.
+ */
+export const SHEET_CONTAINER = 'max-h-[70dvh] rounded-md border border-border bg-background';
 
 /** Table classes for the sheet (keeps gridlines crisp under sticky headers). */
 export const SHEET_TABLE = 'border-separate border-spacing-0';
