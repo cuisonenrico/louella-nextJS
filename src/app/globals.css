@@ -101,3 +101,11 @@ h3 {
     animation: none;
   }
 }
+
+/* ── Safe-area padding ───────────────────────────────────────────────────── */
+/* Clears the home indicator on notched devices and is a no-op everywhere else.
+   `env(safe-area-inset-*)` resolves to 0 unless the viewport carries
+   `viewport-fit=cover` — see the `viewport` export in src/app/layout.tsx. */
+@utility pb-safe {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
