@@ -6,7 +6,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { DollarSign } from 'lucide-react';
 import dayjs from 'dayjs';
 import { productionApi, branchesApi } from '@/lib/apiServices';
-import type { Branch, ConsumptionSummary } from '@/types';
+import type { Branch } from '@/types';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -39,11 +39,11 @@ export default function ProductionCostPage() {
   return (
     <>
         <div className="flex flex-wrap gap-4 items-end mb-6">
-          <div className="space-y-1"><Label className="text-xs">Date</Label><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-40" /></div>
+          <div className="space-y-1"><Label className="text-xs" htmlFor="date">Date</Label><Input id="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-40" /></div>
           <div className="space-y-1">
-            <Label className="text-xs">Branch</Label>
+            <Label className="text-xs" htmlFor="branch">Branch</Label>
             <Select value={branchId} onValueChange={setBranchId}>
-              <SelectTrigger className="w-48"><SelectValue placeholder="All branches" /></SelectTrigger>
+              <SelectTrigger id="branch" className="w-48"><SelectValue placeholder="All branches" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All branches</SelectItem>
                 {branches.map((b: Branch) => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}

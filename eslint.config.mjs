@@ -14,6 +14,25 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
   ]),
   {
+    // A leading underscore is this codebase's existing signal for "deliberately
+    // unused": destructured props kept for documentation, positional callback
+    // params, and the discarded half of an omit-a-field destructure. Honour it
+    // rather than reporting each one, which trained the eye to skip the warning
+    // list entirely.
+    rules: {
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        {
+          varsIgnorePattern: "^_",
+          argsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+          destructuredArrayIgnorePattern: "^_",
+          ignoreRestSiblings: true,
+        },
+      ],
+    },
+  },
+  {
     // The Nest API under src/server is server-side Node code that happens to
     // live in a Next.js project. Next's React/browser rules do not describe it,
     // and it carries its own conventions from when it was a standalone repo.

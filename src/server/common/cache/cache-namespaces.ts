@@ -2,6 +2,7 @@
 export const CACHE_NS = {
   INVENTORY_AGG: 'inventory-agg',
   MATERIAL_AGG: 'material-agg',
+  DASHBOARD_AGG: 'dashboard-agg',
 } as const;
 
 export type CacheNamespace = (typeof CACHE_NS)[keyof typeof CACHE_NS];

@@ -2,7 +2,7 @@
 
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { usePageHeader } from '@/components/layout/usePageHeader';
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { toast } from 'sonner';
 import {
   ChevronDown, ChevronRight, EyeOff, Loader2, Lock, Pencil, RotateCcw, Smartphone,
@@ -242,8 +242,11 @@ function FeatureGroup({
         const isOpen = expanded.has(f.key);
         const summary = childSummary(children);
         return (
-          <>
-            <TableRow key={f.key} className="border-b last:border-0">
+          // Keyed on the Fragment, not the TableRow inside it: the fragment is
+          // the list child, so a key on its child does not identify it and
+          // React reconciles rows by position.
+          <Fragment key={f.key}>
+            <TableRow className="border-b last:border-0">
               <TableCell className="px-4 py-3 sticky left-0 z-20 border-r border-border bg-card">
                 <div className="flex items-center gap-1.5">
                   {children.length > 0 ? (
@@ -317,7 +320,7 @@ function FeatureGroup({
                 ))}
               </TableRow>
             ))}
-          </>
+          </Fragment>
         );
       })}
     </>

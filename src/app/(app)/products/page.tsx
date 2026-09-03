@@ -270,28 +270,28 @@ function ProductForm({ form, setForm, formError }: { form: ProductFormData; setF
     <div className="space-y-4 py-2">
       {formError && <Alert variant="destructive"><AlertDescription>{formError}</AlertDescription></Alert>}
       <div className="space-y-2">
-        <Label>Name</Label>
-        <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} autoFocus />
+        <Label htmlFor="name">Name</Label>
+        <Input id="name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} autoFocus />
       </div>
       <div className="space-y-2">
-        <Label>Type</Label>
+        <Label htmlFor="type">Type</Label>
         <Select value={form.type} onValueChange={(v) => setForm((f) => ({ ...f, type: v as ProductType }))}>
-          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectTrigger id="type"><SelectValue /></SelectTrigger>
           <SelectContent>{PRODUCT_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
         </Select>
       </div>
       <div className="space-y-2">
-        <Label>Price (₱)</Label>
-        <Input type="number" min={0} step={0.01} value={form.price} onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))} />
+        <Label htmlFor="price">Price (₱)</Label>
+        <Input id="price" type="number" min={0} step={0.01} value={form.price} onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))} />
       </div>
       <div className="space-y-2">
-        <Label>Launch Date</Label>
-        <Input type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} />
+        <Label htmlFor="launch-date">Launch Date</Label>
+        <Input id="launch-date" type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} />
       </div>
       <div className="space-y-2">
-        <Label>Status</Label>
+        <Label htmlFor="status">Status</Label>
         <Select value={form.isActive ? 'active' : 'inactive'} onValueChange={(v) => setForm((f) => ({ ...f, isActive: v === 'active' }))}>
-          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectTrigger id="status"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="active">Active</SelectItem>
             <SelectItem value="inactive">Inactive</SelectItem>

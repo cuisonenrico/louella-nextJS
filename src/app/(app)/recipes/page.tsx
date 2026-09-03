@@ -18,7 +18,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import QueryError from '@/components/QueryError';
 import { CardGridSkeleton } from '@/components/loading/Skeletons';
@@ -183,23 +182,23 @@ export default function RecipesPage() {
               {formError && <Alert variant="destructive"><AlertDescription>{formError}</AlertDescription></Alert>}
               {!editTarget && (
                 <div className="space-y-2">
-                  <Label>Product</Label>
+                  <Label htmlFor="product">Product</Label>
                   <Select value={productId} onValueChange={setProductId}>
-                    <SelectTrigger><SelectValue placeholder="Select product" /></SelectTrigger>
+                    <SelectTrigger id="product"><SelectValue placeholder="Select product" /></SelectTrigger>
                     <SelectContent>{products.map((p: Product) => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
               )}
-              <div className="space-y-2"><Label>Yield (batches)</Label><Input type="number" value={recipeYield} onChange={(e) => setRecipeYield(e.target.value)} /></div>
-              <div className="space-y-2"><Label>Notes</Label><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} /></div>
+              <div className="space-y-2"><Label htmlFor="yield-batches">Yield (batches)</Label><Input id="yield-batches" type="number" value={recipeYield} onChange={(e) => setRecipeYield(e.target.value)} /></div>
+              <div className="space-y-2"><Label htmlFor="notes">Notes</Label><Textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} /></div>
 
               <div className="space-y-2">
-                <div className="flex justify-between items-center"><Label>Ingredients</Label><Button type="button" size="sm" variant="outline" onClick={addIngredient}><Plus className="mr-1 h-3 w-3" />Add</Button></div>
+                <div className="flex justify-between items-center"><Label htmlFor="ingredients">Ingredients</Label><Button type="button" size="sm" variant="outline" onClick={addIngredient}><Plus className="mr-1 h-3 w-3" />Add</Button></div>
                 {ingredients.map((ing, idx) => (
                   <div key={idx} className="flex gap-2 items-end">
                     <div className="flex-1">
                       <Select value={String(ing.materialId || '')} onValueChange={(v) => updateIngredient(idx, 'materialId', parseInt(v))}>
-                        <SelectTrigger className="h-9"><SelectValue placeholder="Material" /></SelectTrigger>
+                        <SelectTrigger id="ingredients" className="h-9"><SelectValue placeholder="Material" /></SelectTrigger>
                         <SelectContent>{materials.map((m: Material) => <SelectItem key={m.id} value={String(m.id)}>{m.name}</SelectItem>)}</SelectContent>
                       </Select>
                     </div>

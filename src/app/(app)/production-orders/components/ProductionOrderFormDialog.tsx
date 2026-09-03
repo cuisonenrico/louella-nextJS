@@ -171,9 +171,9 @@ export function ProductionOrderFormDialog({
         {formError && <Alert variant="destructive"><AlertDescription>{formError}</AlertDescription></Alert>}
 
         <div className="space-y-1">
-          <Label>Deliver to Branch</Label>
+          <Label htmlFor="deliver-to-branch">Deliver to Branch</Label>
           <Select value={formBranchId ? String(formBranchId) : ''} onValueChange={(v) => setFormBranchId(Number.parseInt(v, 10))}>
-            <SelectTrigger><SelectValue placeholder="Select branch" /></SelectTrigger>
+            <SelectTrigger id="deliver-to-branch"><SelectValue placeholder="Select branch" /></SelectTrigger>
             <SelectContent>
               {activeBranches.map((b) => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
             </SelectContent>
@@ -181,8 +181,8 @@ export function ProductionOrderFormDialog({
         </div>
 
         <div className="space-y-1">
-          <Label>Notes (optional)</Label>
-          <Textarea placeholder="Order notes..." value={formNotes} onChange={(e) => setFormNotes(e.target.value)} className="h-14 resize-none" />
+          <Label htmlFor="notes-optional">Notes (optional)</Label>
+          <Textarea id="notes-optional" placeholder="Order notes..." value={formNotes} onChange={(e) => setFormNotes(e.target.value)} className="h-14 resize-none" />
         </div>
 
         <div className="flex items-center justify-between gap-2">

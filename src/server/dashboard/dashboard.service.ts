@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { ProductType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { computeAdjSum } from '../common/utils/inventory-metrics.util';
+import { CacheNamespaceService } from '../common/cache/cache-namespace.service';
+import { CACHE_NS } from '../common/cache/cache-namespaces';
 
 export interface DashboardStats {
   products: { total: number; active: number };
@@ -80,9 +82,43 @@ export interface DashboardSummaryResponse {
 
 @Injectable()
 export class DashboardService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache: CacheNamespaceService,
+  ) {}
 
-  async getSummary(
+  /**
+   * The panel keys the summary actually branches on.
+   *
+   * The cache key needs the permissions that change the *shape* of the
+   * response, not the caller's whole 87-key grant list — keying on all of them
+   * would make the key enormous and cache-miss for every user.
+   */
+  private static readonly SUMMARY_PERMISSION_KEYS = [
+    'dashboard:kpis',
+    'dashboard:production-mix',
+    'dashboard:low-stock',
+    'dashboard:branch-gaps',
+    'dashboard:rejections',
+  ] as const;
+
+  getSummary(
+    date: string,
+    branchId: number | undefined,
+    permissions: readonly string[],
+  ): Promise<DashboardSummaryResponse> {
+    const shape = DashboardService.SUMMARY_PERMISSION_KEYS.map((k) =>
+      permissions.includes(k) ? '1' : '0',
+    ).join('');
+
+    return this.cache.wrap(
+      CACHE_NS.DASHBOARD_AGG,
+      ['summary', date, branchId ?? 'all', shape],
+      () => this.getSummaryUncached(date, branchId, permissions),
+    );
+  }
+
+  private async getSummaryUncached(
     date: string,
     branchId: number | undefined,
     permissions: readonly string[],

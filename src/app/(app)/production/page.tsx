@@ -152,7 +152,10 @@ export default function ProductionPage() {
       }
     }
     return map;
-  }, [allRows, branches, pendingProduction, pendingInventory]);
+    // getEffectiveValue is a useCallback over exactly pendingProduction and
+    // pendingInventory, so depending on it covers both and keeps this honest
+    // if the hook ever reads something else.
+  }, [allRows, branches, getEffectiveValue]);
 
   const hasOverAllocation = overAllocatedByProduct.size > 0;
 

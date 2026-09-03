@@ -52,8 +52,8 @@ export default function MaterialInventoryGapsPage() {
   return (
     <>
         <div className="flex flex-wrap gap-4 items-end mb-6">
-          <div className="space-y-1"><Label className="text-xs">Start Date</Label><Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-40" /></div>
-          <div className="space-y-1"><Label className="text-xs">End Date</Label><Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-40" /></div>
+          <div className="space-y-1"><Label className="text-xs" htmlFor="start-date">Start Date</Label><Input id="start-date" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-40" /></div>
+          <div className="space-y-1"><Label className="text-xs" htmlFor="end-date">End Date</Label><Input id="end-date" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-40" /></div>
           <Button variant="outline" onClick={() => fillTodayMut.mutate()} disabled={fillTodayMut.isPending}>
             {fillTodayMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}Fill Today
           </Button>

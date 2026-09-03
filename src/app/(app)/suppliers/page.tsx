@@ -67,7 +67,11 @@ export default function SuppliersPage() {
       name: form.name.trim(), contact: form.contact || undefined, phone: form.phone || undefined,
       email: form.email || undefined, address: form.address || undefined, isActive: form.isActive,
     };
-    editTarget ? updateMutation.mutate({ id: editTarget.id, data: payload }) : createMutation.mutate(payload);
+    if (editTarget) {
+      updateMutation.mutate({ id: editTarget.id, data: payload });
+    } else {
+      createMutation.mutate(payload);
+    }
   };
 
   const filtered = suppliers.filter((s: Supplier) => s.name.toLowerCase().includes(search.toLowerCase()));
@@ -121,14 +125,14 @@ export default function SuppliersPage() {
             <DialogHeader><DialogTitle>{editTarget ? 'Edit Supplier' : 'New Supplier'}</DialogTitle></DialogHeader>
             <div className="space-y-4 py-2">
               {formError && <Alert variant="destructive"><AlertDescription>{formError}</AlertDescription></Alert>}
-              <div className="space-y-2"><Label>Name</Label><Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} autoFocus /></div>
-              <div className="space-y-2"><Label>Contact Person</Label><Input value={form.contact} onChange={(e) => setForm((f) => ({ ...f, contact: e.target.value }))} /></div>
-              <div className="space-y-2"><Label>Phone</Label><Input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} /></div>
-              <div className="space-y-2"><Label>Email</Label><Input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} /></div>
-              <div className="space-y-2"><Label>Address</Label><Input value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} /></div>
+              <div className="space-y-2"><Label htmlFor="name">Name</Label><Input id="name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} autoFocus /></div>
+              <div className="space-y-2"><Label htmlFor="contact-person">Contact Person</Label><Input id="contact-person" value={form.contact} onChange={(e) => setForm((f) => ({ ...f, contact: e.target.value }))} /></div>
+              <div className="space-y-2"><Label htmlFor="phone">Phone</Label><Input id="phone" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} /></div>
+              <div className="space-y-2"><Label htmlFor="email">Email</Label><Input id="email" type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} /></div>
+              <div className="space-y-2"><Label htmlFor="address">Address</Label><Input id="address" value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} /></div>
               <div className="flex items-center gap-2">
-                <Switch checked={form.isActive} onCheckedChange={(v) => setForm((f) => ({ ...f, isActive: v }))} />
-                <Label>Active</Label>
+                <Switch id="is-active" checked={form.isActive} onCheckedChange={(v) => setForm((f) => ({ ...f, isActive: v }))} />
+                <Label htmlFor="is-active">Active</Label>
               </div>
             </div>
             <DialogFooter>

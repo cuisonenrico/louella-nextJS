@@ -37,6 +37,12 @@ export async function refreshAccessToken(): Promise<string> {
   return newAccessToken;
 }
 
+/** `/auth/login`, `/auth/refresh` and `/auth/logout` — with or without the base URL. */
+function isAuthEndpoint(url: string | undefined): boolean {
+  if (!url) return false;
+  return /\/auth\/(login|refresh|logout)\/?(\?|$)/.test(url);
+}
+
 // Auto-refresh on 401
 let isRefreshing = false;
 type FailedRequest = {
@@ -62,6 +68,16 @@ api.interceptors.response.use(
     const originalRequest = error.config as InternalAxiosRequestConfig & {
       _retry?: boolean;
     };
+
+    // The auth endpoints are never "an expired session" — they are how a
+    // session is established, renewed or ended, and their own 401 is the
+    // answer the caller asked for. Running the recovery path on them turned a
+    // wrong password into a silent reload that wiped the login form's error
+    // message before anyone could read it, and fired a pointless refresh
+    // against a 10/min budget on every failed attempt.
+    if (isAuthEndpoint(originalRequest?.url)) {
+      return Promise.reject(error);
+    }
 
     if (error.response?.status === 401 && !originalRequest._retry) {
       if (isRefreshing) {
@@ -90,7 +106,12 @@ api.interceptors.response.use(
       } catch (refreshError) {
         processQueue(refreshError, null);
         setAccessToken(null);
-        if (typeof window !== 'undefined') {
+        // Only a 401 from the refresh itself means the session is genuinely
+        // over. A 429, a 5xx or a dropped connection is transient — bouncing
+        // to /login on those threw the user out of a page mid-edit for what
+        // was really a blip. Let the caller surface it as an ordinary error.
+        const status = (refreshError as AxiosError)?.response?.status;
+        if (typeof window !== 'undefined' && status === 401) {
           window.location.href = '/login';
         }
         return Promise.reject(refreshError);

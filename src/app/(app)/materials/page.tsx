@@ -75,7 +75,11 @@ export default function MaterialsPage() {
     const price = parseFloat(form.pricePerUnit);
     if (isNaN(price) || price < 0) { setFormError('Valid price is required'); return; }
     const payload: Partial<Material> = { name: form.name.trim(), unit: form.unit, pricePerUnit: price, reorderLevel: parseFloat(form.reorderLevel) || 0 };
-    editTarget ? updateMut.mutate({ id: editTarget.id, data: payload }) : createMut.mutate(payload);
+    if (editTarget) {
+      updateMut.mutate({ id: editTarget.id, data: payload });
+    } else {
+      createMut.mutate(payload);
+    }
   };
 
   const filtered = materials.filter((m: Material) => m.name.toLowerCase().includes(search.toLowerCase()));
@@ -134,16 +138,16 @@ export default function MaterialsPage() {
               <TabsContent value="details">
                 <div className="space-y-4">
                   {formError && <Alert variant="destructive"><AlertDescription>{formError}</AlertDescription></Alert>}
-                  <div className="space-y-2"><Label>Name</Label><Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} autoFocus /></div>
+                  <div className="space-y-2"><Label htmlFor="name">Name</Label><Input id="name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} autoFocus /></div>
                   <div className="space-y-2">
-                    <Label>Unit</Label>
+                    <Label htmlFor="unit">Unit</Label>
                     <Select value={form.unit} onValueChange={(v) => setForm((f) => ({ ...f, unit: v as MeasurementUnit }))}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectTrigger id="unit"><SelectValue /></SelectTrigger>
                       <SelectContent>{UNITS.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
-                  <div className="space-y-2"><Label>Price per Unit (₱)</Label><Input type="number" step="0.01" value={form.pricePerUnit} onChange={(e) => setForm((f) => ({ ...f, pricePerUnit: e.target.value }))} /></div>
-                  <div className="space-y-2"><Label>Reorder Level</Label><Input type="number" value={form.reorderLevel} onChange={(e) => setForm((f) => ({ ...f, reorderLevel: e.target.value }))} /></div>
+                  <div className="space-y-2"><Label htmlFor="price-per-unit">Price per Unit (₱)</Label><Input id="price-per-unit" type="number" step="0.01" value={form.pricePerUnit} onChange={(e) => setForm((f) => ({ ...f, pricePerUnit: e.target.value }))} /></div>
+                  <div className="space-y-2"><Label htmlFor="reorder-level">Reorder Level</Label><Input id="reorder-level" type="number" value={form.reorderLevel} onChange={(e) => setForm((f) => ({ ...f, reorderLevel: e.target.value }))} /></div>
                 </div>
               </TabsContent>
               {editTarget && (

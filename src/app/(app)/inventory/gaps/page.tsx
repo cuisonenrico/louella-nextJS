@@ -12,7 +12,7 @@ import type { Branch, GapEntry } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -58,12 +58,12 @@ export default function InventoryGapsPage() {
   return (
     <>
         <div className="flex flex-wrap gap-4 items-end mb-6">
-          <div className="space-y-1"><Label className="text-xs">Start Date</Label><Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-40" /></div>
-          <div className="space-y-1"><Label className="text-xs">End Date</Label><Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-40" /></div>
+          <div className="space-y-1"><Label className="text-xs" htmlFor="start-date">Start Date</Label><Input id="start-date" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-40" /></div>
+          <div className="space-y-1"><Label className="text-xs" htmlFor="end-date">End Date</Label><Input id="end-date" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-40" /></div>
           <div className="space-y-1">
-            <Label className="text-xs">Branch</Label>
+            <Label className="text-xs" htmlFor="branch">Branch</Label>
             <Select value={branchId} onValueChange={setBranchId}>
-              <SelectTrigger className="w-48"><SelectValue placeholder="All branches" /></SelectTrigger>
+              <SelectTrigger id="branch" className="w-48"><SelectValue placeholder="All branches" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All branches</SelectItem>
                 {branches.map((b: Branch) => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}

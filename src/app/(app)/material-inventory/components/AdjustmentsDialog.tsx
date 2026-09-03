@@ -76,9 +76,9 @@ export function AdjustmentsDialog({ record, onClose }: { record: MaterialInvento
           <p className="text-sm font-bold">Add Adjustment</p>
           <div className="flex gap-2 flex-wrap items-end">
             <div className="min-w-[120px]">
-              <Label className="text-xs">Type</Label>
+              <Label className="text-xs" htmlFor="type">Type</Label>
               <Select value={type} onValueChange={(v) => setType(v as typeof type)}>
-                <SelectTrigger className="h-11 md:h-8"><SelectValue /></SelectTrigger>
+                <SelectTrigger id="type" className="h-11 md:h-8"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="PULL_IN">Pull In</SelectItem>
                   <SelectItem value="PULL_OUT">Pull Out</SelectItem>
@@ -87,12 +87,12 @@ export function AdjustmentsDialog({ record, onClose }: { record: MaterialInvento
               </Select>
             </div>
             <div className="w-[100px]">
-              <Label className="text-xs">Value</Label>
-              <Input type="number" value={value} onChange={(e) => setValue(e.target.value)} min={0} step={0.01} className="h-11 md:h-8" />
+              <Label className="text-xs" htmlFor="value">Value</Label>
+              <Input id="value" type="number" value={value} onChange={(e) => setValue(e.target.value)} min={0} step={0.01} className="h-11 md:h-8" />
             </div>
             <div className="flex-grow min-w-[120px]">
-              <Label className="text-xs">Notes</Label>
-              <Input value={notes} onChange={(e) => setNotes(e.target.value)} className="h-11 md:h-8" />
+              <Label className="text-xs" htmlFor="notes">Notes</Label>
+              <Input id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} className="h-11 md:h-8" />
             </div>
             <Button size="sm" disabled={!value || parseFloat(value) <= 0 || createAdj.isPending} onClick={() => createAdj.mutate()}>
               {createAdj.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Add'}

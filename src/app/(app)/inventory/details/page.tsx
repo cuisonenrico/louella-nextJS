@@ -29,6 +29,11 @@ import { TableSkeleton } from '@/components/loading/Skeletons';
 
 const PRODUCT_TYPE_ORDER: ProductType[] = ['BREAD', 'CAKE', 'SPECIAL', 'MISCELLANEOUS'];
 
+// A stable identity for "no rows yet". Writing `?? []` inline produced a fresh
+// array on every render, which changed the dependency of every downstream
+// useMemo and rebuilt the grouping and counts each time the page re-rendered.
+const NO_ROWS: Inventory[] = [];
+
 export default function InventoryDetailsPage() {
   usePageHeader({ title: 'Inventory Details' });
   const qc = useQueryClient();
@@ -81,7 +86,7 @@ export default function InventoryDetailsPage() {
     placeholderData: keepPreviousData,
   });
 
-  const rows = invQuery.data ?? [];
+  const rows = invQuery.data ?? NO_ROWS;
   const displayRows = useInventoryDisplayRows(rows, filterBranch, isRange);
 
   // Group by product type

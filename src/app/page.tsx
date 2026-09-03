@@ -57,6 +57,7 @@ export default function Home() {
         <LandingCta />
       </header>
 
+      <main>
       {/* Hero */}
       <section className="mx-auto max-w-6xl px-6 pb-16 pt-14 sm:pt-24">
         <p className="mb-5 text-xs font-semibold uppercase tracking-[0.22em] text-secondary">
@@ -135,6 +136,8 @@ export default function Home() {
           ))}
         </div>
       </section>
+
+      </main>
 
       {/* Footer */}
       <footer className="bg-foreground text-background">

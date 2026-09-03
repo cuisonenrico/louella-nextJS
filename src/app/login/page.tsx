@@ -46,7 +46,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+    <main className="flex min-h-screen items-center justify-center bg-background p-4">
       <div className="w-full max-w-4xl overflow-hidden rounded-2xl border bg-card shadow-sm md:grid md:grid-cols-[1.1fr_1fr]">
         {/* Brand panel */}
         <div className="relative hidden flex-col justify-between bg-foreground p-10 text-background md:flex">
@@ -121,6 +121,6 @@ export default function LoginPage() {
           </Link>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

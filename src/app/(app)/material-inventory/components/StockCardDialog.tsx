@@ -92,18 +92,18 @@ export function StockCardDialog({ open, editRecord, filterDate, materials, suppl
       <ResponsiveDialogContent className="sm:max-w-md">
         <ResponsiveDialogHeader><ResponsiveDialogTitle>{editRecord ? 'Edit Stock Card' : 'New Stock Card'}</ResponsiveDialogTitle></ResponsiveDialogHeader>
         <div className="space-y-3 py-2">
-          <div className="space-y-1"><Label className="text-xs">Date</Label><Input type="date" value={form.date} onChange={set('date')} /></div>
+          <div className="space-y-1"><Label className="text-xs" htmlFor="date">Date</Label><Input id="date" type="date" value={form.date} onChange={set('date')} /></div>
           <div className="space-y-1">
-            <Label className="text-xs">Material *</Label>
+            <Label className="text-xs" htmlFor="material">Material *</Label>
             <Select value={form.materialId} onValueChange={(v) => setForm((p) => ({ ...p, materialId: v }))} disabled={!!editRecord}>
-              <SelectTrigger><SelectValue placeholder="Select material" /></SelectTrigger>
+              <SelectTrigger id="material"><SelectValue placeholder="Select material" /></SelectTrigger>
               <SelectContent>{materials.map((m) => <SelectItem key={m.id} value={String(m.id)}>{m.name} ({m.unit})</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div className="space-y-1">
-            <Label className="text-xs">Supplier</Label>
+            <Label className="text-xs" htmlFor="supplier">Supplier</Label>
             <Select value={form.supplierId || '__none__'} onValueChange={(v) => setForm((p) => ({ ...p, supplierId: v === '__none__' ? '' : v }))}>
-              <SelectTrigger><SelectValue placeholder="— None —" /></SelectTrigger>
+              <SelectTrigger id="supplier"><SelectValue placeholder="— None —" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__none__">— None —</SelectItem>
                 {suppliers.filter((s) => s.isActive).map((s) => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}
@@ -112,20 +112,20 @@ export function StockCardDialog({ open, editRecord, filterDate, materials, suppl
           </div>
           <div className="flex gap-3">
             <div className="flex-1 space-y-1">
-              <Label className="text-xs">Opening Stock</Label>
-              <Input type="number" value={form.quantity} onChange={set('quantity')} min={0} step={0.01} disabled={!editRecord && !!existingRow} />
+              <Label className="text-xs" htmlFor="opening-stock">Opening Stock</Label>
+              <Input id="opening-stock" type="number" value={form.quantity} onChange={set('quantity')} min={0} step={0.01} disabled={!editRecord && !!existingRow} />
             </div>
             <div className="flex-1 space-y-1">
-              <Label className="text-xs">{!editRecord && existingRow ? 'Add Delivery' : 'Delivery'}</Label>
-              <Input type="number" value={form.delivery} onChange={set('delivery')} min={0} step={0.01} />
+              <Label className="text-xs" htmlFor="field-5">{!editRecord && existingRow ? 'Add Delivery' : 'Delivery'}</Label>
+              <Input id="field-5" type="number" value={form.delivery} onChange={set('delivery')} min={0} step={0.01} />
               {!editRecord && existingRow && existingRow.delivery > 0 && (
                 <p className="text-[10px] text-muted-foreground">+{existingRow.delivery} already recorded</p>
               )}
             </div>
           </div>
           <div className="flex gap-3">
-            <div className="flex-1 space-y-1"><Label className="text-xs">Batch Number</Label><Input value={form.batchNumber} onChange={set('batchNumber')} /></div>
-            <div className="flex-1 space-y-1"><Label className="text-xs">Notes</Label><Input value={form.notes} onChange={set('notes')} /></div>
+            <div className="flex-1 space-y-1"><Label className="text-xs" htmlFor="batch-number">Batch Number</Label><Input id="batch-number" value={form.batchNumber} onChange={set('batchNumber')} /></div>
+            <div className="flex-1 space-y-1"><Label className="text-xs" htmlFor="notes">Notes</Label><Input id="notes" value={form.notes} onChange={set('notes')} /></div>
           </div>
           {err && <Alert variant="destructive"><AlertDescription>{err}</AlertDescription></Alert>}
         </div>

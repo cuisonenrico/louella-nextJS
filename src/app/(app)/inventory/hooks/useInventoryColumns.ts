@@ -49,7 +49,7 @@ export function getAdjSum(inv: Inventory): number {
   );
 }
 
-export function getSold(inv: Inventory, productById: Map<number, Product>): number {
+export function getSold(inv: Inventory, _productById: Map<number, Product>): number {
   const adjSum = getAdjSum(inv);
   // Rejects (spoiled/burnt) are waste, never sales — mirrors the backend computeSold.
   return inv.quantity + inv.delivery + adjSum - inv.leftover - inv.reject;

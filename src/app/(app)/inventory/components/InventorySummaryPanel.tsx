@@ -1,9 +1,9 @@
 'use client';
 
 import { ChevronDown } from 'lucide-react';
-import type { InventorySummaryData, ProductType } from '@/types';
+import type { InventorySummaryData } from '@/types';
 import dayjs from 'dayjs';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@radix-ui/react-collapsible';

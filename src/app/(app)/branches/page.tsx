@@ -78,7 +78,11 @@ export default function BranchesPage() {
     setFormError('');
     if (!form.name.trim()) { setFormError('Branch name is required.'); return; }
     const payload: Partial<Branch> = { name: form.name.trim(), address: form.address || undefined, phone: form.phone || undefined, isActive: form.isActive };
-    editTarget ? updateMutation.mutate({ id: editTarget.id, data: payload }) : createMutation.mutate(payload);
+    if (editTarget) {
+      updateMutation.mutate({ id: editTarget.id, data: payload });
+    } else {
+      createMutation.mutate(payload);
+    }
   };
 
   const filtered = branches.filter((b) => b.name.toLowerCase().includes(search.toLowerCase()));
@@ -135,13 +139,13 @@ export default function BranchesPage() {
             <DialogHeader><DialogTitle>{editTarget ? 'Edit Branch' : 'New Branch'}</DialogTitle></DialogHeader>
             <div className="space-y-4 py-2">
               {formError && <Alert variant="destructive"><AlertDescription>{formError}</AlertDescription></Alert>}
-              <div className="space-y-2"><Label>Name</Label><Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} autoFocus /></div>
-              <div className="space-y-2"><Label>Address</Label><Input value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} /></div>
-              <div className="space-y-2"><Label>Phone</Label><Input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} /></div>
+              <div className="space-y-2"><Label htmlFor="name">Name</Label><Input id="name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} autoFocus /></div>
+              <div className="space-y-2"><Label htmlFor="address">Address</Label><Input id="address" value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} /></div>
+              <div className="space-y-2"><Label htmlFor="phone">Phone</Label><Input id="phone" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} /></div>
               <div className="space-y-2">
-                <Label>Status</Label>
+                <Label htmlFor="status">Status</Label>
                 <Select value={form.isActive ? 'active' : 'inactive'} onValueChange={(v) => setForm((f) => ({ ...f, isActive: v === 'active' }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger id="status"><SelectValue /></SelectTrigger>
                   <SelectContent><SelectItem value="active">Active</SelectItem><SelectItem value="inactive">Inactive</SelectItem></SelectContent>
                 </Select>
               </div>

@@ -185,9 +185,9 @@ export default function InventoryAdjustmentsDialog({ inventory, productName, bra
 
           <div className="space-y-3">
             <div className="space-y-1">
-              <Label className="text-xs">Type</Label>
+              <Label className="text-xs" htmlFor="type">Type</Label>
               <Select value={form.type} onValueChange={(v) => setForm((f) => ({ ...f, type: v as AdjustmentType, toBranchId: '' }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger id="type"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="PULL_IN">Pull In — Add stock</SelectItem>
                   <SelectItem value="PULL_OUT">Pull Out — Remove stock</SelectItem>
@@ -198,12 +198,12 @@ export default function InventoryAdjustmentsDialog({ inventory, productName, bra
 
             {form.type === 'PULL_OUT' && (
               <div className="space-y-1">
-                <Label className="text-xs">Transfer to Branch (optional)</Label>
+                <Label className="text-xs" htmlFor="transfer-to-branch-optional">Transfer to Branch (optional)</Label>
                 <Select
                   value={form.toBranchId || NO_TRANSFER}
                   onValueChange={(v) => setForm((f) => ({ ...f, toBranchId: v === NO_TRANSFER ? '' : v }))}
                 >
-                  <SelectTrigger><SelectValue placeholder="— Standalone pull-out —" /></SelectTrigger>
+                  <SelectTrigger id="transfer-to-branch-optional"><SelectValue placeholder="— Standalone pull-out —" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value={NO_TRANSFER}>— Standalone pull-out (no transfer) —</SelectItem>
                     {otherBranches.map((b) => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
@@ -225,12 +225,12 @@ export default function InventoryAdjustmentsDialog({ inventory, productName, bra
             )}
 
             <div className="space-y-1">
-              <Label className="text-xs">Value</Label>
-              <Input type="number" value={form.value} onChange={(e) => setForm((f) => ({ ...f, value: e.target.value }))} min={1} step={1} placeholder={isTransfer ? 'Units to move' : 'Positive integer'} />
+              <Label className="text-xs" htmlFor="value">Value</Label>
+              <Input id="value" type="number" value={form.value} onChange={(e) => setForm((f) => ({ ...f, value: e.target.value }))} min={1} step={1} placeholder={isTransfer ? 'Units to move' : 'Positive integer'} />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Notes (optional)</Label>
-              <Input value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} />
+              <Label className="text-xs" htmlFor="notes-optional">Notes (optional)</Label>
+              <Input id="notes-optional" value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} />
             </div>
           </div>
         </div>

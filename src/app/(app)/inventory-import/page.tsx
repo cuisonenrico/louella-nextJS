@@ -386,9 +386,9 @@ export default function InventoryImportPage() {
             <CardHeader><CardTitle className="text-base">Select Branch</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label>Branch</Label>
+                <Label htmlFor="branch">Branch</Label>
                 <Select value={branchId} onValueChange={setBranchId}>
-                  <SelectTrigger><SelectValue placeholder="Select branch" /></SelectTrigger>
+                  <SelectTrigger id="branch"><SelectValue placeholder="Select branch" /></SelectTrigger>
                   <SelectContent>{branches.map((b: Branch) => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}</SelectContent>
                 </Select>
               </div>

@@ -19,7 +19,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     // The Proxy get-trap delegates dynamically to the extended client, which
     // cannot be expressed in the static type system — the unsafe-* rules are
     // suppressed for exactly this trap, not the file.
-    /* eslint-disable @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
+     
     return new Proxy<PrismaService>(this, {
       get(target, prop, receiver) {
         if (prop in (extended as object)) {
@@ -30,7 +30,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
         return typeof own === 'function' ? own.bind(target) : own;
       },
     });
-    /* eslint-enable @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
+     
   }
 
   async onModuleInit() {

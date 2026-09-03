@@ -118,19 +118,19 @@ export default function InventoryAdjustmentsPage() {
     <>
         <div className="flex flex-wrap gap-4 items-end mb-6">
           <div className="space-y-1">
-            <Label className="text-xs">Branch</Label>
+            <Label className="text-xs" htmlFor="branch">Branch</Label>
             <Select value={branchId || (branches.length > 0 ? String(branches[0].id) : '')} onValueChange={setBranchId}>
-              <SelectTrigger className="w-48"><SelectValue placeholder="Select branch" /></SelectTrigger>
+              <SelectTrigger id="branch" className="w-48"><SelectValue placeholder="Select branch" /></SelectTrigger>
               <SelectContent>{branches.map((b: Branch) => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div className="space-y-1">
-            <Label className="text-xs">Date</Label>
+            <Label className="text-xs" htmlFor="date">Date</Label>
             <div className="flex items-center gap-1">
               <Button variant="ghost" size="icon" className="size-11 md:size-8" onClick={() => setDate(dayjs(date).subtract(1, 'day').format('YYYY-MM-DD'))}>
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-40 h-11 md:h-8" />
+              <Input id="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-40 h-11 md:h-8" />
               <Button variant="ghost" size="icon" className="size-11 md:size-8" onClick={() => setDate(dayjs(date).add(1, 'day').format('YYYY-MM-DD'))}>
                 <ChevronRight className="h-4 w-4" />
               </Button>
@@ -140,8 +140,8 @@ export default function InventoryAdjustmentsPage() {
             </div>
           </div>
           <div className="space-y-1">
-            <Label className="text-xs">Product</Label>
-            <Input
+            <Label className="text-xs" htmlFor="product">Product</Label>
+            <Input id="product"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search products…"
@@ -250,14 +250,14 @@ export default function InventoryAdjustmentsPage() {
               {formError && <Alert variant="destructive"><AlertDescription>{formError}</AlertDescription></Alert>}
               <p className="text-sm text-muted-foreground">Product: <strong>{dialogTarget?.product?.name}</strong></p>
               <div className="space-y-2">
-                <Label>Type</Label>
+                <Label htmlFor="type">Type</Label>
                 <Select value={adjType} onValueChange={(v) => setAdjType(v as AdjustmentType)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger id="type"><SelectValue /></SelectTrigger>
                   <SelectContent>{ADJ_TYPES.map((t) => <SelectItem key={t} value={t}>{t.replace('_', ' ')}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2"><Label>Value</Label><Input type="number" min={1} step={1} value={adjValue} onChange={(e) => setAdjValue(e.target.value)} autoFocus /></div>
-              <div className="space-y-2"><Label>Notes</Label><Textarea value={adjNotes} onChange={(e) => setAdjNotes(e.target.value)} rows={2} /></div>
+              <div className="space-y-2"><Label htmlFor="value">Value</Label><Input id="value" type="number" min={1} step={1} value={adjValue} onChange={(e) => setAdjValue(e.target.value)} autoFocus /></div>
+              <div className="space-y-2"><Label htmlFor="notes">Notes</Label><Textarea id="notes" value={adjNotes} onChange={(e) => setAdjNotes(e.target.value)} rows={2} /></div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>

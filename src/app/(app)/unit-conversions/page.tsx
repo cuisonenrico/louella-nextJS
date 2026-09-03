@@ -100,18 +100,18 @@ export default function UnitConversionsPage() {
           <Card className="lg:col-span-1">
             <CardHeader><CardTitle className="text-base">Conversion Tool</CardTitle></CardHeader>
             <CardContent className="space-y-3">
-              <div className="space-y-1"><Label>Quantity</Label><Input type="number" value={convQty} onChange={(e) => setConvQty(e.target.value)} /></div>
+              <div className="space-y-1"><Label htmlFor="quantity">Quantity</Label><Input id="quantity" type="number" value={convQty} onChange={(e) => setConvQty(e.target.value)} /></div>
               <div className="space-y-1">
-                <Label>From</Label>
+                <Label htmlFor="from">From</Label>
                 <Select value={convFrom} onValueChange={(v) => setConvFrom(v as MeasurementUnit)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger id="from"><SelectValue /></SelectTrigger>
                   <SelectContent>{UNITS.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label>To</Label>
+                <Label htmlFor="to">To</Label>
                 <Select value={convTo} onValueChange={(v) => setConvTo(v as MeasurementUnit)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger id="to"><SelectValue /></SelectTrigger>
                   <SelectContent>{UNITS.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
@@ -167,22 +167,22 @@ export default function UnitConversionsPage() {
               {!editTarget && (
                 <>
                   <div className="space-y-2">
-                    <Label>From Unit</Label>
+                    <Label htmlFor="from-unit">From Unit</Label>
                     <Select value={form.fromUnit} onValueChange={(v) => setForm((f) => ({ ...f, fromUnit: v as MeasurementUnit }))}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectTrigger id="from-unit"><SelectValue /></SelectTrigger>
                       <SelectContent>{UNITS.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>To Unit</Label>
+                    <Label htmlFor="to-unit">To Unit</Label>
                     <Select value={form.toUnit} onValueChange={(v) => setForm((f) => ({ ...f, toUnit: v as MeasurementUnit }))}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectTrigger id="to-unit"><SelectValue /></SelectTrigger>
                       <SelectContent>{UNITS.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                 </>
               )}
-              <div className="space-y-2"><Label>Factor</Label><Input type="number" step="any" value={form.factor} onChange={(e) => setForm((f) => ({ ...f, factor: e.target.value }))} autoFocus /></div>
+              <div className="space-y-2"><Label htmlFor="factor">Factor</Label><Input id="factor" type="number" step="any" value={form.factor} onChange={(e) => setForm((f) => ({ ...f, factor: e.target.value }))} autoFocus /></div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>

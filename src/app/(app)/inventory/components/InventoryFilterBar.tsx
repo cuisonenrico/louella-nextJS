@@ -38,7 +38,6 @@ export default function InventoryFilterBar({
   onBranchChange,
   onImportOpen,
 }: InventoryFilterBarProps) {
-  const isRange = draftFrom !== draftTo;
 
   return (
     <TooltipProvider>

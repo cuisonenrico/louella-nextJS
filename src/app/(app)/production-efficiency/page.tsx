@@ -3,7 +3,6 @@
 import { useState, useMemo } from 'react';
 import { usePageHeader } from '@/components/layout/usePageHeader';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { BarChart3 } from 'lucide-react';
 import dayjs from 'dayjs';
 import { productionApi, branchesApi } from '@/lib/apiServices';
 import type { Branch, ProductionEfficiencyItem } from '@/types';
@@ -47,12 +46,12 @@ export default function ProductionEfficiencyPage() {
   return (
     <>
         <div className="flex flex-wrap gap-4 items-end mb-6">
-          <div className="space-y-1"><Label className="text-xs">Start Date</Label><Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-40" /></div>
-          <div className="space-y-1"><Label className="text-xs">End Date</Label><Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-40" /></div>
+          <div className="space-y-1"><Label className="text-xs" htmlFor="start-date">Start Date</Label><Input id="start-date" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-40" /></div>
+          <div className="space-y-1"><Label className="text-xs" htmlFor="end-date">End Date</Label><Input id="end-date" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-40" /></div>
           <div className="space-y-1">
-            <Label className="text-xs">Branch</Label>
+            <Label className="text-xs" htmlFor="branch">Branch</Label>
             <Select value={branchId} onValueChange={setBranchId}>
-              <SelectTrigger className="w-48"><SelectValue placeholder="All branches" /></SelectTrigger>
+              <SelectTrigger id="branch" className="w-48"><SelectValue placeholder="All branches" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All branches</SelectItem>
                 {branches.map((b: Branch) => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
@@ -91,7 +90,6 @@ export default function ProductionEfficiencyPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
           {['BREAD', 'CAKE', 'SPECIAL'].map((type) => {
             const items = effItems.filter((i) => i.productType === type);
-            const yields = items.reduce((s, i) => s + i.totalYield, 0);
             const sold = items.reduce((s, i) => s + i.sold, 0);
             const leftover = items.reduce((s, i) => s + i.totalLeftover, 0);
             const reject = items.reduce((s, i) => s + i.totalReject, 0);

@@ -2,6 +2,20 @@ import { FEATURE_BY_KEY } from '@/lib/rbac/features';
 import { DashboardService } from './dashboard.service';
 
 /**
+ * Pass-through cache: these tests assert what the summary computes, not what
+ * it caches. `wrap` therefore always calls straight through to the source.
+ */
+function makeCache() {
+  return {
+    wrap: jest.fn(
+      (_ns: string, _key: (string | number)[], compute: () => Promise<unknown>) =>
+        compute(),
+    ),
+    bump: jest.fn(),
+  };
+}
+
+/**
  * A Prisma double returning one row of everything the summary aggregates.
  *
  * Values are non-empty on purpose: a stripping bug that returns `[]` instead of
@@ -60,7 +74,7 @@ describe('DashboardService.getSummary', () => {
   });
 
   it('returns the panels a caller holds', async () => {
-    const service = new DashboardService(makePrisma());
+    const service = new DashboardService(makePrisma() as never, makeCache() as never);
     const result = await service.getSummary('2026-09-02', undefined, ALL_PANELS);
 
     expect(result.stats).toBeDefined();
@@ -75,7 +89,7 @@ describe('DashboardService.getSummary', () => {
    */
   describe('withholds a denied panel entirely', () => {
     it('omits the KPI figures without dashboard:kpis', async () => {
-      const service = new DashboardService(makePrisma());
+      const service = new DashboardService(makePrisma() as never, makeCache() as never);
       const result = await service.getSummary('2026-09-02', undefined, ['dashboard']);
 
       expect(result.stats).toBeUndefined();
@@ -84,21 +98,21 @@ describe('DashboardService.getSummary', () => {
     });
 
     it('omits the production mix without dashboard:production-mix', async () => {
-      const service = new DashboardService(makePrisma());
+      const service = new DashboardService(makePrisma() as never, makeCache() as never);
       const result = await service.getSummary('2026-09-02', undefined, ['dashboard:kpis']);
 
       expect(result.production).toBeUndefined();
     });
 
     it('omits low stock without dashboard:low-stock', async () => {
-      const service = new DashboardService(makePrisma());
+      const service = new DashboardService(makePrisma() as never, makeCache() as never);
       const result = await service.getSummary('2026-09-02', undefined, ['dashboard:kpis']);
 
       expect(result.lowStock).toBeUndefined();
     });
 
     it('omits the branch roster and gaps without dashboard:branch-gaps', async () => {
-      const service = new DashboardService(makePrisma());
+      const service = new DashboardService(makePrisma() as never, makeCache() as never);
       const result = await service.getSummary('2026-09-02', undefined, ['dashboard:kpis']);
 
       expect(result.branches).toBeUndefined();
@@ -111,7 +125,7 @@ describe('DashboardService.getSummary', () => {
   describe('branch gaps', () => {
     it('lists active branches with no entry for the date', async () => {
       // Branch 1 entered, branch 2 did not.
-      const service = new DashboardService(makePrisma([{ branchId: 1 }]));
+      const service = new DashboardService(makePrisma([{ branchId: 1 }]) as never, makeCache() as never);
       const result = await service.getSummary('2026-09-02', undefined, [
         'dashboard',
         'dashboard:branch-gaps',
@@ -126,7 +140,7 @@ describe('DashboardService.getSummary', () => {
       // contain their own branch — the cross-branch leak is impossible rather
       // than merely filtered afterwards.
       const prisma = makePrisma([]);
-      const service = new DashboardService(prisma);
+      const service = new DashboardService(prisma, makeCache() as never);
       await service.getSummary('2026-09-02', 1, ['dashboard', 'dashboard:branch-gaps']);
 
       const branchQuery = (prisma as unknown as {
@@ -139,7 +153,7 @@ describe('DashboardService.getSummary', () => {
   it('ships the roster for the rejections filter too', async () => {
     // The wastage card's branch filter needs the roster, so it travels with
     // either panel — still narrowed to the caller's scope.
-    const service = new DashboardService(makePrisma());
+    const service = new DashboardService(makePrisma() as never, makeCache() as never);
     const result = await service.getSummary('2026-09-02', undefined, [
       'dashboard',
       'dashboard:rejections',

@@ -137,3 +137,99 @@ describe('AuthService.validateUser (login lockout)', () => {
     expect(bcrypt.getRounds(call.data.passwordHash)).toBe(BCRYPT_COST_FACTOR);
   });
 });
+
+/**
+ * Harness for rotation. The stored row is returned by `findUnique` and the
+ * `update` call is captured so the test can assert how the predecessor was
+ * retired.
+ */
+function makeRotationService(stored: any, user: any = { id: 1, isActive: true }) {
+  const usersService = { findById: jest.fn().mockResolvedValue(user) } as any;
+  const prisma = {
+    refreshToken: {
+      findUnique: jest.fn().mockResolvedValue(stored),
+      update: jest.fn().mockResolvedValue(undefined),
+      create: jest.fn().mockResolvedValue({ id: 99 }),
+    },
+  } as any;
+  const jwtService = {
+    verifyAsync: jest.fn().mockResolvedValue({ sub: '1', jti: stored?.jti }),
+    sign: jest.fn().mockReturnValue('new-token'),
+  } as any;
+  const config = { get: () => 'test-secret' } as any;
+  return {
+    service: new AuthService(usersService, prisma, jwtService, config),
+    prisma,
+  };
+}
+
+describe('AuthService.refresh (rotation grace window)', () => {
+  const YEAR_OUT = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+
+  async function storedFor(token: string, overrides: any = {}) {
+    return {
+      id: 7,
+      userId: 1,
+      jti: 'jti-1',
+      tokenHash: await bcrypt.hash(token, 10),
+      expiresAt: YEAR_OUT,
+      revoked: false,
+      ...overrides,
+    };
+  }
+
+  it('retires the predecessor by expiry, not by revoking it outright', async () => {
+    // The replacement only reaches the client if the response arrives. Revoking
+    // immediately stranded any client whose refresh was aborted mid-flight.
+    const token = 'refresh-token';
+    const { service, prisma } = makeRotationService(await storedFor(token));
+
+    await service.refresh(token);
+
+    const update = prisma.refreshToken.update.mock.calls[0][0];
+    expect(update.where).toEqual({ id: 7 });
+    expect(update.data.revoked).toBeUndefined();
+    expect(update.data.expiresAt).toBeInstanceOf(Date);
+  });
+
+  it('leaves the predecessor usable for a short grace window', async () => {
+    const token = 'refresh-token';
+    const { service, prisma } = makeRotationService(await storedFor(token));
+
+    await service.refresh(token);
+
+    const graceUntil: Date = prisma.refreshToken.update.mock.calls[0][0].data.expiresAt;
+    const remainingMs = graceUntil.getTime() - Date.now();
+    expect(remainingMs).toBeGreaterThan(0);
+    expect(remainingMs).toBeLessThanOrEqual(60_000);
+  });
+
+  it('never extends a token past its own expiry', async () => {
+    // A token 10s from the end of its 30 days must not gain a minute of life.
+    const token = 'refresh-token';
+    const nearlyDone = new Date(Date.now() + 10_000);
+    const { service, prisma } = makeRotationService(
+      await storedFor(token, { expiresAt: nearlyDone }),
+    );
+
+    await service.refresh(token);
+
+    expect(prisma.refreshToken.update.mock.calls[0][0].data.expiresAt).toEqual(nearlyDone);
+  });
+
+  it('still rejects a token revoked by logout', async () => {
+    const token = 'refresh-token';
+    const { service } = makeRotationService(await storedFor(token, { revoked: true }));
+
+    await expect(service.refresh(token)).rejects.toThrow(UnauthorizedException);
+  });
+
+  it('still rejects a token past its expiry', async () => {
+    const token = 'refresh-token';
+    const { service } = makeRotationService(
+      await storedFor(token, { expiresAt: new Date(Date.now() - 1000) }),
+    );
+
+    await expect(service.refresh(token)).rejects.toThrow(UnauthorizedException);
+  });
+});

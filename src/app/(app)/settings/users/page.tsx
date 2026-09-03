@@ -416,21 +416,21 @@ export default function UsersPage() {
               <div className="space-y-4 py-2">
                 {createError && <Alert variant="destructive"><AlertDescription>{createError}</AlertDescription></Alert>}
                 <div className="space-y-2">
-                  <Label>Email</Label>
-                  <Input type="email" value={createForm.email} onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))} autoFocus />
+                  <Label htmlFor="email">Email</Label>
+                  <Input id="email" type="email" value={createForm.email} onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))} autoFocus />
                 </div>
                 <div className="space-y-2">
-                  <Label>Role</Label>
+                  <Label htmlFor="role">Role</Label>
                   <Select value={createForm.role} onValueChange={(v) => setCreateForm((f) => ({ ...f, role: v as UserRole, branchId: '' }))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="role"><SelectValue /></SelectTrigger>
                     <SelectContent>{ROLES.map((r) => <SelectItem key={r} value={r}>{ROLE_LABELS[r]}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 {createForm.role === 'MANAGER' && (
                   <div className="space-y-2">
-                    <Label>Branch (optional)</Label>
+                    <Label htmlFor="branch-optional">Branch (optional)</Label>
                     <Select value={createForm.branchId || 'null'} onValueChange={(v) => setCreateForm((f) => ({ ...f, branchId: v }))}>
-                      <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
+                      <SelectTrigger id="branch-optional"><SelectValue placeholder="Unassigned" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="null">Unassigned</SelectItem>
                         {createUnassignedBranches.map((b) => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
@@ -439,9 +439,9 @@ export default function UsersPage() {
                   </div>
                 )}
                 <div className="space-y-2">
-                  <Label>Temporary Password</Label>
+                  <Label htmlFor="temporary-password">Temporary Password</Label>
                   <div className="flex gap-2">
-                    <Input
+                    <Input id="temporary-password"
                       value={createForm.password}
                       onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))}
                       placeholder="Min. 8 characters"
@@ -497,9 +497,9 @@ export default function UsersPage() {
             <div className="space-y-4 py-2">
               {roleError && <Alert variant="destructive"><AlertDescription>{roleError}</AlertDescription></Alert>}
               <div className="space-y-2">
-                <Label>Role</Label>
+                <Label htmlFor="role-2">Role</Label>
                 <Select value={newRole} onValueChange={(v) => setNewRole(v as UserRole)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger id="role-2"><SelectValue /></SelectTrigger>
                   <SelectContent>{ROLES.map((r) => <SelectItem key={r} value={r}>{ROLE_LABELS[r]}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
@@ -529,9 +529,9 @@ export default function UsersPage() {
             <div className="space-y-4 py-2">
               {branchError && <Alert variant="destructive"><AlertDescription>{branchError}</AlertDescription></Alert>}
               <div className="space-y-2">
-                <Label>Branch</Label>
+                <Label htmlFor="branch">Branch</Label>
                 <Select value={newBranchId} onValueChange={setNewBranchId}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger id="branch"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="null">Unassigned</SelectItem>
                     {unassignedBranches.map((b) => (
@@ -563,9 +563,9 @@ export default function UsersPage() {
             <div className="space-y-4 py-2">
               {resetError && <Alert variant="destructive"><AlertDescription>{resetError}</AlertDescription></Alert>}
               <div className="space-y-2">
-                <Label>New Password</Label>
+                <Label htmlFor="new-password">New Password</Label>
                 <div className="flex gap-2">
-                  <Input
+                  <Input id="new-password"
                     value={newPw}
                     onChange={(e) => setNewPw(e.target.value)}
                     placeholder="Min. 8 characters"

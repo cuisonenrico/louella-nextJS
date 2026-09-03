@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { authApi } from '@/lib/apiServices';
@@ -28,6 +28,16 @@ export default function ChangePasswordPage() {
     }
   }, [isLoading, user, router]);
 
+  // The success message is shown for a beat before signing the user out.
+  // Navigating away inside that beat used to leave the timer running and fire
+  // logout() against an unmounted component.
+  const logoutTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (logoutTimer.current) clearTimeout(logoutTimer.current);
+    };
+  }, []);
+
   if (isLoading || !user) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -46,7 +56,7 @@ export default function ChangePasswordPage() {
     try {
       await authApi.changePassword(current, next);
       setSuccess(true);
-      setTimeout(() => logout(), 1500);
+      logoutTimer.current = setTimeout(() => logout(), 1500);
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;

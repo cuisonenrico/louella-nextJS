@@ -26,6 +26,14 @@ type UserEntity = {
 
 const ACCESS_TOKEN_EXPIRES_IN = '15m';
 const REFRESH_TOKEN_EXPIRES_IN_DAYS = 30;
+// How long a rotated refresh token stays usable after its replacement is
+// minted. A refresh round-trip costs ~2s against the remote database, and the
+// replacement only reaches the browser if that response actually arrives — a
+// reload or navigation mid-flight aborts it. Retiring the predecessor
+// instantly would strand the client holding a dead cookie with no way back,
+// which logged users out on the second page load. One minute is far longer
+// than any legitimate retry and far shorter than the 30-day token lifetime.
+const REFRESH_ROTATION_GRACE_MS = 60_000;
 // Per-account lockout: independent of the IP-based throttle, so an attacker
 // spreading guesses across many IPs against one account still gets stopped.
 const MAX_FAILED_LOGIN_ATTEMPTS = 5;
@@ -147,9 +155,17 @@ export class AuthService {
       throw new UnauthorizedException('Refresh token invalid');
     }
 
+    // Rotate by expiring the predecessor rather than revoking it outright, so
+    // that a rotation whose response never reached the client stays
+    // recoverable for REFRESH_ROTATION_GRACE_MS. Presenting the old token
+    // inside that window simply rotates again. Never extend past the token's
+    // own expiry — a token near the end of its 30 days must not gain life.
+    const graceUntil = new Date(Date.now() + REFRESH_ROTATION_GRACE_MS);
     await this.prisma.refreshToken.update({
       where: { id: stored.id },
-      data: { revoked: true },
+      data: {
+        expiresAt: graceUntil < stored.expiresAt ? graceUntil : stored.expiresAt,
+      },
     });
 
     const user = await this.usersService.findById(Number(payload.sub));
