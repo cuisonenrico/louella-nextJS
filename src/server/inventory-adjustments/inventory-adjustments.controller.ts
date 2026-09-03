@@ -10,12 +10,16 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
-import { InventoryAdjustmentsService } from './inventory-adjustments.service';
+import {
+  InventoryAdjustmentsService,
+  type RequestUser,
+} from './inventory-adjustments.service';
 import { CreateInventoryAdjustmentDto } from './dto/create-inventory-adjustment.dto';
 import { UpdateInventoryAdjustmentDto } from './dto/update-inventory-adjustment.dto';
 import { CreateTransferDto } from './dto/create-transfer.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RequireFeature } from '../common/decorators/require-feature.decorator';
+import { CurrentUser } from '../common/decorators/user.decorator';
 
 @Controller('inventory-adjustments')
 @RequireFeature('inventory-adjustments')
@@ -29,8 +33,11 @@ export class InventoryAdjustmentsController {
   @Post()
   @RequireFeature('inventory-adjustments:create')
   @Roles(UserRole.INVENTORY)
-  create(@Body() dto: CreateInventoryAdjustmentDto) {
-    return this.inventoryAdjustmentsService.create(dto);
+  create(
+    @Body() dto: CreateInventoryAdjustmentDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.inventoryAdjustmentsService.create(dto, user);
   }
 
   @Post('transfer')
@@ -41,13 +48,16 @@ export class InventoryAdjustmentsController {
     description:
       'Atomically creates a linked PULL_OUT on the source inventory and a PULL_IN on the destination inventory. Both records must track the same product.',
   })
-  transfer(@Body() dto: CreateTransferDto) {
-    return this.inventoryAdjustmentsService.transfer(dto);
+  transfer(@Body() dto: CreateTransferDto, @CurrentUser() user: RequestUser) {
+    return this.inventoryAdjustmentsService.transfer(dto, user);
   }
 
   @Get('inventory/:inventoryId')
-  findByInventory(@Param('inventoryId', ParseIntPipe) inventoryId: number) {
-    return this.inventoryAdjustmentsService.findByInventory(inventoryId);
+  findByInventory(
+    @Param('inventoryId', ParseIntPipe) inventoryId: number,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.inventoryAdjustmentsService.findByInventory(inventoryId, user);
   }
 
   @Patch(':id')
@@ -56,14 +66,18 @@ export class InventoryAdjustmentsController {
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateInventoryAdjustmentDto,
+    @CurrentUser() user: RequestUser,
   ) {
-    return this.inventoryAdjustmentsService.update(id, dto);
+    return this.inventoryAdjustmentsService.update(id, dto, user);
   }
 
   @Delete(':id')
   @RequireFeature('inventory-adjustments:delete')
   @Roles(UserRole.INVENTORY)
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.inventoryAdjustmentsService.remove(id);
+  remove(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.inventoryAdjustmentsService.remove(id, user);
   }
 }

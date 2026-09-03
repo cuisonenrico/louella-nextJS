@@ -82,6 +82,8 @@ model User {
   materialInventoryEntries MaterialInventory[] @relation("MaterialInventoryCreatedBy")
   productionEntries        Production[]        @relation("ProductionCreatedBy")
   productionOrders         ProductionOrder[]   @relation("ProductionOrderCreatedBy")
+  inventoryAdjustments     InventoryAdjustment[] @relation("InventoryAdjustmentCreatedBy")
+  materialAdjustments      MaterialAdjustment[]  @relation("MaterialAdjustmentCreatedBy")
   deviceTokens             DeviceToken[]
   importLogs               ImportLog[]         @relation("ImportLogCreatedBy")
 
@@ -298,9 +300,10 @@ model InventoryAdjustment {
   id                  Int            @id @default(autoincrement())
   inventoryId         Int
   type                AdjustmentType
-  value               Int            // positive = stock added (pull-in), negative = stock removed
+  value               Int            // magnitude, always positive; direction comes from `type` (see computeAdjSum)
   notes               String?
   linkedAdjustmentId  Int?           // paired transfer counterpart (PULL_OUT ↔ PULL_IN)
+  createdById         Int?           // user who entered this adjustment
   createdAt           DateTime       @default(now())
   updatedAt           DateTime       @updatedAt
   deletedAt           DateTime?
@@ -308,9 +311,11 @@ model InventoryAdjustment {
   inventory        Inventory            @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
   linkedAdjustment InventoryAdjustment? @relation("TransferLink", fields: [linkedAdjustmentId], references: [id], onDelete: SetNull)
   linkedBy         InventoryAdjustment[] @relation("TransferLink")
+  createdBy        User?                @relation("InventoryAdjustmentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   @@index([inventoryId])
   @@index([linkedAdjustmentId])
+  @@index([createdById])
 }
 
 // ---------------------------------------------------------------------------
@@ -470,6 +475,16 @@ model MaterialInventory {
 
 // ---------------------------------------------------------------------------
 // Material Adjustments (losses, spoilage, corrections)
+//
+// Two deliberate differences from InventoryAdjustment, both worth knowing before
+// you "fix" one of them:
+//
+//   - `value` is Float here, Int there. Materials are weighed (2.5 KG of flour);
+//     finished goods are counted in whole pieces.
+//   - There is no update endpoint and no transfer pairing. Material stock is
+//     global to the central kitchen — MaterialInventory has no branchId — so
+//     there is nowhere to transfer *to*, and a wrong entry is deleted and
+//     re-added rather than edited.
 // ---------------------------------------------------------------------------
 
 model MaterialAdjustment {
@@ -478,13 +493,16 @@ model MaterialAdjustment {
   type                AdjustmentType // PULL_IN = restock, PULL_OUT = transfer out, ANOMALY = loss/spoilage
   value               Float          // magnitude (always positive; direction conveyed by type)
   notes               String?
+  createdById         Int?           // user who entered this adjustment
   createdAt           DateTime       @default(now())
   updatedAt           DateTime       @updatedAt
   deletedAt           DateTime?
 
   materialInventory MaterialInventory @relation(fields: [materialInventoryId], references: [id], onDelete: Cascade)
+  createdBy         User?             @relation("MaterialAdjustmentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   @@index([materialInventoryId])
+  @@index([createdById])
 }
 
 // ---------------------------------------------------------------------------

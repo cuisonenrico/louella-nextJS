@@ -23,8 +23,10 @@ interface AllOpsArgs {
 
 /**
  * A Prisma client extension that bumps the relevant cache namespace after any
- * successful write to Inventory / InventoryAdjustment / MaterialInventory.
- * Centralising here means no writer service can bypass invalidation.
+ * successful write to Inventory / InventoryAdjustment / MaterialInventory /
+ * MaterialAdjustment. Centralising here means no writer service can bypass
+ * invalidation — MaterialAdjustment was the one model that could, and material
+ * stock figures fold its rows in.
  */
 export function buildInvalidationExtension(registry: Registry) {
   const hook = (namespace: string) => ({
@@ -45,6 +47,7 @@ export function buildInvalidationExtension(registry: Registry) {
       inventory: hook(CACHE_NS.INVENTORY_AGG),
       inventoryAdjustment: hook(CACHE_NS.INVENTORY_AGG),
       materialInventory: hook(CACHE_NS.MATERIAL_AGG),
+      materialAdjustment: hook(CACHE_NS.MATERIAL_AGG),
     },
   };
 }

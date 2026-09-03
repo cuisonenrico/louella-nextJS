@@ -13,6 +13,7 @@ import { MaterialAdjustmentsService } from './material-adjustments.service';
 import { CreateMaterialAdjustmentDto } from './dto/create-material-adjustment.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RequireFeature } from '../common/decorators/require-feature.decorator';
+import { CurrentUser } from '../common/decorators/user.decorator';
 
 @Controller('material-adjustments')
 @RequireFeature('material-stock')
@@ -22,8 +23,11 @@ export class MaterialAdjustmentsController {
   @Post()
   @RequireFeature('material-stock:adjust')
   @Roles(UserRole.INVENTORY)
-  create(@Body() body: CreateMaterialAdjustmentDto) {
-    return this.service.create(body);
+  create(
+    @Body() body: CreateMaterialAdjustmentDto,
+    @CurrentUser() user: { id: number },
+  ) {
+    return this.service.create(body, user?.id);
   }
 
   @Get()

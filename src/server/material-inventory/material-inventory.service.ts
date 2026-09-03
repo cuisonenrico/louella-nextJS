@@ -9,7 +9,12 @@ import { CACHE_NS } from '../common/cache/cache-namespaces';
 const materialInventoryInclude = {
   material: true,
   supplier: true,
-  adjustments: { orderBy: { createdAt: 'desc' as const } },
+  // Without the deletedAt filter a soft-deleted adjustment keeps coming back on
+  // the stock card, so deleting one looked like a no-op in the UI.
+  adjustments: {
+    where: { deletedAt: null },
+    orderBy: { createdAt: 'desc' as const },
+  },
 };
 
 @Injectable()

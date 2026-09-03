@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Trash2, Plus, Loader2 } from 'lucide-react';
 import { inventoryAdjustmentsApi, inventoryApi } from '@/lib/apiServices';
+import { getAdjSum } from '../hooks/useInventoryColumns';
 import type { AdjustmentType, Branch, Inventory } from '@/types';
 import { extractError } from '@/lib/errors';
 import { Button } from '@/components/ui/button';
@@ -37,6 +38,11 @@ const ADJ_COLORS: Record<AdjustmentType, string> = {
   PULL_OUT: 'bg-amber-100 text-amber-800 border-amber-300',
   ANOMALY: 'bg-red-100 text-red-800 border-red-300',
 };
+
+// Radix reserves '' as the value that clears a Select and shows the
+// placeholder, and throws if a SelectItem carries it. The "no transfer" choice
+// therefore needs a real sentinel, mapped back to '' in form state.
+const NO_TRANSFER = 'none';
 
 interface InventoryAdjustmentsDialogProps {
   inventory: Inventory | null;
@@ -97,7 +103,10 @@ export default function InventoryAdjustmentsDialog({ inventory, productName, bra
   if (!inventory) return null;
 
   const currentAdjustments = inventory.adjustments ?? [];
-  const adjSum = currentAdjustments.reduce((acc, a) => acc + a.value, 0);
+  // Values are stored positive and the type carries the direction, so summing
+  // them raw showed a pull-out of 10 as a green +10 — the opposite of what the
+  // row behind the dialog shows. getAdjSum is the same helper the sheet uses.
+  const adjSum = getAdjSum(inventory);
   const destInventory = destInventoryQuery.data?.find((r) => r.productId === inventory.productId) ?? null;
 
   const isPending = createMutation.isPending || transferMutation.isPending;
@@ -156,8 +165,8 @@ export default function InventoryAdjustmentsDialog({ inventory, productName, bra
               {currentAdjustments.map((adj) => (
                 <div key={adj.id} className="flex items-center gap-2 py-1.5 border-b">
                   <Badge variant="outline" className={ADJ_COLORS[adj.type]} >{ADJ_TYPE_LABELS[adj.type]}</Badge>
-                  <span className={`text-sm font-bold min-w-[40px] ${adj.value > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {adj.value > 0 ? `+${adj.value}` : adj.value}
+                  <span className={`text-sm font-bold min-w-[40px] ${adj.type === 'PULL_IN' ? 'text-green-600' : 'text-red-600'}`}>
+                    {adj.type === 'PULL_IN' ? `+${adj.value}` : `-${adj.value}`}
                   </span>
                   <span className="text-sm text-muted-foreground flex-grow">{adj.notes ?? '—'}</span>
                   {adj.linkedAdjustmentId && <Badge variant="outline" className="text-xs">Transfer</Badge>}
@@ -190,10 +199,13 @@ export default function InventoryAdjustmentsDialog({ inventory, productName, bra
             {form.type === 'PULL_OUT' && (
               <div className="space-y-1">
                 <Label className="text-xs">Transfer to Branch (optional)</Label>
-                <Select value={form.toBranchId} onValueChange={(v) => setForm((f) => ({ ...f, toBranchId: v }))}>
+                <Select
+                  value={form.toBranchId || NO_TRANSFER}
+                  onValueChange={(v) => setForm((f) => ({ ...f, toBranchId: v === NO_TRANSFER ? '' : v }))}
+                >
                   <SelectTrigger><SelectValue placeholder="— Standalone pull-out —" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">— Standalone pull-out (no transfer) —</SelectItem>
+                    <SelectItem value={NO_TRANSFER}>— Standalone pull-out (no transfer) —</SelectItem>
                     {otherBranches.map((b) => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
                   </SelectContent>
                 </Select>

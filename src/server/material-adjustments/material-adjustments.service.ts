@@ -6,7 +6,7 @@ import { CreateMaterialAdjustmentDto } from './dto/create-material-adjustment.dt
 export class MaterialAdjustmentsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(body: CreateMaterialAdjustmentDto) {
+  async create(body: CreateMaterialAdjustmentDto, userId?: number) {
     const inv = await this.prisma.materialInventory.findUnique({
       where: { id: body.materialInventoryId },
     });
@@ -19,6 +19,7 @@ export class MaterialAdjustmentsService {
         type: body.type,
         value: body.value,
         notes: body.notes,
+        createdById: userId ?? null,
       },
     });
   }

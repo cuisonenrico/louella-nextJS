@@ -32,6 +32,7 @@ import {
 } from '@/components/ui/alert-dialog';
 
 import { extractError } from '@/lib/errors';
+import { getMaterialAdjSum, getMaterialClosing } from '@/lib/materialStock';
 
 function todayStr() { return new Date().toISOString().slice(0, 10); }
 function addDays(dateStr: string, days: number) { const d = new Date(dateStr); d.setDate(d.getDate() + days); return d.toISOString().slice(0, 10); }
@@ -132,7 +133,7 @@ export default function MaterialInventoryPage() {
     let totalCostUsed = 0;
     for (const r of rows) {
       const price = r.material?.pricePerUnit ?? materials.find((m) => m.id === r.materialId)?.pricePerUnit ?? 0;
-      totalClosingCost += Math.max(0, r.quantity + effectiveDelivery(r) - r.used) * Number(price);
+      totalClosingCost += getMaterialClosing(r, effectiveDelivery(r)) * Number(price);
       totalCostUsed += r.used * Number(price);
     }
     return { totalClosingCost, totalCostUsed };
@@ -214,7 +215,8 @@ export default function MaterialInventoryPage() {
                 {rows.map((r) => {
                   const price = Number(r.material?.pricePerUnit ?? materials.find((m) => m.id === r.materialId)?.pricePerUnit ?? 0);
                   const delivery = effectiveDelivery(r);
-                  const closing = Math.max(0, r.quantity + delivery - r.used);
+                  const adjSum = getMaterialAdjSum(r.adjustments);
+                  const closing = getMaterialClosing(r, delivery);
                   const costUsed = r.used * price;
                   const closingCost = closing * price;
                   const hasPending = pendingDeliveries.has(r.id);
@@ -250,7 +252,18 @@ export default function MaterialInventoryPage() {
                           {fmt(r.used)}
                         </Badge>
                       </TableCell>
-                      <TableCell className={cn(SHEET_CELL, 'px-2 text-right tabular-nums font-bold')}>{fmt(closing)}</TableCell>
+                      <TableCell className={cn(SHEET_CELL, 'px-2 text-right tabular-nums font-bold')}>
+                        <div className="flex items-center justify-end gap-1">
+                          {/* Closing already folds the adjustment in; this shows
+                              why the number differs from opening + delivery - used. */}
+                          {adjSum !== 0 && (
+                            <span className={cn('text-xs font-bold tabular-nums', adjSum > 0 ? 'text-green-600' : 'text-red-600')}>
+                              {adjSum > 0 ? `+${fmt(adjSum)}` : fmt(adjSum)}
+                            </span>
+                          )}
+                          {fmt(closing)}
+                        </div>
+                      </TableCell>
                       <TableCell className={cn(SHEET_CELL, 'px-2 text-right tabular-nums font-semibold text-green-600')}>₱{fmt(costUsed)}</TableCell>
                       <TableCell className={cn(SHEET_CELL, 'px-2 text-right tabular-nums font-semibold text-primary')}>₱{fmt(closingCost)}</TableCell>
                       <TableCell className={cn(SHEET_CELL, 'px-1')}>

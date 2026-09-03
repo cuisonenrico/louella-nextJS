@@ -326,9 +326,12 @@ export default function InventoryDetailsPage() {
             </DialogContent>
           </Dialog>
 
-          {/* Adjustments dialog */}
+          {/* Adjustments dialog.
+              `adjRow` is the row as it was when the gear was clicked. Re-reading
+              it from the live query means adding or deleting an adjustment shows
+              up in the dialog immediately, instead of only after a close/reopen. */}
           <InventoryAdjustmentsDialog
-            inventory={adjRow}
+            inventory={adjRow ? (rows.find((r) => r.id === adjRow.id) ?? adjRow) : null}
             productName={productById.get(adjRow?.productId ?? 0)?.name ?? ''}
             branches={branches}
             onClose={() => setAdjRow(null)}

@@ -28,6 +28,13 @@ describe('buildInvalidationExtension', () => {
     expect(bump).toHaveBeenCalledWith(CACHE_NS.MATERIAL_AGG);
   });
 
+  it('bumps material-agg on a write to MaterialAdjustment', async () => {
+    const bump = jest.fn();
+    const ext = buildInvalidationExtension({ bump });
+    await runHook(ext.query.materialAdjustment, 'create');
+    expect(bump).toHaveBeenCalledWith(CACHE_NS.MATERIAL_AGG);
+  });
+
   it('does NOT bump on a read operation', async () => {
     const bump = jest.fn();
     const ext = buildInvalidationExtension({ bump });

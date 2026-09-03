@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ProductType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { computeAdjSum } from '../common/utils/inventory-metrics.util';
 
 export interface DashboardStats {
   products: { total: number; active: number };
@@ -269,10 +270,7 @@ export class DashboardService {
       });
 
       for (const inv of latestInventories) {
-        const adjDelta = inv.adjustments.reduce(
-          (sum, a) => (a.type === 'PULL_IN' ? sum + a.value : sum - a.value),
-          0,
-        );
+        const adjDelta = computeAdjSum(inv.adjustments);
         latestByMaterial.set(inv.materialId, {
           quantity: inv.quantity,
           delivery: inv.delivery,

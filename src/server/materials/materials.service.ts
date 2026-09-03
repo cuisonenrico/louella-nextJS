@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateMaterialDto } from './dto/create-material.dto';
 import { UpdateMaterialDto } from './dto/update-material.dto';
+import { computeAdjSum } from '../common/utils/inventory-metrics.util';
 
 @Injectable()
 export class MaterialsService {
@@ -149,10 +150,7 @@ export class MaterialsService {
     >();
     for (const inv of latestInventories) {
       if (!latestByMaterial.has(inv.materialId)) {
-        const adjDelta = inv.adjustments.reduce(
-          (sum, a) => (a.type === 'PULL_IN' ? sum + a.value : sum - a.value),
-          0,
-        );
+        const adjDelta = computeAdjSum(inv.adjustments);
         latestByMaterial.set(inv.materialId, {
           quantity: inv.quantity,
           delivery: inv.delivery,

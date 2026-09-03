@@ -1,4 +1,4 @@
-import { IsEnum, IsInt, IsOptional, IsString } from 'class-validator';
+import { IsEnum, IsInt, IsOptional, IsPositive, IsString } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { AdjustmentType } from '@prisma/client';
 
@@ -14,9 +14,10 @@ export class CreateInventoryAdjustmentDto {
   @ApiProperty({
     example: 5,
     description:
-      'Adjustment value — positive adds stock (PULL_IN), negative removes stock (PULL_OUT/ANOMALY)',
+      'Magnitude of the adjustment, always a positive integer. Direction comes from `type` (PULL_IN adds, PULL_OUT/ANOMALY subtract) and is applied by the sold formula, never stored in the sign.',
   })
   @IsInt()
+  @IsPositive()
   value: number;
 
   @ApiPropertyOptional({
