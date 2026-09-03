@@ -25,6 +25,25 @@ function hasSessionCookie(): boolean {
   return /(?:^|;\s*)has_session=1(?:;|$)/.test(document.cookie);
 }
 
+/** Routes a signed-out visitor is expected to land on. */
+const PUBLIC_PATHS = ['/', '/login', '/register'];
+
+/**
+ * Whether to attempt the refresh at all.
+ *
+ * The hint cookie is the fast path: when it says a session exists, always try.
+ * When it is absent the answer depends on where we are. On a public page an
+ * anonymous visitor is the overwhelmingly likely case, and firing a refresh
+ * that can only 401 is pure waste. On a protected route it is worth trying
+ * anyway — the hint may simply predate its introduction, and a session that is
+ * actually valid must not be thrown away just because the flag is missing.
+ */
+function shouldAttemptRefresh(): boolean {
+  if (hasSessionCookie()) return true;
+  if (typeof window === 'undefined') return false;
+  return !PUBLIC_PATHS.includes(window.location.pathname);
+}
+
 /** A 401 is a real answer: this session is over. Anything else may be transient. */
 function isDefinitiveAuthFailure(err: unknown): boolean {
   return (err as { response?: { status?: number } })?.response?.status === 401;
@@ -112,9 +131,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
     };
 
-    // No session cookie here means nobody is signed in on this browser. Skip
-    // the round trip entirely rather than firing a refresh that can only 401.
-    if (!hasSessionCookie()) {
+    // An anonymous visitor on a public page has nothing to refresh. Skip the
+    // round trip rather than firing one that can only 401.
+    if (!shouldAttemptRefresh()) {
       signedOut();
       return;
     }
