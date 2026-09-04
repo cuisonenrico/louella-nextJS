@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useCallback, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Loader2, Sparkles } from 'lucide-react';
@@ -9,7 +9,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { applyAllSuggestions } from '../lib/applySuggestions';
 import { productionOrdersApi } from '@/lib/apiServices';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -22,10 +21,16 @@ import {
 } from '@/components/ui/responsive-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { SheetInput } from '@/components/sheet/SheetInput';
+import { useSheetNavigation } from '@/components/sheet/useSheetNavigation';
+import { SHEET_BANNER, SHEET_CELL, SHEET_HEAD, SHEET_TABLE } from '@/components/sheet/styles';
+import { cn } from '@/lib/utils';
 import { extractError } from '@/lib/errors';
 
 const PRODUCT_TYPE_ORDER: ProductType[] = ['BREAD', 'CAKE', 'SPECIAL', 'MISCELLANEOUS'];
 const TYPE_LABELS: Record<ProductType, string> = { BREAD: 'Bread', CAKE: 'Cake', SPECIAL: 'Special', MISCELLANEOUS: 'Miscellaneous' };
+/** The sheet has a single editable column; named so the nav hook can index it. */
+const YIELD_COLS = ['yield'] as const;
 
 interface ProductionOrderFormDialogProps {
   open: boolean;
@@ -54,7 +59,6 @@ export function ProductionOrderFormDialog({
   const [formItems, setFormItems] = useState<Map<number, number>>(new Map());
   const [formError, setFormError] = useState('');
   const [suggestPeriod, setSuggestPeriod] = useState<SuggestionPeriod>('7d');
-  const inputRefs = useRef<Map<number, HTMLInputElement>>(new Map());
 
   const suggestionsQuery = useQuery({
     queryKey: ['production-suggestions', formBranchId, suggestPeriod, filterDate],
@@ -138,15 +142,11 @@ export function ProductionOrderFormDialog({
     return list;
   }, [productsByType]);
 
-  const handleInputKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>, productId: number) => {
-    if (e.key !== 'Enter') return;
-    e.preventDefault();
-    const idx = orderedProducts.findIndex((p) => p.id === productId);
-    const next = orderedProducts[idx + 1];
-    if (!next) return;
-    const nextEl = inputRefs.current.get(next.id);
-    if (nextEl) { nextEl.focus(); nextEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
-  }, [orderedProducts]);
+  // One editable column, so the sheet's linear and column orders coincide:
+  // Enter/Up/Down/Tab all walk the yield column, skipping the type banners.
+  const orderedProductIds = useMemo(() => orderedProducts.map((p) => p.id), [orderedProducts]);
+  const getInputId = useCallback((productId: number) => `order-yield-${productId}`, []);
+  const { moveInColumn, moveLinear } = useSheetNavigation(orderedProductIds, YIELD_COLS, getInputId);
 
   const handleSave = useCallback(() => {
     setFormError('');
@@ -215,83 +215,82 @@ export function ProductionOrderFormDialog({
           </p>
         )}
 
-        <div className="overflow-y-auto flex-1 rounded-md border">
-          <Table>
-            <TableHeader className="sticky top-0 bg-muted z-10">
-              <TableRow>
-                <TableHead className="w-8 text-center">#</TableHead>
-                <TableHead>Product</TableHead>
-                <TableHead className="w-28 text-right">Suggested</TableHead>
-                <TableHead className="w-36 text-right">Yield</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {PRODUCT_TYPE_ORDER.map((type) => {
-                const prods = productsByType.get(type) ?? [];
-                if (prods.length === 0) return null;
-                return (
-                  <Fragment key={type}>
-                    <TableRow className="bg-muted/60 hover:bg-muted/60">
-                      <TableCell colSpan={4} className="py-1.5 px-3">
-                        <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{TYPE_LABELS[type]}</span>
+        {/* Same dense sheet as the inventory and production grids; the dialog's
+            flex column supplies the height cap, so the container drops the
+            shared max-h in favour of flex-1. */}
+        <Table
+          containerClassName="min-h-0 flex-1 overflow-y-auto rounded-md border border-border bg-background"
+          className={SHEET_TABLE}
+        >
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead className={cn(SHEET_HEAD, 'w-8 text-center')}>#</TableHead>
+              <TableHead className={cn(SHEET_HEAD, 'text-left')}>Product</TableHead>
+              <TableHead className={cn(SHEET_HEAD, 'w-28 text-right')}>Suggested</TableHead>
+              <TableHead className={cn(SHEET_HEAD, 'w-36 text-right')}>Yield</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {PRODUCT_TYPE_ORDER.map((type) => {
+              const prods = productsByType.get(type) ?? [];
+              if (prods.length === 0) return null;
+              return (
+                <Fragment key={type}>
+                  <TableRow className="hover:bg-transparent">
+                    <TableCell colSpan={4} className={SHEET_BANNER}>{TYPE_LABELS[type]}</TableCell>
+                  </TableRow>
+                  {prods.map((p, idx) => (
+                    <TableRow key={p.id}>
+                      <TableCell className={cn(SHEET_CELL, 'px-2 text-center text-xs tabular-nums text-muted-foreground')}>{idx + 1}</TableCell>
+                      <TableCell className={cn(SHEET_CELL, 'px-2 font-medium')}>{p.name}</TableCell>
+                      <TableCell className={cn(SHEET_CELL, 'px-2 text-right')}>
+                        {(() => {
+                          const s = suggestionByProduct.get(p.id);
+                          if (!s) return <span className="text-muted-foreground/50 text-xs">—</span>;
+                          return (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 px-2 text-xs font-mono text-primary"
+                                  aria-label={`Apply suggested ${s.suggestedQty} for ${p.name}`}
+                                  onClick={() =>
+                                    setFormItems((prev) => {
+                                      const next = new Map(prev);
+                                      next.set(p.id, s.suggestedQty);
+                                      return next;
+                                    })
+                                  }
+                                >
+                                  ↑ {s.suggestedQty}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                avg {s.avgSold.toFixed(1)}/day · {s.daysWithData} day{s.daysWithData === 1 ? '' : 's'} of data
+                              </TooltipContent>
+                            </Tooltip>
+                          );
+                        })()}
+                      </TableCell>
+                      <TableCell className={cn(SHEET_CELL, 'p-0')}>
+                        <SheetInput
+                          id={getInputId(p.id)}
+                          value={formItems.get(p.id) ?? 0}
+                          onValueChange={(val) =>
+                            setFormItems((prev) => { const next = new Map(prev); next.set(p.id, val); return next; })
+                          }
+                          onColumnMove={(dir) => moveInColumn(p.id, 'yield', dir)}
+                          onLinearMove={(dir) => moveLinear(getInputId(p.id), dir)}
+                        />
                       </TableCell>
                     </TableRow>
-                    {prods.map((p, idx) => (
-                      <TableRow key={p.id}>
-                        <TableCell className="text-center text-xs text-muted-foreground">{idx + 1}</TableCell>
-                        <TableCell className="font-medium">{p.name}</TableCell>
-                        <TableCell className="text-right">
-                          {(() => {
-                            const s = suggestionByProduct.get(p.id);
-                            if (!s) return <span className="text-muted-foreground/50 text-xs">—</span>;
-                            return (
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-7 px-2 text-xs font-mono text-primary"
-                                    aria-label={`Apply suggested ${s.suggestedQty} for ${p.name}`}
-                                    onClick={() =>
-                                      setFormItems((prev) => {
-                                        const next = new Map(prev);
-                                        next.set(p.id, s.suggestedQty);
-                                        return next;
-                                      })
-                                    }
-                                  >
-                                    ↑ {s.suggestedQty}
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  avg {s.avgSold.toFixed(1)}/day · {s.daysWithData} day{s.daysWithData === 1 ? '' : 's'} of data
-                                </TooltipContent>
-                              </Tooltip>
-                            );
-                          })()}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Input
-                            ref={(el) => { if (el) inputRefs.current.set(p.id, el); else inputRefs.current.delete(p.id); }}
-                            type="number"
-                            className="h-11 md:h-8 w-28 ml-auto text-base md:text-sm text-right"
-                            min={0}
-                            value={String(formItems.get(p.id) ?? 0)}
-                            onChange={(e) => {
-                              const val = parseInt(e.target.value) || 0;
-                              setFormItems((prev) => { const next = new Map(prev); next.set(p.id, val); return next; });
-                            }}
-                            onKeyDown={(e) => handleInputKeyDown(e, p.id)}
-                          />
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </Fragment>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </div>
+                  ))}
+                </Fragment>
+              );
+            })}
+          </TableBody>
+        </Table>
 
         <div className="text-sm text-right font-semibold text-primary pt-1">
           Total: {totalFormYield.toLocaleString()}
