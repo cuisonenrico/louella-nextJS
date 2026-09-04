@@ -8,12 +8,19 @@
 export const SHEET_HEAD =
   'sticky top-0 z-10 h-8 bg-muted px-2 text-xs font-semibold text-muted-foreground border-b border-r border-border last:border-r-0';
 
-/** Ruled body cell. */
-export const SHEET_CELL = 'border-b border-r border-border last:border-r-0 h-8';
+/**
+ * Ruled body cell.
+ *
+ * `p-0` is load-bearing: the TableCell primitive's base `p-4` is only half
+ * beaten by the `px-*` each consumer adds, so without it every row keeps 16px
+ * of vertical padding and stands ~72px tall instead of the 32px `h-8` asks
+ * for. Consumers still layer their own `px-*` on top.
+ */
+export const SHEET_CELL = 'border-b border-r border-border last:border-r-0 h-8 p-0';
 
 /** Full-width section-banner cell (colSpan across all columns). */
 export const SHEET_BANNER =
-  'h-7 bg-muted/60 px-2 text-xs font-bold uppercase tracking-wider text-muted-foreground border-b border-border';
+  'h-7 p-0 px-2 bg-muted/60 text-xs font-bold uppercase tracking-wider text-muted-foreground border-b border-border';
 
 /**
  * Container classes for the scrollable sheet (pass as Table containerClassName).
