@@ -20,6 +20,7 @@ import { UserRole } from '@prisma/client';
 import { InventoryService } from './inventory.service';
 import { CreateInventoryDto } from './dto/create-inventory.dto';
 import { UpdateInventoryDto } from './dto/update-inventory.dto';
+import { UpdateInventoryItemDto } from './dto/update-inventory-bulk.dto';
 import { InventoryDateQueryDto } from './dto/inventory-date-query.dto';
 import { InventoryDateRangeQueryDto } from './dto/inventory-date-range-query.dto';
 import { InventorySummaryQueryDto } from './dto/inventory-summary-query.dto';
@@ -62,6 +63,19 @@ export class InventoryController {
     @CurrentUser() user: { id: number },
   ) {
     return this.inventoryService.createBulk(body, user?.id);
+  }
+
+  // One request for a whole sheet save. The per-row PATCH path below is still
+  // the right call for a single edit; sending 165 of them is not.
+  @Patch('bulk')
+  @RequireFeature('inventory-history:edit')
+  @Roles(UserRole.INVENTORY)
+  updateBulk(
+    @Body(new ParseArrayPipe({ items: UpdateInventoryItemDto }))
+    body: UpdateInventoryItemDto[],
+    @Query('branchId') branchIdStr?: string,
+  ) {
+    return this.inventoryService.updateBulk(body, parseBranchId(branchIdStr));
   }
 
   @Get()
@@ -162,10 +176,10 @@ export class InventoryController {
   }
 
   @Get('dashboard')
+  // The dashboard aggregates this, so the owning screen's key is not the only
+  // way in — but the trend itself is a `sensitive` panel, so the panel key is
+  // what grants it, not plain `dashboard`.
   @RequireFeature('inventory-history', 'dashboard:revenue-trend')
-    // The dashboard aggregates this, so a role holding `dashboard` but not the
-    // owning screen's key must still be able to read it.
-  @RequireFeature('inventory-history', 'dashboard')
   getDashboard(@Query() query: InventoryDashboardQueryDto) {
     const branchId = query.branchId ? parseInt(query.branchId, 10) : null;
     return this.inventoryService.getDashboard(
@@ -230,10 +244,9 @@ export class InventoryController {
   }
 
   @Get('rejection-by-product')
+  // As with the dashboard endpoint: `dashboard:rejections` is a sensitive
+  // panel, so holding it — not plain `dashboard` — is what grants this.
   @RequireFeature('inventory-history', 'dashboard:rejections')
-    // The dashboard aggregates this, so a role holding `dashboard` but not the
-    // owning screen's key must still be able to read it.
-  @RequireFeature('inventory-history', 'dashboard')
   getRejectionByProduct(@Query() query: RejectionQueryDto) {
     const branchId = query.branchId ? parseInt(query.branchId, 10) : null;
     return this.inventoryService.getRejectionByProduct(

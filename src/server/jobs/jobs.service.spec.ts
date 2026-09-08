@@ -100,6 +100,19 @@ describe('JobsService', () => {
       );
     });
 
+    it('never seeds the opening balance from a soft-deleted row', async () => {
+      // Every Prisma query in the inventory domain filters deletedAt; this raw
+      // DISTINCT ON was the one place that did not, so a deleted day could set
+      // the next day's opening quantity.
+      prisma.inventory.findMany.mockResolvedValueOnce([]);
+      prisma.production.findMany.mockResolvedValue([]);
+
+      await service.autofillMissingEntries('2026-06-13');
+
+      const sqlParts = prisma.$queryRaw.mock.calls[0][0] as string[];
+      expect(sqlParts.join('?')).toMatch(/"deletedAt"\s+IS\s+NULL/);
+    });
+
     it('defaults the carried-forward leftover to 0 when no prior entry exists', async () => {
       prisma.inventory.findMany.mockResolvedValueOnce([]);
 

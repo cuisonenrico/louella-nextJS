@@ -3,9 +3,15 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateMaterialInventoryDto } from './dto/create-material-inventory.dto';
 import { UpdateMaterialInventoryDto } from './dto/update-material-inventory.dto';
+import { UpdateMaterialInventoryItemDto } from './dto/update-material-inventory-bulk.dto';
 import { CacheNamespaceService } from '../common/cache/cache-namespace.service';
 import { CACHE_NS } from '../common/cache/cache-namespaces';
 import { computeMaterialClosing } from '../common/utils/inventory-metrics.util';
+import {
+  assertDateRange,
+  eachDayInclusive,
+  toUtcDay,
+} from '../common/utils/date-range.util';
 
 const materialInventoryInclude = {
   material: true,
@@ -27,13 +33,13 @@ export class MaterialInventoryService {
 
   /** Upsert: one stock-card per material per day. */
   create(body: CreateMaterialInventoryDto, userId?: number) {
-    const date = new Date(body.date);
+    const date = toUtcDay(body.date);
     return this.prisma.materialInventory.upsert({
       where: { materialId_date: { materialId: body.materialId, date } },
       update: {
         supplierId: body.supplierId,
         batchNumber: body.batchNumber,
-        expiresAt: body.expiresAt ? new Date(body.expiresAt) : undefined,
+        expiresAt: body.expiresAt ? toUtcDay(body.expiresAt) : undefined,
         quantity: body.quantity,
         delivery: body.delivery,
         notes: body.notes,
@@ -47,7 +53,7 @@ export class MaterialInventoryService {
         date,
         supplierId: body.supplierId,
         batchNumber: body.batchNumber,
-        expiresAt: body.expiresAt ? new Date(body.expiresAt) : undefined,
+        expiresAt: body.expiresAt ? toUtcDay(body.expiresAt) : undefined,
         quantity: body.quantity ?? 0,
         delivery: body.delivery ?? 0,
         notes: body.notes,
@@ -60,13 +66,13 @@ export class MaterialInventoryService {
   async createBulk(items: CreateMaterialInventoryDto[], userId?: number) {
     return this.prisma.$transaction(
       items.map((item) => {
-        const date = new Date(item.date);
+        const date = toUtcDay(item.date);
         return this.prisma.materialInventory.upsert({
           where: { materialId_date: { materialId: item.materialId, date } },
           update: {
             supplierId: item.supplierId,
             batchNumber: item.batchNumber,
-            expiresAt: item.expiresAt ? new Date(item.expiresAt) : undefined,
+            expiresAt: item.expiresAt ? toUtcDay(item.expiresAt) : undefined,
             quantity: item.quantity,
             delivery: item.delivery,
             notes: item.notes,
@@ -78,7 +84,7 @@ export class MaterialInventoryService {
             date,
             supplierId: item.supplierId,
             batchNumber: item.batchNumber,
-            expiresAt: item.expiresAt ? new Date(item.expiresAt) : undefined,
+            expiresAt: item.expiresAt ? toUtcDay(item.expiresAt) : undefined,
             quantity: item.quantity ?? 0,
             delivery: item.delivery ?? 0,
             notes: item.notes,
@@ -110,7 +116,7 @@ export class MaterialInventoryService {
   /** Returns all material inventory records for a specific date. */
   findByDate(date: string) {
     return this.prisma.materialInventory.findMany({
-      where: { date: new Date(date), deletedAt: null },
+      where: { date: toUtcDay(date), deletedAt: null },
       orderBy: { material: { name: 'asc' } },
       include: materialInventoryInclude,
     });
@@ -126,7 +132,7 @@ export class MaterialInventoryService {
     userId?: number,
     preloadedMaterials?: Array<{ id: number }>,
   ) {
-    const targetDate = new Date(date);
+    const targetDate = toUtcDay(date);
 
     const materials =
       preloadedMaterials ??
@@ -249,7 +255,7 @@ export class MaterialInventoryService {
           materialId: body.materialId,
           supplierId: body.supplierId,
           batchNumber: body.batchNumber,
-          expiresAt: body.expiresAt ? new Date(body.expiresAt) : undefined,
+          expiresAt: body.expiresAt ? toUtcDay(body.expiresAt) : undefined,
           quantity: body.quantity,
           delivery: body.delivery,
           used: body.used,
@@ -260,6 +266,52 @@ export class MaterialInventoryService {
     } catch {
       throw new NotFoundException('Material inventory record not found');
     }
+  }
+
+  /**
+   * Apply a whole sheet's worth of edits in one request.
+   *
+   * The sheet sent one PATCH per edited row, which runs into the same
+   * 20-requests/minute ceiling as the inventory sheet — and `Promise.all`
+   * rejects on the first 429, reporting a failure over a partial write.
+   *
+   * One read to validate, one batched transaction to write. Prisma pipelines an
+   * array `$transaction` into a single round trip, which matters against a
+   * cross-region database.
+   */
+  async updateBulk(items: UpdateMaterialInventoryItemDto[]) {
+    if (items.length === 0) return { updated: 0 };
+
+    const ids = items.map((i) => i.id);
+    const existing = await this.prisma.materialInventory.findMany({
+      where: { id: { in: ids }, deletedAt: null },
+      select: { id: true },
+    });
+
+    // All-or-nothing: a partial save is the failure mode this replaces.
+    if (existing.length !== ids.length) {
+      const found = new Set(existing.map((r) => r.id));
+      const missing = ids.filter((id) => !found.has(id));
+      throw new NotFoundException(
+        `Material stock cards not found: ${missing.join(', ')}`,
+      );
+    }
+
+    await this.prisma.$transaction(
+      items.map((item) =>
+        this.prisma.materialInventory.update({
+          where: { id: item.id },
+          data: {
+            quantity: item.quantity,
+            delivery: item.delivery,
+            used: item.used,
+            notes: item.notes,
+          },
+        }),
+      ),
+    );
+
+    return { updated: items.length };
   }
 
   /**
@@ -294,18 +346,11 @@ export class MaterialInventoryService {
   }
 
   private async getGapsUncached(startDate: string, endDate: string) {
-    const start = new Date(`${startDate}T00:00:00.000Z`);
-    const end = new Date(`${endDate}T00:00:00.000Z`);
+    const start = toUtcDay(startDate);
+    const end = toUtcDay(endDate);
+    assertDateRange(start, end);
 
-    const diffDays = Math.floor((end.getTime() - start.getTime()) / 86_400_000);
-    if (diffDays < 0 || diffDays > 30) {
-      throw new Error('Date range must be between 1 and 31 days');
-    }
-
-    const dates: Date[] = [];
-    for (let ts = start.getTime(); ts <= end.getTime(); ts += 86_400_000) {
-      dates.push(new Date(ts));
-    }
+    const dates = eachDayInclusive(start, end);
 
     const materials = await this.prisma.material.findMany({
       where: { deletedAt: null },
@@ -333,21 +378,16 @@ export class MaterialInventoryService {
    * initDate() for each day in order (so carry-over chaining works correctly).
    */
   async initDateRange(startDate: string, endDate?: string, userId?: number) {
-    const start = new Date(`${startDate}T00:00:00.000Z`);
-    const end = endDate
-      ? new Date(`${endDate}T00:00:00.000Z`)
-      : new Date(`${startDate}T00:00:00.000Z`);
+    const start = toUtcDay(startDate);
+    const end = endDate ? toUtcDay(endDate) : start;
 
-    const diffDays = Math.floor((end.getTime() - start.getTime()) / 86_400_000);
-    if (diffDays < 0 || diffDays > 30) {
-      throw new Error('Date range must be between 1 and 31 days');
-    }
+    assertDateRange(start, end);
 
     let totalCreated = 0;
     const results: { date: string; created: number }[] = [];
 
-    for (let ts = start.getTime(); ts <= end.getTime(); ts += 86_400_000) {
-      const dateStr = new Date(ts).toISOString().slice(0, 10);
+    for (const day of eachDayInclusive(start, end)) {
+      const dateStr = day.toISOString().slice(0, 10);
       const result = await this.initDate(dateStr, userId);
       totalCreated += result.created;
       results.push({ date: dateStr, created: result.created });

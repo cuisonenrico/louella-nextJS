@@ -14,12 +14,15 @@ import type {
   InventoryImportResult,
   InventorySummaryData,
   InventoryUpdateResult,
+  InventoryBulkUpdateItem,
+  InventoryBulkUpdateResult,
   ImportLogsResponse,
   JobRunsResponse,
   Material,
   MaterialAdjustment,
   MaterialConsumption,
   MaterialInventory,
+  MaterialInventoryBulkUpdateItem,
   MaterialPriceHistory,
   PaginatedResponse,
   DryRunResult,
@@ -157,6 +160,11 @@ export const inventoryApi = {
     api.post<Inventory[]>('/inventory/bulk', data),
   update: (id: number, data: Partial<Inventory>) =>
     api.patch<InventoryUpdateResult>(`/inventory/${id}`, data),
+  // One request for a whole sheet save. Sending one PATCH per row hits the
+  // global 20/min throttle on any real sheet, and a partial save is worse than
+  // a slow one.
+  updateBulk: (data: InventoryBulkUpdateItem[]) =>
+    api.patch<InventoryBulkUpdateResult>('/inventory/bulk', data),
   delete: (id: number) => api.delete(`/inventory/${id}`),
   summary: (startDate?: string, endDate?: string, branchId?: string) =>
     api.get<InventorySummaryData>('/inventory/summary', {
@@ -312,6 +320,9 @@ export const materialInventoryApi = {
     api.get<MaterialInventory>(`/material-inventory/${id}`),
   create: (data: Partial<MaterialInventory>) =>
     api.post<MaterialInventory>('/material-inventory', data),
+  // One request for a whole sheet save — see inventoryApi.updateBulk.
+  updateBulk: (data: MaterialInventoryBulkUpdateItem[]) =>
+    api.patch<{ updated: number }>('/material-inventory/bulk', data),
   update: (id: number, data: Partial<MaterialInventory>) =>
     api.patch<MaterialInventory>(`/material-inventory/${id}`, data),
   gaps: (startDate: string, endDate: string) =>

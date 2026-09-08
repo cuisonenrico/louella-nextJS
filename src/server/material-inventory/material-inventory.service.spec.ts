@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { MaterialInventoryService } from './material-inventory.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -15,8 +15,10 @@ function makePrisma() {
       upsert: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
+      count: jest.fn(),
     },
     material: { findMany: jest.fn() },
+    $transaction: jest.fn((ops: unknown[]) => Promise.all(ops as Promise<unknown>[])),
   };
 }
 
@@ -239,5 +241,109 @@ describe('MaterialInventoryService soft delete', () => {
 
     const args = prisma.materialInventory.upsert.mock.calls[0][0];
     expect(args.update.deletedAt).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Date-range bounds
+//
+// These threw a bare `Error`, which the global exception filter renders as a
+// 500 — so asking for too wide a range told the user the server had failed.
+// ---------------------------------------------------------------------------
+
+describe('MaterialInventoryService date-range bounds', () => {
+  let service: MaterialInventoryService;
+  let prisma: ReturnType<typeof makePrisma>;
+
+  beforeEach(async () => {
+    prisma = makePrisma();
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        MaterialInventoryService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: CacheNamespaceService, useValue: makeCache() },
+      ],
+    }).compile();
+    service = module.get(MaterialInventoryService);
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  it('rejects an over-wide gaps range as a bad request, not a server error', async () => {
+    await expect(
+      service.getGaps('2026-01-01', '2026-12-31'),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('rejects a reversed gaps range as a bad request', async () => {
+    await expect(
+      service.getGaps('2026-09-08', '2026-09-01'),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('rejects an over-wide init range as a bad request', async () => {
+    await expect(
+      service.initDateRange('2026-01-01', '2026-12-31'),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Bulk save
+//
+// The material sheet sent one PATCH per edited row through Promise.all, which
+// runs into the same 20-requests/minute ceiling as the inventory sheet.
+// ---------------------------------------------------------------------------
+
+describe('MaterialInventoryService.updateBulk', () => {
+  let service: MaterialInventoryService;
+  let prisma: ReturnType<typeof makePrisma>;
+
+  beforeEach(async () => {
+    prisma = makePrisma();
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        MaterialInventoryService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: CacheNamespaceService, useValue: makeCache() },
+      ],
+    }).compile();
+    service = module.get(MaterialInventoryService);
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  it('writes every edit in a single transaction', async () => {
+    prisma.materialInventory.findMany.mockResolvedValue([
+      { id: 1 },
+      { id: 2 },
+    ]);
+
+    const res = await service.updateBulk([
+      { id: 1, delivery: 5 },
+      { id: 2, delivery: 6 },
+    ]);
+
+    expect(res).toEqual({ updated: 2 });
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.materialInventory.update).toHaveBeenCalledTimes(2);
+  });
+
+  it('refuses the whole batch when a row is missing or deleted', async () => {
+    prisma.materialInventory.findMany.mockResolvedValue([{ id: 1 }]);
+
+    await expect(
+      service.updateBulk([{ id: 1, delivery: 5 }, { id: 2, delivery: 6 }]),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('only considers live cards', async () => {
+    prisma.materialInventory.findMany.mockResolvedValue([{ id: 1 }]);
+
+    await service.updateBulk([{ id: 1, delivery: 5 }]);
+
+    const where = prisma.materialInventory.findMany.mock.calls[0][0].where;
+    expect(where).toMatchObject({ deletedAt: null });
   });
 });

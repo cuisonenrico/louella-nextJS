@@ -157,25 +157,35 @@ export default function InventoryDetailsPage() {
   // "Initialize" button below) rather than as a side effect of viewing a
   // branch — navigation should never silently write to the database.
 
+  // One request for the whole sheet. Sending a PATCH per row hit the global
+  // 20-requests/minute throttle partway through any real sheet, and the
+  // Promise.all rejected on the first 429 — reporting "save failed" over a
+  // partial write. The server applies the batch in one transaction and runs the
+  // leftover cascade itself.
   const savePendingMutation = useMutation({
-    mutationFn: async () => {
-      const ops = Array.from(pendingUpdates.entries()).map(([id, data]) =>
-        inventoryApi.update(id, data)
-      );
-      const results = await Promise.all(ops);
-      // Check for cascade warnings
-      for (const res of results) {
-        const result = res.data;
-        if (result && typeof result === 'object' && 'cascadeWarning' in result && (result.cascadeWarning as number) > 0) {
-          setCascadeWarning({ branchId: result.branchId, productId: result.productId, fromDate: result.date });
-        }
-      }
-    },
-    onSuccess: () => {
+    mutationFn: () =>
+      inventoryApi
+        .updateBulk(
+          Array.from(pendingUpdates.entries()).map(([id, data]) => ({
+            id,
+            delivery: data.delivery,
+            leftover: data.leftover,
+            reject: data.reject,
+          })),
+        )
+        .then((r) => r.data),
+    onSuccess: (result) => {
       setPendingUpdates(new Map());
       qc.invalidateQueries({ queryKey: ['inventory'] });
       qc.invalidateQueries({ queryKey: ['inventory-summary'] });
-      toast.success('Changes saved');
+      toast.success(
+        result.cascadeUpdated > 0
+          ? `Changes saved — ${result.cascadeUpdated} later ${result.cascadeUpdated === 1 ? 'row' : 'rows'} carried forward`
+          : 'Changes saved',
+      );
+      // Rows the user did not re-count, but whose later days are still
+      // placeholders from an older leftover. Offer the explicit recascade.
+      setCascadeWarning(result.cascadeWarnings[0] ?? null);
     },
     onError: (err) => toast.error(extractError(err)),
   });

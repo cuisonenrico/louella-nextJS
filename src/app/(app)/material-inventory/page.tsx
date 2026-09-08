@@ -100,12 +100,16 @@ export default function MaterialInventoryPage() {
     });
   }, []);
 
+  // One request for the whole sheet. A PATCH per row hit the global 20/min
+  // throttle partway through, and Promise.all reported failure over a partial
+  // write. See inventoryApi.updateBulk.
   const savePendingMutation = useMutation({
     mutationFn: () =>
-      Promise.all(
-        Array.from(pendingDeliveries.entries()).map(([id, delivery]) =>
-          materialInventoryApi.update(id, { delivery }),
-        ),
+      materialInventoryApi.updateBulk(
+        Array.from(pendingDeliveries.entries()).map(([id, delivery]) => ({
+          id,
+          delivery,
+        })),
       ),
     onSuccess: () => {
       setPendingDeliveries(new Map());

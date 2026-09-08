@@ -560,6 +560,40 @@ export interface InventoryUpdateResult extends Inventory {
   cascadeWarning: number;
 }
 
+/** One edited row in a sheet save. Addressed by id — never re-keys the row. */
+export interface InventoryBulkUpdateItem {
+  id: number;
+  quantity?: number;
+  delivery?: number;
+  leftover?: number;
+  reject?: number;
+  notes?: string;
+}
+
+/** One edited card in a material sheet save. Addressed by id. */
+export interface MaterialInventoryBulkUpdateItem {
+  id: number;
+  quantity?: number;
+  delivery?: number;
+  used?: number;
+  notes?: string;
+}
+
+/** A row whose later days are still placeholders derived from an older count. */
+export interface InventoryCascadeWarning {
+  branchId: number;
+  productId: number;
+  fromDate: string;
+}
+
+export interface InventoryBulkUpdateResult {
+  updated: number;
+  /** Downstream auto-generated rows the leftover cascade rewrote. */
+  cascadeUpdated: number;
+  /** Edited rows left with stale downstream placeholders, needing a decision. */
+  cascadeWarnings: InventoryCascadeWarning[];
+}
+
 // ────────────────────────────────────────────────────────────────
 // Production Orders
 // ────────────────────────────────────────────────────────────────

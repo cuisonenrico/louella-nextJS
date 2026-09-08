@@ -15,7 +15,10 @@ import { UserRole } from '@prisma/client';
 import { MaterialInventoryService } from './material-inventory.service';
 import { CreateMaterialInventoryDto } from './dto/create-material-inventory.dto';
 import { UpdateMaterialInventoryDto } from './dto/update-material-inventory.dto';
+import { UpdateMaterialInventoryItemDto } from './dto/update-material-inventory-bulk.dto';
 import { MaterialGapsQueryDto } from './dto/material-gaps-query.dto';
+import { MaterialInventoryDateQueryDto } from './dto/material-inventory-date-query.dto';
+import { MaterialInitRangeQueryDto } from './dto/material-init-range-query.dto';
 import { CurrentUser } from '../common/decorators/user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Autofill } from '../common/decorators/autofill.decorator';
@@ -52,23 +55,37 @@ export class MaterialInventoryController {
   @Post('init')
   @RequireFeature('material-stock:init')
   @Roles(UserRole.INVENTORY)
-  initDate(@Query('date') date: string, @CurrentUser() user: { id: number }) {
-    return this.materialInventoryService.initDate(date, user?.id);
+  initDate(
+    @Query() query: MaterialInventoryDateQueryDto,
+    @CurrentUser() user: { id: number },
+  ) {
+    return this.materialInventoryService.initDate(query.date, user?.id);
   }
 
   @Post('init-range')
   @RequireFeature('material-stock:init')
   @Roles(UserRole.INVENTORY)
   initDateRange(
-    @Query('startDate') startDate: string,
-    @Query('endDate') endDate: string | undefined,
+    @Query() query: MaterialInitRangeQueryDto,
     @CurrentUser() user: { id: number },
   ) {
     return this.materialInventoryService.initDateRange(
-      startDate,
-      endDate,
+      query.startDate,
+      query.endDate,
       user?.id,
     );
+  }
+
+  // One request for a whole sheet save; the per-row PATCH below still serves a
+  // single edit.
+  @Patch('bulk')
+  @RequireFeature('material-stock:edit')
+  @Roles(UserRole.INVENTORY)
+  updateBulk(
+    @Body(new ParseArrayPipe({ items: UpdateMaterialInventoryItemDto }))
+    body: UpdateMaterialInventoryItemDto[],
+  ) {
+    return this.materialInventoryService.updateBulk(body);
   }
 
   @Get('gaps')
@@ -88,8 +105,8 @@ export class MaterialInventoryController {
   // creates, so it carries the trigger the 11 PM cron used to provide.
   @Autofill('materials')
   @Get('by-date')
-  findByDate(@Query('date') date: string) {
-    return this.materialInventoryService.findByDate(date);
+  findByDate(@Query() query: MaterialInventoryDateQueryDto) {
+    return this.materialInventoryService.findByDate(query.date);
   }
 
   @Get()

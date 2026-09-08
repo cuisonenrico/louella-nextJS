@@ -1,8 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, ProductType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { getEffectivePrice } from '../common/utils/price-history.util';
@@ -10,8 +6,31 @@ import { computeSold } from '../common/utils/inventory-metrics.util';
 import { csvField } from '../common/utils/csv.util';
 import { CreateInventoryDto } from './dto/create-inventory.dto';
 import { UpdateInventoryDto } from './dto/update-inventory.dto';
+import { UpdateInventoryItemDto } from './dto/update-inventory-bulk.dto';
 import { CacheNamespaceService } from '../common/cache/cache-namespace.service';
 import { CACHE_NS } from '../common/cache/cache-namespaces';
+import {
+  MAX_REPORT_RANGE_DAYS,
+  assertDateRange,
+  eachDayInclusive,
+  toUtcDay,
+} from '../common/utils/date-range.util';
+
+/** The subset of an inventory row the bulk save and its cascade need. */
+interface SheetRow {
+  id: number;
+  branchId: number;
+  productId: number;
+  date: Date;
+  leftover: number;
+}
+
+/** A row whose later days are still placeholders derived from an older count. */
+export interface CascadeWarning {
+  branchId: number;
+  productId: number;
+  fromDate: string;
+}
 
 @Injectable()
 export class InventoryService {
@@ -40,16 +59,6 @@ export class InventoryService {
     return new Date(`${str}T00:00:00.000Z`);
   }
 
-  private validateDateRange(start: Date, end: Date, maxDays = 31): void {
-    const diffDays = Math.floor(
-      (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24),
-    );
-    if (diffDays < 0)
-      throw new BadRequestException('endDate must be on or after startDate');
-    if (diffDays >= maxDays)
-      throw new BadRequestException(`Date range cannot exceed ${maxDays} days`);
-  }
-
   async create(body: CreateInventoryDto, userId?: number) {
     // Upsert: if a record for the same branch+product+date exists, update it.
     //
@@ -63,7 +72,7 @@ export class InventoryService {
         branchId_productId_date: {
           branchId: body.branchId,
           productId: body.productId,
-          date: new Date(body.date),
+          date: toUtcDay(body.date),
         },
       },
       update: {
@@ -78,7 +87,7 @@ export class InventoryService {
       create: {
         branchId: body.branchId,
         productId: body.productId,
-        date: new Date(body.date),
+        date: toUtcDay(body.date),
         quantity: body.quantity,
         delivery: body.delivery,
         leftover: body.leftover,
@@ -102,7 +111,7 @@ export class InventoryService {
             branchId_productId_date: {
               branchId: item.branchId,
               productId: item.productId,
-              date: new Date(item.date),
+              date: toUtcDay(item.date),
             },
           },
           update: {
@@ -119,7 +128,7 @@ export class InventoryService {
           create: {
             branchId: item.branchId,
             productId: item.productId,
-            date: new Date(item.date),
+            date: toUtcDay(item.date),
             quantity: item.quantity,
             delivery: item.delivery,
             leftover: item.leftover,
@@ -330,7 +339,7 @@ export class InventoryService {
     const rows = await this.prisma.inventory.findMany({
       where: {
         branchId,
-        date: new Date(date),
+        date: toUtcDay(date),
         deletedAt: null,
       },
       orderBy: [
@@ -365,9 +374,9 @@ export class InventoryService {
     startDate: string,
     endDate?: string,
   ) {
-    const start = new Date(startDate);
-    const end = endDate ? new Date(endDate) : start;
-    this.validateDateRange(start, end);
+    const start = toUtcDay(startDate);
+    const end = endDate ? toUtcDay(endDate) : start;
+    assertDateRange(start, end);
 
     const rows = await this.prisma.inventory.findMany({
       where: {
@@ -409,9 +418,9 @@ export class InventoryService {
     endDate?: string,
     branchId?: number,
   ) {
-    const start = startDate ? new Date(startDate) : undefined;
-    const end = endDate ? new Date(endDate) : start;
-    if (start && end) this.validateDateRange(start, end);
+    const start = startDate ? toUtcDay(startDate) : undefined;
+    const end = endDate ? toUtcDay(endDate) : start;
+    if (start && end) assertDateRange(start, end);
     const dateFilter = start
       ? start.getTime() === end?.getTime()
         ? { date: start }
@@ -485,7 +494,7 @@ export class InventoryService {
       data: {
         branchId: body.branchId,
         productId: body.productId,
-        date: body.date ? new Date(body.date) : undefined,
+        date: body.date ? toUtcDay(body.date) : undefined,
         quantity: body.quantity,
         delivery: body.delivery,
         leftover: body.leftover,
@@ -516,10 +525,189 @@ export class InventoryService {
         productId: updated.productId,
         date: { gt: updated.date },
         isAutoGenerated: true,
+        deletedAt: null,
       },
     });
 
     return { ...updated, cascadeWarning, cascadeUpdated: 0 };
+  }
+
+  /**
+   * Apply a whole sheet's worth of edits in one request.
+   *
+   * The sheet used to send one PATCH per edited row. Two things break at scale:
+   * the global 20-requests-per-minute throttle rejects everything past the
+   * twentieth row, and `Promise.all` rejects on the first failure, so the user
+   * is told the save failed while some rows did land.
+   *
+   * Round trips matter more than statements here — the database is
+   * cross-region, ~300ms per statement — so this is written to be a fixed
+   * number of round trips regardless of row count: one read, one batched
+   * transaction of updates, one read of downstream rows, one batched
+   * transaction of cascades. Prisma pipelines an array `$transaction` into a
+   * single round trip, which is what makes that possible.
+   */
+  async updateBulk(items: UpdateInventoryItemDto[], branchId?: number) {
+    if (items.length === 0)
+      return { updated: 0, cascadeUpdated: 0, cascadeWarnings: [] };
+
+    const ids = items.map((i) => i.id);
+    const existing = await this.prisma.inventory.findMany({
+      where: {
+        id: { in: ids },
+        deletedAt: null,
+        ...(branchId != null ? { branchId } : {}),
+      },
+      select: {
+        id: true,
+        branchId: true,
+        productId: true,
+        date: true,
+        leftover: true,
+      },
+    });
+
+    // All-or-nothing. A partial save is exactly the failure mode this replaces,
+    // and a row missing from a branch-scoped read is one the caller may not touch.
+    if (existing.length !== ids.length) {
+      const found = new Set(existing.map((r) => r.id));
+      const missing = ids.filter((id) => !found.has(id));
+      throw new NotFoundException(
+        `Inventory rows not found or outside your branch: ${missing.join(', ')}`,
+      );
+    }
+
+    const byId = new Map(existing.map((r) => [r.id, r]));
+
+    await this.prisma.$transaction(
+      items.map((item) =>
+        this.prisma.inventory.update({
+          where: { id: item.id },
+          data: {
+            quantity: item.quantity,
+            delivery: item.delivery,
+            leftover: item.leftover,
+            reject: item.reject,
+            notes: item.notes,
+            // Matches update(): a user-edited row is no longer a placeholder.
+            isAutoGenerated: false,
+          },
+        }),
+      ),
+    );
+
+    // Rows whose leftover moved carry forward; the rest are only checked for
+    // downstream placeholders still derived from an older number.
+    const seeds: Array<{ row: SheetRow; leftover: number }> = [];
+    const unchanged: SheetRow[] = [];
+    for (const item of items) {
+      const row = byId.get(item.id)!;
+      if (item.leftover !== undefined && item.leftover !== row.leftover) {
+        seeds.push({ row, leftover: item.leftover });
+      } else {
+        unchanged.push(row);
+      }
+    }
+
+    const { cascadeUpdated, cascadeWarnings } = await this.cascadeMany(
+      seeds,
+      unchanged,
+    );
+
+    return { updated: items.length, cascadeUpdated, cascadeWarnings };
+  }
+
+  /**
+   * Batched equivalent of recascadeLeftovers for many seed rows at once.
+   *
+   * Same rule as the single-row version: walk forward through contiguous
+   * auto-generated rows and stop at the first manually-entered one, because a
+   * manual entry is an authoritative boundary. Rows sharing a target value are
+   * collapsed into one updateMany so the statement count tracks distinct
+   * leftovers rather than edited products.
+   */
+  private async cascadeMany(
+    seeds: Array<{ row: SheetRow; leftover: number }>,
+    unchanged: SheetRow[] = [],
+  ): Promise<{ cascadeUpdated: number; cascadeWarnings: CascadeWarning[] }> {
+    const all = [...seeds.map((s) => s.row), ...unchanged];
+    if (all.length === 0) return { cascadeUpdated: 0, cascadeWarnings: [] };
+
+    const branchIds = [...new Set(all.map((r) => r.branchId))];
+    const productIds = [...new Set(all.map((r) => r.productId))];
+    const earliest = new Date(Math.min(...all.map((r) => r.date.getTime())));
+
+    const downstream = await this.prisma.inventory.findMany({
+      where: {
+        branchId: { in: branchIds },
+        productId: { in: productIds },
+        date: { gt: earliest },
+        deletedAt: null,
+      },
+      orderBy: { date: 'asc' },
+      select: {
+        id: true,
+        branchId: true,
+        productId: true,
+        date: true,
+        isAutoGenerated: true,
+      },
+    });
+
+    const byPair = new Map<string, typeof downstream>();
+    for (const row of downstream) {
+      const key = `${row.branchId}-${row.productId}`;
+      const list = byPair.get(key) ?? [];
+      list.push(row);
+      byPair.set(key, list);
+    }
+
+    // leftover value -> row ids that should take it
+    const idsByValue = new Map<number, number[]>();
+    for (const seed of seeds) {
+      const key = `${seed.row.branchId}-${seed.row.productId}`;
+      for (const row of byPair.get(key) ?? []) {
+        if (row.date <= seed.row.date) continue;
+        if (!row.isAutoGenerated) break;
+        const list = idsByValue.get(seed.leftover) ?? [];
+        list.push(row.id);
+        idsByValue.set(seed.leftover, list);
+      }
+    }
+
+    // A row the user did not re-count, but whose later days are still
+    // placeholders carried from an older leftover. update() reported this as
+    // cascadeWarning and offered an explicit recascade; so does this.
+    const cascadeWarnings: CascadeWarning[] = [];
+    for (const row of unchanged) {
+      const rest = byPair.get(`${row.branchId}-${row.productId}`) ?? [];
+      const hasStale = rest.some(
+        (r) => r.date > row.date && r.isAutoGenerated,
+      );
+      if (hasStale) {
+        cascadeWarnings.push({
+          branchId: row.branchId,
+          productId: row.productId,
+          fromDate: row.date.toISOString().slice(0, 10),
+        });
+      }
+    }
+
+    if (idsByValue.size === 0) return { cascadeUpdated: 0, cascadeWarnings };
+
+    const writes = Array.from(idsByValue.entries()).map(([leftover, rowIds]) =>
+      this.prisma.inventory.updateMany({
+        where: { id: { in: rowIds } },
+        data: { quantity: leftover, leftover },
+      }),
+    );
+    await this.prisma.$transaction(writes);
+
+    const cascadeUpdated = Array.from(idsByValue.values()).reduce(
+      (acc, list) => acc + list.length,
+      0,
+    );
+    return { cascadeUpdated, cascadeWarnings };
   }
 
   async remove(id: number, branchId?: number) {
@@ -547,15 +735,16 @@ export class InventoryService {
     endDate?: string,
   ) {
     const today = this.localToday();
-    const start = startDate ? new Date(startDate) : today;
-    const end = endDate ? new Date(endDate) : start;
+    const start = startDate ? toUtcDay(startDate) : today;
+    const end = endDate ? toUtcDay(endDate) : start;
+    assertDateRange(start, end);
 
     const rows = await this.prisma.inventory.findMany({
       where: {
         deletedAt: null,
         date:
           start.getTime() === end.getTime() ? start : { gte: start, lte: end },
-        ...(branchId ? { branchId } : {}),
+        ...(branchId != null ? { branchId } : {}),
       },
       include: {
         adjustments: { where: { deletedAt: null } },
@@ -618,9 +807,9 @@ export class InventoryService {
     endDate?: string,
   ) {
     const today = this.localToday();
-    const start = startDate ? new Date(startDate) : today;
-    const end = endDate ? new Date(endDate) : start;
-    this.validateDateRange(start, end);
+    const start = startDate ? toUtcDay(startDate) : today;
+    const end = endDate ? toUtcDay(endDate) : start;
+    assertDateRange(start, end);
 
     const rows = await this.prisma.inventory.findMany({
       where: {
@@ -801,21 +990,11 @@ export class InventoryService {
     startDate: string,
     endDate: string,
   ) {
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    const diffDays = Math.floor(
-      (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24),
-    );
-    if (diffDays < 0)
-      throw new BadRequestException('endDate must be on or after startDate');
-    if (diffDays > 30)
-      throw new BadRequestException('Date range cannot exceed 31 days');
+    const start = toUtcDay(startDate);
+    const end = toUtcDay(endDate);
+    assertDateRange(start, end);
 
-    // Build the expected date array
-    const dates: Date[] = [];
-    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      dates.push(new Date(d));
-    }
+    const dates = eachDayInclusive(start, end);
 
     // Fetch active branches and products
     const [branches, products] = await Promise.all([
@@ -890,7 +1069,12 @@ export class InventoryService {
     fromDate: string,
   ) {
     const seed = await this.prisma.inventory.findFirst({
-      where: { branchId, productId, date: new Date(fromDate), deletedAt: null },
+      where: {
+        branchId,
+        productId,
+        date: toUtcDay(fromDate),
+        deletedAt: null,
+      },
     });
     if (!seed) throw new NotFoundException('Source inventory row not found');
 
@@ -945,9 +1129,9 @@ export class InventoryService {
     type?: ProductType,
   ) {
     const today = this.localToday();
-    const start = startDate ? new Date(startDate) : today;
-    const end = endDate ? new Date(endDate) : start;
-    this.validateDateRange(start, end, 90);
+    const start = startDate ? toUtcDay(startDate) : today;
+    const end = endDate ? toUtcDay(endDate) : start;
+    assertDateRange(start, end, MAX_REPORT_RANGE_DAYS);
 
     // Step 1: resolve qualifying products (excludes soft-deleted products).
     const products = await this.prisma.product.findMany({

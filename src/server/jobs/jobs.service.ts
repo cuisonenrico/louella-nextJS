@@ -251,6 +251,7 @@ export class JobsService {
       WHERE "branchId" IN (${Prisma.join(branchIds)})
         AND "productId" IN (${Prisma.join(productIds)})
         AND "date" < ${date}
+        AND "deletedAt" IS NULL
       ORDER BY "branchId", "productId", "date" DESC
     `;
     for (const entry of priorEntries) {

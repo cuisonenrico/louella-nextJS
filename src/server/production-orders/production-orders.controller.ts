@@ -65,10 +65,9 @@ export class ProductionOrdersController {
   }
 
   @Get('by-date')
+  // As with the inventory dashboard endpoints: `dashboard:branch-orders` is a
+  // sensitive panel, so holding it — not plain `dashboard` — is what grants this.
   @RequireFeature('production-orders', 'dashboard:branch-orders')
-    // The dashboard aggregates this, so a role holding `dashboard` but not the
-    // owning screen's key must still be able to read it.
-  @RequireFeature('production-orders', 'dashboard')
   findByDate(
     @Query('date') date: string,
     @Query('branchId') branchId?: string,
