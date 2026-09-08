@@ -8,13 +8,11 @@ import {
   Post,
   Query,
   UploadedFile,
-  UseGuards,
   UseInterceptors,
   BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UserRole } from '@prisma/client';
-import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/user.decorator';
 import {
@@ -86,7 +84,8 @@ function parseCreateProducts(raw: string | undefined): CreateProductRequest[] {
 
 @Controller('inventory-import')
 @RequireFeature('inventory-import')
-@UseGuards(RolesGuard)
+// No @UseGuards: RolesGuard is a global APP_GUARD (see app.module), so
+// listing it here only made it look controller-local.
 export class InventoryImportController {
   constructor(private readonly service: InventoryImportService) {}
 

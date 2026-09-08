@@ -7,10 +7,8 @@ import {
   Patch,
   Post,
   Query,
-  UseGuards,
 } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
-import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/user.decorator';
 import { UsersService } from './users.service';
@@ -25,7 +23,8 @@ import { RequireFeature } from '../common/decorators/require-feature.decorator';
 // reachable by every authenticated user, since the client fetches it to learn
 // what it may render.
 @Controller('users')
-@UseGuards(RolesGuard)
+// No @UseGuards: RolesGuard is a global APP_GUARD (see app.module), so
+// listing it here only made it look controller-local.
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 

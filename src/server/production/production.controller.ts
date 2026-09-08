@@ -21,7 +21,6 @@ import { ProductionDateRangeQueryDto } from './dto/production-date-range-query.d
 import { CurrentUser } from '../common/decorators/user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Autofill } from '../common/decorators/autofill.decorator';
-import { RolesGuard } from '../common/guards/roles.guard';
 import { BranchGuard } from '../common/guards/branch.guard';
 import { RequireFeature } from '../common/decorators/require-feature.decorator';
 
@@ -31,7 +30,12 @@ import { RequireFeature } from '../common/decorators/require-feature.decorator';
 // 'production', so enabling either page does not require a second grant.
 @RequireFeature('production')
 @Roles(UserRole.VIEWER)
-@UseGuards(RolesGuard, BranchGuard)
+// RolesGuard is not listed here: it is registered globally as an APP_GUARD in
+// app.module. Re-declaring it made the guard list read as though everything on
+// it were controller-local, which is very likely how inventory-import ended up
+// without the BranchGuard it needed — BranchGuard *is* controller-local, and it
+// is the only thing this list has to say.
+@UseGuards(BranchGuard)
 export class ProductionController {
   constructor(private readonly productionService: ProductionService) {}
 

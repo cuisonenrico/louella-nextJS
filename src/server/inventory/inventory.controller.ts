@@ -33,14 +33,18 @@ import { RecascadeDto } from './dto/recascade.dto';
 import { CurrentUser } from '../common/decorators/user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Autofill } from '../common/decorators/autofill.decorator';
-import { RolesGuard } from '../common/guards/roles.guard';
 import { BranchGuard } from '../common/guards/branch.guard';
 import { RequireFeature } from '../common/decorators/require-feature.decorator';
 
 @Controller('inventory')
 @RequireFeature('inventory-history')
 @Roles(UserRole.VIEWER)
-@UseGuards(RolesGuard, BranchGuard)
+// RolesGuard is not listed here: it is registered globally as an APP_GUARD in
+// app.module. Re-declaring it made the guard list read as though everything on
+// it were controller-local, which is very likely how inventory-import ended up
+// without the BranchGuard it needed — BranchGuard *is* controller-local, and it
+// is the only thing this list has to say.
+@UseGuards(BranchGuard)
 export class InventoryController {
   constructor(private readonly inventoryService: InventoryService) {}
 

@@ -6,10 +6,8 @@ import {
   Param,
   ParseIntPipe,
   Put,
-  UseGuards,
 } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
-import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/user.decorator';
 import { PermissionsService } from './permissions.service';
@@ -18,7 +16,8 @@ import { RequireFeature } from '../common/decorators/require-feature.decorator';
 
 @Controller('permissions')
 @RequireFeature('permissions')
-@UseGuards(RolesGuard)
+// No @UseGuards: RolesGuard is a global APP_GUARD (see app.module), so
+// listing it here only made it look controller-local.
 export class PermissionsController {
   constructor(private readonly permissionsService: PermissionsService) {}
 
