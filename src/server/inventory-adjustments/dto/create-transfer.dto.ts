@@ -1,4 +1,16 @@
-import { IsInt, IsOptional, IsPositive, IsString } from 'class-validator';
+import {
+  IsInt,
+  IsOptional,
+  IsPositive,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
+import {
+  MAX_NOTES_LENGTH,
+  MAX_UNITS,
+} from '../../common/constants/inventory.constants';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateTransferDto {
@@ -7,6 +19,7 @@ export class CreateTransferDto {
     description: 'Source inventory record ID (branch being pulled from)',
   })
   @IsInt()
+  @Min(1)
   fromInventoryId: number;
 
   @ApiProperty({
@@ -14,6 +27,7 @@ export class CreateTransferDto {
     description: 'Destination inventory record ID (branch receiving stock)',
   })
   @IsInt()
+  @Min(1)
   toInventoryId: number;
 
   @ApiProperty({
@@ -22,6 +36,7 @@ export class CreateTransferDto {
   })
   @IsInt()
   @IsPositive()
+  @Max(MAX_UNITS)
   value: number;
 
   @ApiPropertyOptional({
@@ -29,5 +44,6 @@ export class CreateTransferDto {
   })
   @IsOptional()
   @IsString()
+  @MaxLength(MAX_NOTES_LENGTH)
   notes?: string;
 }

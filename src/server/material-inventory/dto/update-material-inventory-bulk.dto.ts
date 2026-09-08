@@ -1,5 +1,17 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsInt, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import {
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
+import {
+  MAX_NOTES_LENGTH,
+  MAX_UNITS,
+} from '../../common/constants/inventory.constants';
 
 /**
  * One row of a material sheet save. Addressed by `id`, so unlike
@@ -16,22 +28,26 @@ export class UpdateMaterialInventoryItemDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(MAX_UNITS)
   quantity?: number;
 
   @ApiPropertyOptional({ example: 25.0 })
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(MAX_UNITS)
   delivery?: number;
 
   @ApiPropertyOptional({ example: 12.5 })
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(MAX_UNITS)
   used?: number;
 
   @ApiPropertyOptional({ example: 'Reserved for first batch' })
   @IsOptional()
   @IsString()
+  @MaxLength(MAX_NOTES_LENGTH)
   notes?: string;
 }

@@ -152,7 +152,10 @@ export class InventoryAdjustmentsService {
         await this.assertTransferStock(existing, dto.value);
 
         const [updated] = await this.prisma.$transaction([
-          this.prisma.inventoryAdjustment.update({ where: { id }, data: dto }),
+          this.prisma.inventoryAdjustment.update({
+            where: { id },
+            data: { ...dto, updatedById: user?.id ?? null },
+          }),
           this.prisma.inventoryAdjustment.updateMany({
             where: { id: existing.linkedAdjustmentId, deletedAt: null },
             data: { value: dto.value },
@@ -174,7 +177,10 @@ export class InventoryAdjustmentsService {
       );
     }
 
-    return this.prisma.inventoryAdjustment.update({ where: { id }, data: dto });
+    return this.prisma.inventoryAdjustment.update({
+      where: { id },
+      data: { ...dto, updatedById: user?.id ?? null },
+    });
   }
 
   /**

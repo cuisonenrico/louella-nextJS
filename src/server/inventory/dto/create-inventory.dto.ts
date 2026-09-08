@@ -4,9 +4,15 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  Max,
+  MaxLength,
   Min,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  MAX_NOTES_LENGTH,
+  MAX_UNITS,
+} from '../../common/constants/inventory.constants';
 
 export class CreateInventoryDto {
   @ApiProperty({ example: 1, description: 'Branch ID' })
@@ -30,6 +36,7 @@ export class CreateInventoryDto {
   @ApiProperty({ example: 100, description: 'Total pieces produced/available' })
   @IsInt()
   @Min(0)
+  @Max(MAX_UNITS)
   quantity: number;
 
   @ApiPropertyOptional({
@@ -39,6 +46,7 @@ export class CreateInventoryDto {
   @IsOptional()
   @IsInt()
   @Min(0)
+  @Max(MAX_UNITS)
   delivery?: number;
 
   @ApiPropertyOptional({
@@ -48,12 +56,14 @@ export class CreateInventoryDto {
   @IsOptional()
   @IsInt()
   @Min(0)
+  @Max(MAX_UNITS)
   leftover?: number;
 
   @ApiPropertyOptional({ example: 2, description: 'Damaged/rejected pieces' })
   @IsOptional()
   @IsInt()
   @Min(0)
+  @Max(MAX_UNITS)
   reject?: number;
 
   @ApiPropertyOptional({
@@ -62,5 +72,6 @@ export class CreateInventoryDto {
   })
   @IsOptional()
   @IsString()
+  @MaxLength(MAX_NOTES_LENGTH)
   notes?: string;
 }

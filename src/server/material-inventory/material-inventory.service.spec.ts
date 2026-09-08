@@ -347,3 +347,88 @@ describe('MaterialInventoryService.updateBulk', () => {
     expect(where).toMatchObject({ deletedAt: null });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Error reporting
+//
+// update() wrapped everything in `try { ... } catch { throw NotFound }`, which
+// reported a unique-constraint collision as "record not found". Worse, the
+// blanket catch ran *before* PrismaExceptionFilter, which would otherwise have
+// turned that same error into an accurate 409.
+// ---------------------------------------------------------------------------
+
+describe('MaterialInventoryService.update error reporting', () => {
+  let service: MaterialInventoryService;
+  let prisma: ReturnType<typeof makePrisma>;
+
+  beforeEach(async () => {
+    prisma = makePrisma();
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        MaterialInventoryService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: CacheNamespaceService, useValue: makeCache() },
+      ],
+    }).compile();
+    service = module.get(MaterialInventoryService);
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  it('reports a missing card as not found', async () => {
+    prisma.materialInventory.findFirst.mockResolvedValue(null);
+
+    await expect(service.update(4, { delivery: 5 })).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    expect(prisma.materialInventory.update).not.toHaveBeenCalled();
+  });
+
+  it('lets a constraint violation through instead of calling it not found', async () => {
+    const collision = Object.assign(new Error('Unique constraint failed'), {
+      code: 'P2002',
+    });
+    prisma.materialInventory.findFirst.mockResolvedValue({ id: 4 });
+    prisma.materialInventory.update.mockRejectedValue(collision);
+
+    await expect(service.update(4, { materialId: 9 })).rejects.toBe(collision);
+  });
+});
+
+describe('MaterialInventoryService audit trail', () => {
+  let service: MaterialInventoryService;
+  let prisma: ReturnType<typeof makePrisma>;
+
+  beforeEach(async () => {
+    prisma = makePrisma();
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        MaterialInventoryService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: CacheNamespaceService, useValue: makeCache() },
+      ],
+    }).compile();
+    service = module.get(MaterialInventoryService);
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  it('records who amended a card', async () => {
+    prisma.materialInventory.findFirst.mockResolvedValue({ id: 4 });
+    prisma.materialInventory.update.mockResolvedValue({ id: 4 });
+
+    await service.update(4, { delivery: 5 }, 42);
+
+    expect(prisma.materialInventory.update.mock.calls[0][0].data.updatedById).toBe(42);
+  });
+
+  it('records who amended each card of a bulk save', async () => {
+    prisma.materialInventory.findMany.mockResolvedValue([{ id: 1 }, { id: 2 }]);
+
+    await service.updateBulk([{ id: 1, delivery: 5 }, { id: 2, delivery: 6 }], 42);
+
+    for (const call of prisma.materialInventory.update.mock.calls) {
+      expect(call[0].data.updatedById).toBe(42);
+    }
+  });
+});

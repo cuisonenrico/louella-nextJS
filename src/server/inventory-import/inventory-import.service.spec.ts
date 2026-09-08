@@ -782,6 +782,24 @@ describe('InventoryImportService', () => {
       });
     });
 
+    it('attributes imported rows to the user who ran the import', async () => {
+      // create/createBulk stamp createdById; the import did not, so every row
+      // it wrote was unattributed while the ImportLog beside it named the user.
+      const buf = buildWorkbook([
+        { name: 'Day (1)', dateHeader: '4/14/26', rows: [['Pandesal', 10, 3, 1]] },
+      ]);
+
+      await service.importWorkbook(buf, 7, 'sheet.xlsx', {
+        id: 55,
+        branchId: null,
+        permissions: ['all-branches'],
+      });
+
+      const call = prisma.inventory.upsert.mock.calls[0][0];
+      expect(call.create.createdById).toBe(55);
+      expect(call.update.updatedById).toBe(55);
+    });
+
     it('clears deletedAt so importing over a deleted day restores the row', async () => {
       // `@@unique([branchId, productId, date])` excludes deletedAt, so a
       // soft-deleted row still owns the slot and this upsert matches it.

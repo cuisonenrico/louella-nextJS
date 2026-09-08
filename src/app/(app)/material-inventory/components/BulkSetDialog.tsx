@@ -44,18 +44,29 @@ export function BulkSetDialog({ open, filterDate, materials, existingRows, onClo
   }
 
   const saveMutation = useMutation({
+    // At most two requests regardless of how many materials are set: one to
+    // update the cards that exist, one to create the rest. A request per
+    // material — which is what a "bulk set" over a full catalogue produced —
+    // hits the global 20/min throttle and half-completes.
     mutationFn: async () => {
-      const ops: Promise<unknown>[] = [];
+      const updates: { id: number; delivery: number }[] = [];
+      const creates: { materialId: number; date: string; quantity: number; delivery: number }[] = [];
+
       deliveries.forEach((deliveryStr, materialId) => {
         const deliveryVal = parseFloat(deliveryStr) || 0;
+        if (deliveryVal <= 0) return;
         const ex = existingRows.find((r) => r.materialId === materialId);
         if (ex) {
-          if (deliveryVal > 0) ops.push(materialInventoryApi.update(ex.id, { delivery: ex.delivery + deliveryVal }));
-        } else if (deliveryVal > 0) {
-          ops.push(materialInventoryApi.create({ materialId, date: filterDate, quantity: 0, delivery: deliveryVal }));
+          updates.push({ id: ex.id, delivery: ex.delivery + deliveryVal });
+        } else {
+          creates.push({ materialId, date: filterDate, quantity: 0, delivery: deliveryVal });
         }
       });
-      return Promise.all(ops);
+
+      return Promise.all([
+        updates.length > 0 ? materialInventoryApi.updateBulk(updates) : Promise.resolve(),
+        creates.length > 0 ? materialInventoryApi.createBulk(creates) : Promise.resolve(),
+      ]);
     },
     onSuccess: () => { onSaved(); onClose(); toast.success('Deliveries saved'); },
     onError: (e) => { const text = extractError(e); setErr(text); toast.error(text); },

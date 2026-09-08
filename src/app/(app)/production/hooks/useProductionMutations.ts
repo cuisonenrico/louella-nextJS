@@ -54,18 +54,20 @@ export function useProductionMutations({
       production: Map<number, { _productionId: number | null; yield: number }>;
       inventory: Map<number, { delivery: number }>;
     }) => {
-      const toUpsert = Array.from(data.production.entries())
-        .filter(([, d]) => d._productionId == null)
+      // Two requests, not one per edited row. A PATCH per row runs into the
+      // global 20-requests/minute throttle on any real sheet, and Promise.all
+      // rejects on the first 429 — reporting failure over a partial save.
+      // upsertBulk keys on (branch, product, date), so rows that already exist
+      // are updated by the same call that creates the new ones.
+      const production = Array.from(data.production.entries())
         .map(([productId, d]) => ({ productId, date: filterDate, yield: d.yield }));
 
-      const toUpdate = Array.from(data.production.entries())
-        .filter(([, d]) => d._productionId != null)
-        .map(([, d]) => ({ id: d._productionId!, yield: d.yield }));
+      const inventory = Array.from(data.inventory.entries())
+        .map(([id, d]) => ({ id, delivery: d.delivery }));
 
       await Promise.all([
-        toUpsert.length > 0 ? productionApi.upsertBulk(toUpsert) : Promise.resolve(),
-        ...toUpdate.map(({ id, yield: y }) => productionApi.update(id, { yield: y })),
-        ...Array.from(data.inventory.entries()).map(([id, d]) => inventoryApi.update(id, d)),
+        production.length > 0 ? productionApi.upsertBulk(production) : Promise.resolve(),
+        inventory.length > 0 ? inventoryApi.updateBulk(inventory) : Promise.resolve(),
       ]);
     },
     onSuccess: () => {

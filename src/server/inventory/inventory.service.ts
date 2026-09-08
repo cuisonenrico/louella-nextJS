@@ -1,14 +1,22 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma, ProductType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { getEffectivePrice } from '../common/utils/price-history.util';
-import { computeSold } from '../common/utils/inventory-metrics.util';
+import {
+  computeAdjSum,
+  computeSold,
+} from '../common/utils/inventory-metrics.util';
 import { csvField } from '../common/utils/csv.util';
 import { CreateInventoryDto } from './dto/create-inventory.dto';
 import { UpdateInventoryDto } from './dto/update-inventory.dto';
 import { UpdateInventoryItemDto } from './dto/update-inventory-bulk.dto';
 import { CacheNamespaceService } from '../common/cache/cache-namespace.service';
 import { CACHE_NS } from '../common/cache/cache-namespaces';
+import { clampPageSize } from '../common/constants/inventory.constants';
 import {
   MAX_REPORT_RANGE_DAYS,
   assertDateRange,
@@ -57,6 +65,38 @@ export class InventoryService {
       timeZone: 'Asia/Manila',
     }).format(new Date());
     return new Date(`${str}T00:00:00.000Z`);
+  }
+
+  /**
+   * Reject a row that claims more stock left over than ever existed.
+   *
+   * `sold = quantity + delivery + adjSum - leftover - reject`, so an entry
+   * where leftover and reject together exceed the stock on hand makes `sold`
+   * negative — and revenue with it. Nothing caught that: `zeroSales` filters
+   * `sold <= 0`, so an impossible row was reported as a product that simply did
+   * not sell, and the negative revenue quietly reduced the day's total.
+   *
+   * Deliberately not applied to the XLSX import, which reproduces a historical
+   * sheet as it was actually written. Refusing a whole month's import over one
+   * badly-typed row from last year would be the wrong trade; this guards entry,
+   * where the person who made the typo is present to fix it.
+   */
+  private assertRowIsPossible(row: {
+    quantity: number;
+    delivery: number;
+    leftover: number;
+    reject: number;
+    adjustments?: Array<{ type: string; value: number }>;
+  }): void {
+    const onHand =
+      row.quantity + row.delivery + computeAdjSum(row.adjustments);
+    const accountedFor = row.leftover + row.reject;
+    if (accountedFor > onHand) {
+      throw new BadRequestException(
+        `Leftover (${row.leftover}) and reject (${row.reject}) come to ${accountedFor}, ` +
+          `but only ${onHand} units existed for this product and day.`,
+      );
+    }
   }
 
   async create(body: CreateInventoryDto, userId?: number) {
@@ -143,6 +183,7 @@ export class InventoryService {
   }
 
   async findAll(page = 1, limit = 50, branchId?: number) {
+    limit = clampPageSize(limit);
     const skip = (page - 1) * limit;
     const where = {
       deletedAt: null,
@@ -162,6 +203,7 @@ export class InventoryService {
   }
 
   async search(q: string, page = 1, limit = 50, branchId?: number) {
+    limit = clampPageSize(limit);
     const skip = (page - 1) * limit;
     const where = {
       deletedAt: null,
@@ -192,6 +234,7 @@ export class InventoryService {
   }
 
   async findByBranch(branchId: number, page = 1, limit = 50) {
+    limit = clampPageSize(limit);
     const skip = (page - 1) * limit;
     const where = { branchId, deletedAt: null };
     const [data, total] = await this.prisma.$transaction([
@@ -213,6 +256,7 @@ export class InventoryService {
     limit = 50,
     branchId?: number,
   ) {
+    limit = clampPageSize(limit);
     const skip = (page - 1) * limit;
     const where = {
       productId,
@@ -480,11 +524,27 @@ export class InventoryService {
     return inventory;
   }
 
-  async update(id: number, body: UpdateInventoryDto, branchId?: number) {
+  async update(
+    id: number,
+    body: UpdateInventoryDto,
+    branchId?: number,
+    userId?: number,
+  ) {
     const existing = await this.prisma.inventory.findFirst({
       where: { id, deletedAt: null, ...(branchId != null ? { branchId } : {}) },
+      include: { adjustments: { where: { deletedAt: null } } },
     });
     if (!existing) throw new NotFoundException('Inventory record not found');
+
+    // Validate the row as it will be *after* the merge, not the fields in
+    // isolation: raising delivery and leftover together is legitimate.
+    this.assertRowIsPossible({
+      quantity: body.quantity ?? existing.quantity,
+      delivery: body.delivery ?? existing.delivery,
+      leftover: body.leftover ?? existing.leftover,
+      reject: body.reject ?? existing.reject,
+      adjustments: existing.adjustments,
+    });
 
     const leftoverChanged =
       body.leftover !== undefined && body.leftover !== existing.leftover;
@@ -492,9 +552,8 @@ export class InventoryService {
     const updated = await this.prisma.inventory.update({
       where: { id },
       data: {
-        branchId: body.branchId,
-        productId: body.productId,
-        date: body.date ? toUtcDay(body.date) : undefined,
+        // No branch/product/date: the DTO does not carry them, because
+        // re-keying a row is not an edit. See UpdateInventoryDto.
         quantity: body.quantity,
         delivery: body.delivery,
         leftover: body.leftover,
@@ -502,6 +561,7 @@ export class InventoryService {
         notes: body.notes,
         // Always flip to manually-entered when a user edits a row
         isAutoGenerated: false,
+        updatedById: userId ?? null,
       },
       include: { branch: true, product: true },
     });
@@ -547,7 +607,11 @@ export class InventoryService {
    * transaction of cascades. Prisma pipelines an array `$transaction` into a
    * single round trip, which is what makes that possible.
    */
-  async updateBulk(items: UpdateInventoryItemDto[], branchId?: number) {
+  async updateBulk(
+    items: UpdateInventoryItemDto[],
+    branchId?: number,
+    userId?: number,
+  ) {
     if (items.length === 0)
       return { updated: 0, cascadeUpdated: 0, cascadeWarnings: [] };
 
@@ -563,7 +627,14 @@ export class InventoryService {
         branchId: true,
         productId: true,
         date: true,
+        quantity: true,
+        delivery: true,
         leftover: true,
+        reject: true,
+        adjustments: {
+          where: { deletedAt: null },
+          select: { type: true, value: true },
+        },
       },
     });
 
@@ -579,6 +650,19 @@ export class InventoryService {
 
     const byId = new Map(existing.map((r) => [r.id, r]));
 
+    // Validate the whole batch before writing any of it — a partial save is
+    // exactly what this endpoint exists to prevent.
+    for (const item of items) {
+      const row = byId.get(item.id)!;
+      this.assertRowIsPossible({
+        quantity: item.quantity ?? row.quantity,
+        delivery: item.delivery ?? row.delivery,
+        leftover: item.leftover ?? row.leftover,
+        reject: item.reject ?? row.reject,
+        adjustments: row.adjustments,
+      });
+    }
+
     await this.prisma.$transaction(
       items.map((item) =>
         this.prisma.inventory.update({
@@ -591,6 +675,7 @@ export class InventoryService {
             notes: item.notes,
             // Matches update(): a user-edited row is no longer a placeholder.
             isAutoGenerated: false,
+            updatedById: userId ?? null,
           },
         }),
       ),
@@ -651,6 +736,11 @@ export class InventoryService {
         productId: true,
         date: true,
         isAutoGenerated: true,
+        delivery: true,
+        adjustments: {
+          where: { deletedAt: null },
+          select: { type: true, value: true },
+        },
       },
     });
 
@@ -662,17 +752,16 @@ export class InventoryService {
       byPair.set(key, list);
     }
 
-    // leftover value -> row ids that should take it
-    const idsByValue = new Map<number, number[]>();
+    // Each placeholder opens on the previous balance and closes on that plus
+    // whatever landed on it, so the values differ per row — see
+    // buildCarryForward, which this shares with the single-row cascade.
+    const writes: Array<{ id: number; quantity: number; leftover: number }> = [];
     for (const seed of seeds) {
       const key = `${seed.row.branchId}-${seed.row.productId}`;
-      for (const row of byPair.get(key) ?? []) {
-        if (row.date <= seed.row.date) continue;
-        if (!row.isAutoGenerated) break;
-        const list = idsByValue.get(seed.leftover) ?? [];
-        list.push(row.id);
-        idsByValue.set(seed.leftover, list);
-      }
+      const after = (byPair.get(key) ?? []).filter(
+        (r) => r.date > seed.row.date,
+      );
+      writes.push(...this.buildCarryForward(seed.leftover, after));
     }
 
     // A row the user did not re-count, but whose later days are still
@@ -693,21 +782,18 @@ export class InventoryService {
       }
     }
 
-    if (idsByValue.size === 0) return { cascadeUpdated: 0, cascadeWarnings };
+    if (writes.length === 0) return { cascadeUpdated: 0, cascadeWarnings };
 
-    const writes = Array.from(idsByValue.entries()).map(([leftover, rowIds]) =>
-      this.prisma.inventory.updateMany({
-        where: { id: { in: rowIds } },
-        data: { quantity: leftover, leftover },
-      }),
+    await this.prisma.$transaction(
+      writes.map(({ id, quantity, leftover }) =>
+        this.prisma.inventory.update({
+          where: { id },
+          data: { quantity, leftover },
+        }),
+      ),
     );
-    await this.prisma.$transaction(writes);
 
-    const cascadeUpdated = Array.from(idsByValue.values()).reduce(
-      (acc, list) => acc + list.length,
-      0,
-    );
-    return { cascadeUpdated, cascadeWarnings };
+    return { cascadeUpdated: writes.length, cascadeWarnings };
   }
 
   async remove(id: number, branchId?: number) {
@@ -1059,9 +1145,16 @@ export class InventoryService {
   }
 
   /**
-   * Walk forward from fromDate through contiguous auto-generated inventory rows
-   * and update each one's leftover (and quantity) to carry forward the prior
-   * day's leftover. Stops at the first manually-entered row.
+   * Walk forward from fromDate through contiguous auto-generated rows, carrying
+   * each day's closing balance into the next. Stops at the first
+   * manually-entered row, which is an authoritative boundary.
+   *
+   * This used to write one flat `seed.leftover` to every downstream row with a
+   * single updateMany. That is only right while a placeholder has no delivery
+   * and no adjustments — but a delivery can land on a day nobody entered, and a
+   * transfer can be booked against one, and the flat write silently discarded
+   * both. Nothing is sold on a placeholder day, so its closing balance is
+   * simply everything it had on hand.
    */
   async recascadeLeftovers(
     branchId: number,
@@ -1083,23 +1176,57 @@ export class InventoryService {
     const allSubsequent = await this.prisma.inventory.findMany({
       where: { branchId, productId, date: { gt: seed.date }, deletedAt: null },
       orderBy: { date: 'asc' },
-      select: { id: true, isAutoGenerated: true },
+      select: {
+        id: true,
+        isAutoGenerated: true,
+        delivery: true,
+        adjustments: {
+          where: { deletedAt: null },
+          select: { type: true, value: true },
+        },
+      },
     });
 
-    const toUpdate: { id: number }[] = [];
-    for (const row of allSubsequent) {
+    const writes = this.buildCarryForward(seed.leftover, allSubsequent);
+    if (writes.length === 0) return { updated: 0 };
+
+    await this.prisma.$transaction(
+      writes.map(({ id, quantity, leftover }) =>
+        this.prisma.inventory.update({
+          where: { id },
+          data: { quantity, leftover },
+        }),
+      ),
+    );
+
+    return { updated: writes.length };
+  }
+
+  /**
+   * Roll a closing balance forward through contiguous placeholder rows.
+   *
+   * Each row opens on the previous balance and closes on that plus whatever it
+   * received — a delivery, a transfer — because a placeholder is a day nobody
+   * recorded a sale on. Stops at the first manual row.
+   */
+  private buildCarryForward(
+    openingBalance: number,
+    subsequent: Array<{
+      id: number;
+      isAutoGenerated: boolean;
+      delivery: number;
+      adjustments: Array<{ type: string; value: number }>;
+    }>,
+  ): Array<{ id: number; quantity: number; leftover: number }> {
+    const writes: Array<{ id: number; quantity: number; leftover: number }> = [];
+    let running = openingBalance;
+    for (const row of subsequent) {
       if (!row.isAutoGenerated) break;
-      toUpdate.push({ id: row.id });
+      const closing = running + row.delivery + computeAdjSum(row.adjustments);
+      writes.push({ id: row.id, quantity: running, leftover: closing });
+      running = closing;
     }
-
-    if (toUpdate.length === 0) return { updated: 0 };
-
-    await this.prisma.inventory.updateMany({
-      where: { id: { in: toUpdate.map((r) => r.id) } },
-      data: { quantity: seed.leftover, leftover: seed.leftover },
-    });
-
-    return { updated: toUpdate.length };
+    return writes;
   }
 
   getRejectionByProduct(

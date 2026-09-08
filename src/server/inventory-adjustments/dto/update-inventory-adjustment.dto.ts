@@ -1,4 +1,16 @@
-import { IsEnum, IsInt, IsOptional, IsPositive, IsString } from 'class-validator';
+import {
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsPositive,
+  IsString,
+  Max,
+  MaxLength,
+} from 'class-validator';
+import {
+  MAX_NOTES_LENGTH,
+  MAX_UNITS,
+} from '../../common/constants/inventory.constants';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { AdjustmentType } from '@prisma/client';
 
@@ -16,10 +28,12 @@ export class UpdateInventoryAdjustmentDto {
   @IsOptional()
   @IsInt()
   @IsPositive()
+  @Max(MAX_UNITS)
   value?: number;
 
   @ApiPropertyOptional({ example: 'Revised count' })
   @IsOptional()
   @IsString()
+  @MaxLength(MAX_NOTES_LENGTH)
   notes?: string;
 }

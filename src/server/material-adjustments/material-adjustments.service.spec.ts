@@ -87,7 +87,14 @@ describe('MaterialAdjustmentsService', () => {
 
       expect(prisma.materialAdjustment.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { materialInventoryId: 4, deletedAt: null },
+          where: {
+            materialInventoryId: 4,
+            deletedAt: null,
+            // The card's own deletedAt matters too: this query addresses
+            // adjustments by id, so a deleted card's history stayed readable
+            // without it even though the card is hidden everywhere else.
+            materialInventory: { deletedAt: null },
+          },
         }),
       );
     });

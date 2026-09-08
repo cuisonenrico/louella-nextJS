@@ -6,6 +6,7 @@ import { UpdateMaterialInventoryDto } from './dto/update-material-inventory.dto'
 import { UpdateMaterialInventoryItemDto } from './dto/update-material-inventory-bulk.dto';
 import { CacheNamespaceService } from '../common/cache/cache-namespace.service';
 import { CACHE_NS } from '../common/cache/cache-namespaces';
+import { clampPageSize } from '../common/constants/inventory.constants';
 import { computeMaterialClosing } from '../common/utils/inventory-metrics.util';
 import {
   assertDateRange,
@@ -116,7 +117,11 @@ export class MaterialInventoryService {
   /** Returns all material inventory records for a specific date. */
   findByDate(date: string) {
     return this.prisma.materialInventory.findMany({
-      where: { date: toUtcDay(date), deletedAt: null },
+      where: {
+        date: toUtcDay(date),
+        deletedAt: null,
+        material: { deletedAt: null },
+      },
       orderBy: { material: { name: 'asc' } },
       include: materialInventoryInclude,
     });
@@ -189,8 +194,9 @@ export class MaterialInventoryService {
   }
 
   async findAll(page = 1, limit = 200) {
+    limit = clampPageSize(limit);
     const skip = (page - 1) * limit;
-    const where = { deletedAt: null };
+    const where = { deletedAt: null, material: { deletedAt: null } };
     const [data, total] = await this.prisma.$transaction([
       this.prisma.materialInventory.findMany({
         where,
@@ -205,9 +211,12 @@ export class MaterialInventoryService {
   }
 
   async search(q: string, page = 1, limit = 200) {
+    limit = clampPageSize(limit);
     const skip = (page - 1) * limit;
     const where = {
       deletedAt: null,
+      // A retired material should not come back through its old stock cards.
+      material: { deletedAt: null },
       OR: [
         { notes: { contains: q, mode: Prisma.QueryMode.insensitive } },
         { batchNumber: { contains: q, mode: Prisma.QueryMode.insensitive } },
@@ -247,25 +256,41 @@ export class MaterialInventoryService {
     return record;
   }
 
-  async update(id: number, body: UpdateMaterialInventoryDto) {
-    try {
-      return await this.prisma.materialInventory.update({
-        where: { id },
-        data: {
+  /**
+   * A blanket `try { ... } catch { throw NotFound }` used to wrap this, so a
+   * unique-constraint collision — changing materialId onto a day that already
+   * has a card — was reported as "record not found". It also ran ahead of
+   * PrismaExceptionFilter, which would have turned that same error into an
+   * accurate 409. Check existence explicitly; let everything else through.
+   */
+  async update(
+    id: number,
+    body: UpdateMaterialInventoryDto,
+    userId?: number,
+  ) {
+    const existing = await this.prisma.materialInventory.findFirst({
+      where: { id, deletedAt: null },
+      select: { id: true },
+    });
+    if (!existing) {
+      throw new NotFoundException('Material inventory record not found');
+    }
+
+    return this.prisma.materialInventory.update({
+      where: { id },
+      data: {
           materialId: body.materialId,
           supplierId: body.supplierId,
           batchNumber: body.batchNumber,
           expiresAt: body.expiresAt ? toUtcDay(body.expiresAt) : undefined,
           quantity: body.quantity,
           delivery: body.delivery,
-          used: body.used,
-          notes: body.notes,
-        },
-        include: materialInventoryInclude,
-      });
-    } catch {
-      throw new NotFoundException('Material inventory record not found');
-    }
+        used: body.used,
+        notes: body.notes,
+        updatedById: userId ?? null,
+      },
+      include: materialInventoryInclude,
+    });
   }
 
   /**
@@ -279,7 +304,10 @@ export class MaterialInventoryService {
    * array `$transaction` into a single round trip, which matters against a
    * cross-region database.
    */
-  async updateBulk(items: UpdateMaterialInventoryItemDto[]) {
+  async updateBulk(
+    items: UpdateMaterialInventoryItemDto[],
+    userId?: number,
+  ) {
     if (items.length === 0) return { updated: 0 };
 
     const ids = items.map((i) => i.id);
@@ -306,6 +334,7 @@ export class MaterialInventoryService {
             delivery: item.delivery,
             used: item.used,
             notes: item.notes,
+            updatedById: userId ?? null,
           },
         }),
       ),

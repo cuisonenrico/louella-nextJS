@@ -318,6 +318,8 @@ export const materialInventoryApi = {
     api.post<{ created: number }>('/material-inventory/init', null, { params: { date } }),
   get: (id: number) =>
     api.get<MaterialInventory>(`/material-inventory/${id}`),
+  createBulk: (data: Partial<MaterialInventory>[]) =>
+    api.post<MaterialInventory[]>('/material-inventory/bulk', data),
   create: (data: Partial<MaterialInventory>) =>
     api.post<MaterialInventory>('/material-inventory', data),
   // One request for a whole sheet save — see inventoryApi.updateBulk.

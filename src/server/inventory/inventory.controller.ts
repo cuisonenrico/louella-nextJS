@@ -73,9 +73,14 @@ export class InventoryController {
   updateBulk(
     @Body(new ParseArrayPipe({ items: UpdateInventoryItemDto }))
     body: UpdateInventoryItemDto[],
+    @CurrentUser() user: { id: number },
     @Query('branchId') branchIdStr?: string,
   ) {
-    return this.inventoryService.updateBulk(body, parseBranchId(branchIdStr));
+    return this.inventoryService.updateBulk(
+      body,
+      parseBranchId(branchIdStr),
+      user?.id,
+    );
   }
 
   @Get()
@@ -271,9 +276,15 @@ export class InventoryController {
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() body: UpdateInventoryDto,
+    @CurrentUser() user: { id: number },
     @Query('branchId') branchIdStr?: string,
   ) {
-    return this.inventoryService.update(id, body, parseBranchId(branchIdStr));
+    return this.inventoryService.update(
+      id,
+      body,
+      parseBranchId(branchIdStr),
+      user?.id,
+    );
   }
 
   @Delete(':id')

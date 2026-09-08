@@ -4,8 +4,14 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Max,
+  MaxLength,
   Min,
 } from 'class-validator';
+import {
+  MAX_NOTES_LENGTH,
+  MAX_UNITS,
+} from '../../common/constants/inventory.constants';
 
 export class UpdateMaterialInventoryDto {
   @IsOptional()
@@ -33,19 +39,23 @@ export class UpdateMaterialInventoryDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(MAX_UNITS)
   quantity?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(MAX_UNITS)
   delivery?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(MAX_UNITS)
   used?: number;
 
   @IsOptional()
   @IsString()
+  @MaxLength(MAX_NOTES_LENGTH)
   notes?: string;
 }

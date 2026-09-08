@@ -4,8 +4,14 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Max,
+  MaxLength,
   Min,
 } from 'class-validator';
+import {
+  MAX_NOTES_LENGTH,
+  MAX_UNITS,
+} from '../../common/constants/inventory.constants';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateMaterialInventoryDto {
@@ -47,16 +53,19 @@ export class CreateMaterialInventoryDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(MAX_UNITS)
   quantity?: number;
 
   @ApiPropertyOptional({ example: 25.0, description: 'Cumulative deliveries' })
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(MAX_UNITS)
   delivery?: number;
 
   @ApiPropertyOptional({ example: 'Reserved for first batch' })
   @IsOptional()
   @IsString()
+  @MaxLength(MAX_NOTES_LENGTH)
   notes?: string;
 }

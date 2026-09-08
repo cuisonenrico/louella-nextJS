@@ -46,7 +46,14 @@ export class MaterialAdjustmentsService {
 
   async listByMaterialInventory(materialInventoryId: number) {
     return this.prisma.materialAdjustment.findMany({
-      where: { materialInventoryId, deletedAt: null },
+      // The card's own deletedAt has to be checked too: this query addresses
+      // adjustments directly, so without it a deleted card's history stayed
+      // readable by id even though the card itself is hidden everywhere.
+      where: {
+        materialInventoryId,
+        deletedAt: null,
+        materialInventory: { deletedAt: null },
+      },
       orderBy: { createdAt: 'desc' },
     });
   }

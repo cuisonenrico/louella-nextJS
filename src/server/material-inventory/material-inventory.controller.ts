@@ -84,8 +84,9 @@ export class MaterialInventoryController {
   updateBulk(
     @Body(new ParseArrayPipe({ items: UpdateMaterialInventoryItemDto }))
     body: UpdateMaterialInventoryItemDto[],
+    @CurrentUser() user: { id: number },
   ) {
-    return this.materialInventoryService.updateBulk(body);
+    return this.materialInventoryService.updateBulk(body, user?.id);
   }
 
   @Get('gaps')
@@ -128,8 +129,9 @@ export class MaterialInventoryController {
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() body: UpdateMaterialInventoryDto,
+    @CurrentUser() user: { id: number },
   ) {
-    return this.materialInventoryService.update(id, body);
+    return this.materialInventoryService.update(id, body, user?.id);
   }
 
   @Delete(':id')

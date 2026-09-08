@@ -4,8 +4,14 @@ import {
   IsOptional,
   IsPositive,
   IsString,
+  Max,
+  MaxLength,
   Min,
 } from 'class-validator';
+import {
+  MAX_NOTES_LENGTH,
+  MAX_UNITS,
+} from '../../common/constants/inventory.constants';
 import { AdjustmentType } from '@prisma/client';
 
 export class CreateMaterialAdjustmentDto {
@@ -22,9 +28,11 @@ export class CreateMaterialAdjustmentDto {
    */
   @IsNumber()
   @IsPositive()
+  @Max(MAX_UNITS)
   value: number;
 
   @IsOptional()
   @IsString()
+  @MaxLength(MAX_NOTES_LENGTH)
   notes?: string;
 }

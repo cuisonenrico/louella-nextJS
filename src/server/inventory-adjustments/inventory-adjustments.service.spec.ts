@@ -329,7 +329,7 @@ describe('InventoryAdjustmentsService', () => {
 
       expect(prisma.inventoryAdjustment.update).toHaveBeenCalledWith({
         where: { id: 1 },
-        data: { value: 3 },
+        data: { value: 3, updatedById: 1 },
       });
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
@@ -370,7 +370,7 @@ describe('InventoryAdjustmentsService', () => {
       expect(prisma.$transaction).toHaveBeenCalledTimes(1);
       expect(prisma.inventoryAdjustment.update).toHaveBeenCalledWith({
         where: { id: 1 },
-        data: { value: 8 },
+        data: { value: 8, updatedById: 1 },
       });
       expect(prisma.inventoryAdjustment.updateMany).toHaveBeenCalledWith({
         where: { id: 2, deletedAt: null },
@@ -582,6 +582,24 @@ describe('InventoryAdjustmentsService', () => {
         pullOut: { id: 11, linkedAdjustmentId: 12 },
         pullIn: { id: 12 },
       });
+    });
+  });
+
+  describe('audit trail', () => {
+    it('records who revised an adjustment', async () => {
+      prisma.inventoryAdjustment.findFirst.mockResolvedValue({
+        id: 1,
+        inventoryId: 9,
+        type: 'PULL_IN',
+        value: 5,
+        linkedAdjustmentId: null,
+        inventory: { branchId: 1 },
+      });
+      prisma.inventoryAdjustment.update.mockResolvedValue({ id: 1 });
+
+      await service.update(1, { value: 3 }, unscoped());
+
+      expect(prisma.inventoryAdjustment.update.mock.calls[0][0].data.updatedById).toBe(1);
     });
   });
 });

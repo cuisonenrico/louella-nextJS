@@ -79,10 +79,13 @@ model User {
   updatedAt          DateTime       @updatedAt
 
   inventoryEntries         Inventory[]         @relation("InventoryCreatedBy")
+  inventoryEdits           Inventory[]         @relation("InventoryUpdatedBy")
   materialInventoryEntries MaterialInventory[] @relation("MaterialInventoryCreatedBy")
+  materialInventoryEdits   MaterialInventory[] @relation("MaterialInventoryUpdatedBy")
   productionEntries        Production[]        @relation("ProductionCreatedBy")
   productionOrders         ProductionOrder[]   @relation("ProductionOrderCreatedBy")
   inventoryAdjustments     InventoryAdjustment[] @relation("InventoryAdjustmentCreatedBy")
+  inventoryAdjustmentEdits InventoryAdjustment[] @relation("InventoryAdjustmentUpdatedBy")
   materialAdjustments      MaterialAdjustment[]  @relation("MaterialAdjustmentCreatedBy")
   deviceTokens             DeviceToken[]
   importLogs               ImportLog[]         @relation("ImportLogCreatedBy")
@@ -265,6 +268,7 @@ model Inventory {
   branchId    Int
   productId   Int
   createdById Int?     // user who submitted this record
+  updatedById Int?     // user who last amended it — an edit is not an entry
   // quantity/delivery/leftover/reject are Int (whole pieces). If partial-unit
   // products are ever introduced, all four columns must migrate to Decimal.
   quantity    Int      @default(0) // total pieces produced / available for the day
@@ -281,6 +285,7 @@ model Inventory {
   branch      Branch                @relation(fields: [branchId], references: [id], onDelete: Cascade)
   product     Product               @relation(fields: [productId], references: [id], onDelete: Cascade)
   createdBy   User?                 @relation("InventoryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy   User?                 @relation("InventoryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
   adjustments InventoryAdjustment[]
 
   @@unique([branchId, productId, date])
@@ -288,6 +293,7 @@ model Inventory {
   @@index([productId])
   @@index([date])
   @@index([createdById])
+  @@index([updatedById])
   @@index([branchId, date])
   @@index([productId, date])
 }
@@ -304,6 +310,7 @@ model InventoryAdjustment {
   notes               String?
   linkedAdjustmentId  Int?           // paired transfer counterpart (PULL_OUT ↔ PULL_IN)
   createdById         Int?           // user who entered this adjustment
+  updatedById         Int?           // user who last revised it
   createdAt           DateTime       @default(now())
   updatedAt           DateTime       @updatedAt
   deletedAt           DateTime?
@@ -312,10 +319,12 @@ model InventoryAdjustment {
   linkedAdjustment InventoryAdjustment? @relation("TransferLink", fields: [linkedAdjustmentId], references: [id], onDelete: SetNull)
   linkedBy         InventoryAdjustment[] @relation("TransferLink")
   createdBy        User?                @relation("InventoryAdjustmentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy        User?                @relation("InventoryAdjustmentUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
 
   @@index([inventoryId])
   @@index([linkedAdjustmentId])
   @@index([createdById])
+  @@index([updatedById])
 }
 
 // ---------------------------------------------------------------------------
@@ -453,6 +462,7 @@ model MaterialInventory {
   date        DateTime  // one stock-card per material per day
   supplierId  Int?
   createdById Int?
+  updatedById Int?
   batchNumber String?
   expiresAt   DateTime?
   quantity    Float     @default(0) // opening stock (carried over from previous day)
@@ -466,6 +476,7 @@ model MaterialInventory {
   material    Material            @relation(fields: [materialId], references: [id], onDelete: Cascade)
   supplier    Supplier?           @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   createdBy   User?               @relation("MaterialInventoryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy   User?               @relation("MaterialInventoryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
   adjustments MaterialAdjustment[]
 
   // The unique key deliberately excludes deletedAt, matching Inventory: a
@@ -476,6 +487,7 @@ model MaterialInventory {
   @@index([date])
   @@index([supplierId])
   @@index([createdById])
+  @@index([updatedById])
 }
 
 // ---------------------------------------------------------------------------
