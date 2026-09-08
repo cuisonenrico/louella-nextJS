@@ -10,6 +10,7 @@ import { inventoryApi, inventoryAdjustmentsApi, branchesApi } from '@/lib/apiSer
 import type { Branch, Inventory, InventoryAdjustment, AdjustmentType } from '@/types';
 import { extractError } from '@/lib/errors';
 import { Button } from '@/components/ui/button';
+import { useCan } from '@/lib/rbac/useHasFeature';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
@@ -34,6 +35,11 @@ export default function InventoryAdjustmentsPage() {
   const qc = useQueryClient();
   const today = dayjs().format('YYYY-MM-DD');
   const [branchId, setBranchId] = useState('');
+  // RouteGuard only checks the page key, so the actions on it need their own —
+  // the endpoints behind them enforce these exact keys.
+  const canCreate = useCan('inventory-adjustments:create');
+  const canDelete = useCan('inventory-adjustments:delete');
+
   const [date, setDate] = useState(today);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -195,7 +201,9 @@ export default function InventoryAdjustmentsPage() {
                       <TableCell className="text-right">{inv.leftover}</TableCell>
                       <TableCell className="text-right">{inv.reject}</TableCell>
                       <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                        <Button size="sm" variant="outline" onClick={() => openAdjDialog(inv)}><Plus className="mr-1 h-3 w-3" />Adjust</Button>
+                        {canCreate && (
+                          <Button size="sm" variant="outline" onClick={() => openAdjDialog(inv)}><Plus className="mr-1 h-3 w-3" />Adjust</Button>
+                        )}
                       </TableCell>
                     </TableRow>
                     {isOpen && (
@@ -217,7 +225,7 @@ export default function InventoryAdjustmentsPage() {
                                     <TableCell className="text-muted-foreground">{a.notes ?? '—'}</TableCell>
                                     <TableCell>{dayjs(a.createdAt).format('MMM D, HH:mm')}</TableCell>
                                     <TableCell>
-                                      <Button
+                                      {canDelete && <Button
                                         variant="ghost"
                                         size="icon"
                                         className="h-7 w-7 text-destructive"
@@ -225,7 +233,7 @@ export default function InventoryAdjustmentsPage() {
                                         onClick={() => setDeleteTarget(a)}
                                       >
                                         <Trash2 className="h-3.5 w-3.5" />
-                                      </Button>
+                                      </Button>}
                                     </TableCell>
                                   </TableRow>
                                 ))}

@@ -12,6 +12,7 @@ import {
   dateKey,
   getConversionFactorMap,
 } from '../common/utils/unit-conversion.util';
+import { toUtcDay } from '../common/utils/date-range.util';
 
 // Branch that owns production when an entry omits a branch. Materials are global
 // (central kitchen), so this only affects which branch a yield is attributed to.
@@ -71,10 +72,10 @@ export class ProductionService {
       { materialId: number; date: Date; delta: number }
     >();
     for (const item of changedItems) {
-      const idx = dateObjs.indexOf(
-        item.date ? new Date(item.date) : dateObjs[0],
-      );
-      const date = idx >= 0 ? dateObjs[idx] : new Date(item.date!);
+      // The old `dateObjs.indexOf(new Date(...))` never matched — indexOf
+      // compares Dates by reference — so it always fell through to the same
+      // value this line computes directly.
+      const date = item.date ? toUtcDay(item.date) : dateObjs[0];
       const bId = (item as { branchId?: number }).branchId ?? defaultBranchId;
       const oldYield =
         existingMap.get(`${bId}:${item.productId}:${dateKey(date)}`) ?? 0;
@@ -202,7 +203,7 @@ export class ProductionService {
     const oldYield = await this.findExistingYield(
       body.branchId,
       body.productId,
-      new Date(body.date),
+      toUtcDay(body.date),
     );
 
     return this.prisma.$transaction(async (tx) => {
@@ -211,7 +212,7 @@ export class ProductionService {
           branchId_productId_date: {
             branchId: body.branchId,
             productId: body.productId,
-            date: new Date(body.date),
+            date: toUtcDay(body.date),
           },
         },
         update: {
@@ -221,7 +222,7 @@ export class ProductionService {
         create: {
           branchId: body.branchId,
           productId: body.productId,
-          date: new Date(body.date),
+          date: toUtcDay(body.date),
           yield: body.yield,
           notes: body.notes,
           createdById: userId,
@@ -235,7 +236,7 @@ export class ProductionService {
         body.productId,
         body.yield,
         oldYield,
-        new Date(body.date),
+        toUtcDay(body.date),
         tx,
       );
       return result;
@@ -248,7 +249,7 @@ export class ProductionService {
     const keys = items.map((item) => ({
       branchId: item.branchId,
       productId: item.productId,
-      date: new Date(item.date),
+      date: toUtcDay(item.date),
     }));
 
     const existingMap = new Map<string, number>();
@@ -270,7 +271,7 @@ export class ProductionService {
             branchId_productId_date: {
               branchId: item.branchId,
               productId: item.productId,
-              date: new Date(item.date),
+              date: toUtcDay(item.date),
             },
           },
           update: {
@@ -280,7 +281,7 @@ export class ProductionService {
           create: {
             branchId: item.branchId,
             productId: item.productId,
-            date: new Date(item.date),
+            date: toUtcDay(item.date),
             yield: item.yield,
             notes: item.notes,
             createdById: userId,
@@ -294,7 +295,7 @@ export class ProductionService {
       (item) =>
         item.yield !==
         (existingMap.get(
-          `${item.branchId}:${item.productId}:${dateKey(new Date(item.date))}`,
+          `${item.branchId}:${item.productId}:${dateKey(toUtcDay(item.date))}`,
         ) ?? 0),
     );
     if (changedItems.length > 0) {
@@ -314,7 +315,7 @@ export class ProductionService {
         this.prisma,
         conversionPairs,
       );
-      const dateObjs = changedItems.map((i) => new Date(i.date));
+      const dateObjs = changedItems.map((i) => toUtcDay(i.date));
       const deltaMap = this.buildMaterialDeltaMap(
         changedItems,
         dateObjs,
@@ -342,7 +343,7 @@ export class ProductionService {
     userId?: number,
   ) {
     const defaultBranchId = PRODUCTION_BRANCH_ID;
-    const dateObjs = items.map((i) => new Date(i.date));
+    const dateObjs = items.map((i) => toUtcDay(i.date));
     const keys = items.map((item, idx) => ({
       branchId: item.branchId ?? defaultBranchId,
       productId: item.productId,
@@ -568,7 +569,7 @@ export class ProductionService {
           data: {
             branchId: body.branchId,
             productId: body.productId,
-            date: body.date ? new Date(body.date) : undefined,
+            date: body.date ? toUtcDay(body.date) : undefined,
             yield: body.yield,
             notes: body.notes,
           },

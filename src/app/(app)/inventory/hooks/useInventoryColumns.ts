@@ -1,4 +1,9 @@
 import type { Inventory, Product } from '@/types';
+import {
+  computeAdjSum,
+  computeSold,
+  computeTotalStock,
+} from '@/lib/inventory/metrics';
 
 export interface InventoryColumn {
   field: string;
@@ -42,17 +47,16 @@ export function useInventoryColumns({ filterBranch, isRange }: UseInventoryColum
   return cols;
 }
 
+// These were hand-written copies of the server's computeSold/computeAdjSum, and
+// they had drifted: this file read `inv.reject` unguarded where the server
+// defaults it to 0, so a row without the field made sold, revenue and every
+// total NaN. There is one definition now, in src/lib/inventory/metrics.
 export function getAdjSum(inv: Inventory): number {
-  return (inv.adjustments ?? []).reduce(
-    (acc, a) => acc + (a.type === 'PULL_IN' ? a.value : -a.value),
-    0,
-  );
+  return computeAdjSum(inv.adjustments);
 }
 
 export function getSold(inv: Inventory, _productById: Map<number, Product>): number {
-  const adjSum = getAdjSum(inv);
-  // Rejects (spoiled/burnt) are waste, never sales — mirrors the backend computeSold.
-  return inv.quantity + inv.delivery + adjSum - inv.leftover - inv.reject;
+  return computeSold(inv);
 }
 
 export function getRevenue(inv: Inventory, productById: Map<number, Product>): number {
@@ -62,6 +66,5 @@ export function getRevenue(inv: Inventory, productById: Map<number, Product>): n
 }
 
 export function getTotalStock(inv: Inventory): number {
-  const adjSum = getAdjSum(inv);
-  return inv.quantity + inv.delivery + adjSum;
+  return computeTotalStock(inv);
 }

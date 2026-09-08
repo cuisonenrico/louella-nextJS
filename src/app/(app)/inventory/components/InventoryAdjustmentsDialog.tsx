@@ -8,6 +8,7 @@ import { getAdjSum } from '../hooks/useInventoryColumns';
 import type { AdjustmentType, Branch, Inventory } from '@/types';
 import { extractError } from '@/lib/errors';
 import { Button } from '@/components/ui/button';
+import { useCan } from '@/lib/rbac/useHasFeature';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
@@ -71,6 +72,12 @@ export default function InventoryAdjustmentsDialog({ inventory, productName, bra
         .then((r) => r.data as Inventory[]),
     enabled: form.type === 'PULL_OUT' && !!form.toBranchId && !!inventory,
   });
+
+  // Creating, transferring and deleting are three separate grants on the
+  // server; the dialog offered all three to anyone who could open it.
+  const canCreate = useCan('inventory-adjustments:create');
+  const canTransfer = useCan('inventory-adjustments:transfer');
+  const canDelete = useCan('inventory-adjustments:delete');
 
   const createMutation = useMutation({
     mutationFn: (data: { inventoryId: number; type: AdjustmentType; value: number; notes?: string }) =>
@@ -170,9 +177,11 @@ export default function InventoryAdjustmentsDialog({ inventory, productName, bra
                   </span>
                   <span className="text-sm text-muted-foreground flex-grow">{adj.notes ?? '—'}</span>
                   {adj.linkedAdjustmentId && <Badge variant="outline" className="text-xs">Transfer</Badge>}
-                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" disabled={deleteMutation.isPending} onClick={() => setDeleteTarget(adj.id)}>
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
+                  {canDelete && (
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" disabled={deleteMutation.isPending} onClick={() => setDeleteTarget(adj.id)}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
                 </div>
               ))}
             </div>
@@ -237,10 +246,12 @@ export default function InventoryAdjustmentsDialog({ inventory, productName, bra
 
         <ResponsiveDialogFooter>
           <Button variant="outline" onClick={onClose}>Close</Button>
-          <Button onClick={handleAdd} disabled={isPending || (isTransfer && !destInventory)}>
-            {isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
-            {isTransfer ? 'Transfer' : 'Add'}
-          </Button>
+          {(isTransfer ? canTransfer : canCreate) && (
+            <Button onClick={handleAdd} disabled={isPending || (isTransfer && !destInventory)}>
+              {isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
+              {isTransfer ? 'Transfer' : 'Add'}
+            </Button>
+          )}
         </ResponsiveDialogFooter>
       </ResponsiveDialogContent>
     </ResponsiveDialog>

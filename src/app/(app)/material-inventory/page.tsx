@@ -10,6 +10,7 @@ import { TableSkeleton } from '@/components/loading/Skeletons';
 import { materialInventoryApi, materialsApi, suppliersApi } from '@/lib/apiServices';
 import type { Material, MaterialInventory, Supplier } from '@/types';
 import { Button } from '@/components/ui/button';
+import { useCan } from '@/lib/rbac/useHasFeature';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -44,6 +45,15 @@ export default function MaterialInventoryPage() {
   const qc = useQueryClient();
   const [filterDate, setFilterDate] = useState(todayStr());
   const [stockDialogOpen, setStockDialogOpen] = useState(false);
+  // Gate controls on the keys the endpoints enforce. RouteGuard only checks the
+  // page key (`material-stock`), so every action on the sheet was offered to
+  // anyone who could open it — including users whose action keys were revoked,
+  // for whom each control 403s.
+  const canCreate = useCan('material-stock:create');
+  const canEdit = useCan('material-stock:edit');
+  const canDelete = useCan('material-stock:delete');
+  const canAdjust = useCan('material-stock:adjust');
+
   const [bulkSetOpen, setBulkSetOpen] = useState(false);
   const [editRecord, setEditRecord] = useState<MaterialInventory | null>(null);
   const [adjRecord, setAdjRecord] = useState<MaterialInventory | null>(null);
@@ -125,7 +135,7 @@ export default function MaterialInventoryPage() {
   }, [qc, filterDate]);
 
   // Ctrl+S / Cmd+S saves pending edits, matching the Excel workflow the sheet emulates.
-  useSaveShortcut(pendingDeliveries.size > 0 && !savePendingMutation.isPending, () => savePendingMutation.mutate());
+  useSaveShortcut(canEdit && pendingDeliveries.size > 0 && !savePendingMutation.isPending, () => savePendingMutation.mutate());
 
   const rowIds = useMemo(() => rows.map((r) => r.id), [rows]);
   const getInputId = useCallback((id: number, col: 'delivery') => `material-input-${id}-${col}`, []);
@@ -160,12 +170,16 @@ export default function MaterialInventoryPage() {
               <Button size="sm" variant="outline" onClick={() => setFilterDate(todayStr())}>Today</Button>
             )}
             <div className="flex-grow" />
-            <Button size="sm" variant="outline" onClick={() => setBulkSetOpen(true)}>
-              <Plus className="h-3.5 w-3.5 mr-1" /> New Set
-            </Button>
-            <Button size="sm" onClick={() => { setEditRecord(null); setStockDialogOpen(true); }}>
-              <Plus className="h-3.5 w-3.5 mr-1" /> New
-            </Button>
+            {canCreate && (
+              <>
+                <Button size="sm" variant="outline" onClick={() => setBulkSetOpen(true)}>
+                  <Plus className="h-3.5 w-3.5 mr-1" /> New Set
+                </Button>
+                <Button size="sm" onClick={() => { setEditRecord(null); setStockDialogOpen(true); }}>
+                  <Plus className="h-3.5 w-3.5 mr-1" /> New
+                </Button>
+              </>
+            )}
           </div>
 
           {/* Summary */}
@@ -186,7 +200,7 @@ export default function MaterialInventoryPage() {
           )}
 
           <SheetPendingBar
-            totalPending={pendingDeliveries.size}
+            totalPending={canEdit ? pendingDeliveries.size : 0}
             isSaving={savePendingMutation.isPending}
             onDiscard={discardPending}
             onSave={() => savePendingMutation.mutate()}
@@ -241,15 +255,19 @@ export default function MaterialInventoryPage() {
                       <TableCell className={cn(SHEET_CELL, 'px-2')}><Badge variant="secondary" className="text-xs">{r.material?.unit ?? ''}</Badge></TableCell>
                       <TableCell className={cn(SHEET_CELL, 'px-2 text-right tabular-nums text-muted-foreground')}>₱{fmt(price)}</TableCell>
                       <TableCell className={cn(SHEET_CELL, 'px-2 text-right tabular-nums text-muted-foreground')}>{fmt(r.quantity)}</TableCell>
-                      <TableCell className={cn(SHEET_CELL, 'p-0')}>
-                        <SheetInput
-                          id={getInputId(r.id, 'delivery')}
-                          value={delivery}
-                          decimal
-                          onValueChange={(v) => handleDeliveryChange(r.id, v)}
-                          onColumnMove={(dir) => moveInColumn(r.id, 'delivery', dir)}
-                          onLinearMove={(dir) => moveLinear(getInputId(r.id, 'delivery'), dir)}
-                        />
+                      <TableCell className={cn(SHEET_CELL, canEdit ? 'p-0' : 'px-2 text-right tabular-nums')}>
+                        {canEdit ? (
+                          <SheetInput
+                            id={getInputId(r.id, 'delivery')}
+                            value={delivery}
+                            decimal
+                            onValueChange={(v) => handleDeliveryChange(r.id, v)}
+                            onColumnMove={(dir) => moveInColumn(r.id, 'delivery', dir)}
+                            onLinearMove={(dir) => moveLinear(getInputId(r.id, 'delivery'), dir)}
+                          />
+                        ) : (
+                          fmt(delivery)
+                        )}
                       </TableCell>
                       <TableCell className={cn(SHEET_CELL, 'px-2 text-center')}>
                         <Badge variant={r.used > 0 ? 'default' : 'secondary'} className={r.used > 0 ? 'bg-green-500 min-w-[36px]' : 'min-w-[36px]'}>
@@ -272,21 +290,27 @@ export default function MaterialInventoryPage() {
                       <TableCell className={cn(SHEET_CELL, 'px-2 text-right tabular-nums font-semibold text-primary')}>₱{fmt(closingCost)}</TableCell>
                       <TableCell className={cn(SHEET_CELL, 'px-1')}>
                         <div className="flex gap-0.5">
-                          <Tooltip><TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditRecord(r); setStockDialogOpen(true); }}>
-                              <Pencil className="h-3.5 w-3.5" />
-                            </Button>
-                          </TooltipTrigger><TooltipContent>Edit</TooltipContent></Tooltip>
-                          <Tooltip><TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setAdjRecord(r)}>
-                              <Settings2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </TooltipTrigger><TooltipContent>Adjustments</TooltipContent></Tooltip>
-                          <Tooltip><TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteTarget(r.id)} disabled={deleteMutation.isPending}>
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </TooltipTrigger><TooltipContent>Delete</TooltipContent></Tooltip>
+                          {canEdit && (
+                            <Tooltip><TooltipTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditRecord(r); setStockDialogOpen(true); }}>
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                            </TooltipTrigger><TooltipContent>Edit</TooltipContent></Tooltip>
+                          )}
+                          {canAdjust && (
+                            <Tooltip><TooltipTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setAdjRecord(r)}>
+                                <Settings2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </TooltipTrigger><TooltipContent>Adjustments</TooltipContent></Tooltip>
+                          )}
+                          {canDelete && (
+                            <Tooltip><TooltipTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteTarget(r.id)} disabled={deleteMutation.isPending}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </TooltipTrigger><TooltipContent>Delete</TooltipContent></Tooltip>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>

@@ -8,8 +8,7 @@ import { Loader2, AlertTriangle, Info } from 'lucide-react';
 import dayjs from 'dayjs';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { useAuth } from '@/contexts/AuthContext';
-import { meetsMinRole } from '@/lib/rbac';
+import { useCan } from '@/lib/rbac/useHasFeature';
 import { branchesApi, inventoryApi, productsApi } from '@/lib/apiServices';
 import type { Branch, Inventory, InventorySummaryData, Product, ProductType } from '@/types';
 import { extractError } from '@/lib/errors';
@@ -38,9 +37,15 @@ export default function InventoryDetailsPage() {
   usePageHeader({ title: 'Inventory Details' });
   const qc = useQueryClient();
   const router = useRouter();
-  const { user } = useAuth();
-  const canWriteInventory = meetsMinRole(user?.role, 'INVENTORY');
-  const canImport = meetsMinRole(user?.role, 'MANAGER');
+  // Gate on the same keys the endpoints enforce, not on the role.
+  //
+  // These were `meetsMinRole(role, 'INVENTORY' | 'MANAGER')`, which reads a
+  // different axis than the API does: the backend checks feature keys via
+  // FeatureGuard, so revoking `inventory-history:edit` for one INVENTORY user
+  // still left them an editable sheet whose every save came back 403.
+  const canEditInventory = useCan('inventory-history:edit');
+  const canCreateInventory = useCan('inventory-history:create');
+  const canImport = useCan('inventory-import:import');
   const today = dayjs().format('YYYY-MM-DD');
 
   // Filter state
@@ -217,7 +222,9 @@ export default function InventoryDetailsPage() {
   }, [qc]);
 
   const totalPending = pendingUpdates.size;
-  const isEditable = !isRange && filterBranch !== '' && canWriteInventory;
+  const isEditable = !isRange && filterBranch !== '' && canEditInventory;
+  // Adjustments are their own feature, with their own key.
+  const canAdjust = useCan('inventory-adjustments:create');
 
   // Ctrl+S / Cmd+S saves pending edits, matching the Excel workflow the grid emulates.
   useSaveShortcut(totalPending > 0 && !savePendingMutation.isPending, () => savePendingMutation.mutate());
@@ -276,7 +283,7 @@ export default function InventoryDetailsPage() {
           )}
 
           {/* Explicit initialization — no longer an automatic write-on-view */}
-          {isEditable && uninitializedCount > 0 && (
+          {canCreateInventory && !isRange && filterBranch !== '' && uninitializedCount > 0 && (
             <div className="flex flex-wrap items-center justify-between gap-2 text-sm bg-muted/40 rounded-lg px-3 py-2 mb-3">
               <span className="text-muted-foreground">
                 {uninitializedCount} product{uninitializedCount === 1 ? '' : 's'} not yet
@@ -314,7 +321,7 @@ export default function InventoryDetailsPage() {
               isRange={isRange}
               isEditable={isEditable}
               hasBranchFilter={filterBranch !== ''}
-              canAdjust={canWriteInventory}
+              canAdjust={canAdjust}
               onAdjustmentsOpen={setAdjRow}
               onCellChange={handleCellChange}
             />

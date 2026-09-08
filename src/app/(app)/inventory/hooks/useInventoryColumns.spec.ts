@@ -112,6 +112,16 @@ describe('getSold', () => {
     expect(getSold(inv, makeProductMap())).toBe(-5);
   });
 
+  it('treats a missing reject as 0, like the server formula does', () => {
+    // The server's computeSold defaults a missing reject to 0; this mirror read
+    // inv.reject unguarded, so a row arriving without the field made every
+    // downstream figure NaN — sold, revenue, and the totals built on them.
+    const inv = makeInventory({ quantity: 30, delivery: 0, leftover: 5 });
+    delete (inv as { reject?: number }).reject;
+
+    expect(getSold(inv, new Map())).toBe(25);
+  });
+
   it('returns 0 sold when nothing moved', () => {
     const inv = makeInventory({ quantity: 0, delivery: 0, leftover: 0, adjustments: [] });
     expect(getSold(inv, makeProductMap())).toBe(0);

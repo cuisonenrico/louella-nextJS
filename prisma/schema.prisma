@@ -459,7 +459,12 @@ model RecipeItem {
 model MaterialInventory {
   id          Int       @id @default(autoincrement())
   materialId  Int
-  date        DateTime  // one stock-card per material per day
+  // @db.Date, matching Inventory.date. As a bare DateTime this column stored
+  // the time component, so a request carrying one created a *second* card for
+  // the same day that @@unique([materialId, date]) could not catch. Writes are
+  // normalised through toUtcDay as well; this makes the column itself incapable
+  // of holding the bad value.
+  date        DateTime  @db.Date // one stock-card per material per day
   supplierId  Int?
   createdById Int?
   updatedById Int?
