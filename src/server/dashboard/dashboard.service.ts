@@ -277,7 +277,7 @@ export class DashboardService {
     const materialIds = materials.map((m) => m.id);
     const latestDates = await this.prisma.materialInventory.groupBy({
       by: ['materialId'],
-      where: { materialId: { in: materialIds } },
+      where: { materialId: { in: materialIds }, deletedAt: null },
       _max: { date: true },
     });
 
@@ -292,7 +292,7 @@ export class DashboardService {
 
     if (orConditions.length > 0) {
       const latestInventories = await this.prisma.materialInventory.findMany({
-        where: { OR: orConditions },
+        where: { OR: orConditions, deletedAt: null },
         select: {
           materialId: true,
           quantity: true,

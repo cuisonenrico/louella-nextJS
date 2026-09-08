@@ -316,7 +316,10 @@ export default function MaterialInventoryPage() {
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>Delete material stock record?</AlertDialogTitle>
-                <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
+                <AlertDialogDescription>
+                  The card and its adjustment history are kept, but hidden from every
+                  stock sheet and report. Re-entering this material for this day restores it.
+                </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancel</AlertDialogCancel>

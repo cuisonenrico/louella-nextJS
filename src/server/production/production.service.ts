@@ -107,7 +107,10 @@ export class ProductionService {
       ({ materialId, date, delta }) =>
         this.prisma.materialInventory.upsert({
           where: { materialId_date: { materialId, date } },
-          update: { used: { increment: delta } },
+          // The unique key ignores deletedAt, so this can land on a deleted
+          // card. Consumption that really happened must be visible, so writing
+          // to a card revives it rather than recording into a hidden row.
+          update: { used: { increment: delta }, deletedAt: null },
           create: {
             materialId,
             date,
@@ -168,7 +171,8 @@ export class ProductionService {
       return [
         client.materialInventory.upsert({
           where: { materialId_date: { materialId: item.material.id, date } },
-          update: { used: { increment: delta } },
+          // See applyMaterialDeltaUpserts: consumption revives a deleted card.
+          update: { used: { increment: delta }, deletedAt: null },
           create: {
             materialId: item.material.id,
             date,

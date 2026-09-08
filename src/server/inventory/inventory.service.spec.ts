@@ -114,6 +114,47 @@ describe('InventoryService', () => {
   afterEach(() => jest.clearAllMocks());
 
   // ─────────────────────────────────────────────────────────────────────────
+  // create / createBulk — soft-delete resurrection
+  //
+  // `@@unique([branchId, productId, date])` does not include `deletedAt`, so an
+  // upsert re-entering a previously deleted day matches the tombstone and
+  // updates it. Without clearing `deletedAt` the write succeeds and the row
+  // stays invisible to every read, all of which filter `deletedAt: null`.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  describe('create — soft-deleted rows', () => {
+    const dto = {
+      branchId: 1,
+      productId: 5,
+      date: '2026-09-02',
+      quantity: 10,
+      delivery: 0,
+      leftover: 0,
+      reject: 0,
+    };
+
+    it('clears deletedAt so re-entering a deleted day restores the row', async () => {
+      prisma.inventory.upsert.mockResolvedValue({ id: 1 });
+
+      await service.create(dto, 7);
+
+      const args = prisma.inventory.upsert.mock.calls[0][0];
+      expect(args.update.deletedAt).toBeNull();
+    });
+
+    it('clears deletedAt on every row of a bulk write', async () => {
+      prisma.$transaction.mockResolvedValue([]);
+      prisma.inventory.upsert.mockReturnValue({});
+
+      await service.createBulk([dto, { ...dto, productId: 6 }], 7);
+
+      for (const call of prisma.inventory.upsert.mock.calls) {
+        expect(call[0].update.deletedAt).toBeNull();
+      }
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
   // recascadeLeftovers
   // ─────────────────────────────────────────────────────────────────────────
 

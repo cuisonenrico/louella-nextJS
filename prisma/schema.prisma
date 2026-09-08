@@ -461,12 +461,17 @@ model MaterialInventory {
   notes       String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime? // soft delete – null means active
 
   material    Material            @relation(fields: [materialId], references: [id], onDelete: Cascade)
   supplier    Supplier?           @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   createdBy   User?               @relation("MaterialInventoryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   adjustments MaterialAdjustment[]
 
+  // The unique key deliberately excludes deletedAt, matching Inventory: a
+  // deleted card still owns its (material, date) slot, and re-entering that day
+  // clears the tombstone rather than inserting a second card. See
+  // MaterialInventoryService.create.
   @@unique([materialId, date])
   @@index([date])
   @@index([supplierId])

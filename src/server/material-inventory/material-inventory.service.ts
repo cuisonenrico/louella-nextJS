@@ -5,6 +5,7 @@ import { CreateMaterialInventoryDto } from './dto/create-material-inventory.dto'
 import { UpdateMaterialInventoryDto } from './dto/update-material-inventory.dto';
 import { CacheNamespaceService } from '../common/cache/cache-namespace.service';
 import { CACHE_NS } from '../common/cache/cache-namespaces';
+import { computeMaterialClosing } from '../common/utils/inventory-metrics.util';
 
 const materialInventoryInclude = {
   material: true,
@@ -36,6 +37,10 @@ export class MaterialInventoryService {
         quantity: body.quantity,
         delivery: body.delivery,
         notes: body.notes,
+        // The unique key excludes deletedAt, so a deleted card still owns this
+        // (material, date) slot and this upsert matches it. Re-entering the day
+        // is a restore — without this the write lands on a row no read returns.
+        deletedAt: null,
       },
       create: {
         materialId: body.materialId,
@@ -65,6 +70,8 @@ export class MaterialInventoryService {
             quantity: item.quantity,
             delivery: item.delivery,
             notes: item.notes,
+            // See create(): re-entering a deleted day restores it.
+            deletedAt: null,
           },
           create: {
             materialId: item.materialId,
@@ -91,6 +98,7 @@ export class MaterialInventoryService {
 
   private async listDatesUncached(limit: number): Promise<string[]> {
     const rows = await this.prisma.materialInventory.findMany({
+      where: { deletedAt: null },
       select: { date: true },
       distinct: ['date'],
       orderBy: { date: 'desc' },
@@ -102,15 +110,15 @@ export class MaterialInventoryService {
   /** Returns all material inventory records for a specific date. */
   findByDate(date: string) {
     return this.prisma.materialInventory.findMany({
-      where: { date: new Date(date) },
+      where: { date: new Date(date), deletedAt: null },
       orderBy: { material: { name: 'asc' } },
       include: materialInventoryInclude,
     });
   }
 
   /**
-   * Initialise today's stock cards from the previous day's closing stock.
-   * Closing stock = quantity + delivery - used.
+   * Initialise today's stock cards from the previous day's closing stock
+   * (see computeMaterialClosing — opening + delivery + adjustments - used).
    * Only creates records that do not already exist for the target date.
    */
   async initDate(
@@ -131,17 +139,22 @@ export class MaterialInventoryService {
     // Using the last known date (rather than hardcoding -1 day) ensures carry-forward
     // works correctly even when days are skipped (holidays, gaps, etc.).
     const lastKnown = await this.prisma.materialInventory.findFirst({
-      where: { date: { lt: targetDate } },
+      where: { date: { lt: targetDate }, deletedAt: null },
       orderBy: { date: 'desc' },
       select: { date: true },
     });
     const prevRecords = lastKnown
       ? await this.prisma.materialInventory.findMany({
-          where: { date: lastKnown.date },
+          where: { date: lastKnown.date, deletedAt: null },
+          // Closing stock folds adjustments in, so they have to come along.
+          include: { adjustments: { where: { deletedAt: null } } },
         })
       : [];
     const prevMap = new Map(prevRecords.map((r) => [r.materialId, r]));
 
+    // Deliberately *not* filtered by deletedAt: the unique key ignores it, so a
+    // deleted card still occupies its slot and createMany would skip it anyway.
+    // Treating it as free would report phantom creations every run.
     const existing = await this.prisma.materialInventory.findMany({
       where: { date: targetDate },
       select: { materialId: true },
@@ -171,14 +184,16 @@ export class MaterialInventoryService {
 
   async findAll(page = 1, limit = 200) {
     const skip = (page - 1) * limit;
+    const where = { deletedAt: null };
     const [data, total] = await this.prisma.$transaction([
       this.prisma.materialInventory.findMany({
+        where,
         skip,
         take: limit,
         orderBy: [{ date: 'desc' }, { material: { name: 'asc' } }],
         include: materialInventoryInclude,
       }),
-      this.prisma.materialInventory.count(),
+      this.prisma.materialInventory.count({ where }),
     ]);
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
@@ -186,6 +201,7 @@ export class MaterialInventoryService {
   async search(q: string, page = 1, limit = 200) {
     const skip = (page - 1) * limit;
     const where = {
+      deletedAt: null,
       OR: [
         { notes: { contains: q, mode: Prisma.QueryMode.insensitive } },
         { batchNumber: { contains: q, mode: Prisma.QueryMode.insensitive } },
@@ -215,8 +231,8 @@ export class MaterialInventoryService {
   }
 
   async findOne(id: number) {
-    const record = await this.prisma.materialInventory.findUnique({
-      where: { id },
+    const record = await this.prisma.materialInventory.findFirst({
+      where: { id, deletedAt: null },
       include: materialInventoryInclude,
     });
     if (!record) {
@@ -246,12 +262,23 @@ export class MaterialInventoryService {
     }
   }
 
+  /**
+   * Soft delete. A hard delete here used to cascade into MaterialAdjustment and
+   * destroy the card's spoilage and restock history — the one record of why the
+   * numbers moved.
+   */
   async remove(id: number) {
-    try {
-      return await this.prisma.materialInventory.delete({ where: { id } });
-    } catch {
+    const existing = await this.prisma.materialInventory.findFirst({
+      where: { id, deletedAt: null },
+      select: { id: true },
+    });
+    if (!existing) {
       throw new NotFoundException('Material inventory record not found');
     }
+    return this.prisma.materialInventory.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
   }
 
   /**
@@ -286,7 +313,7 @@ export class MaterialInventoryService {
     });
 
     const existing = await this.prisma.materialInventory.findMany({
-      where: { date: { gte: start, lte: end } },
+      where: { date: { gte: start, lte: end }, deletedAt: null },
       select: { materialId: true, date: true },
     });
 
@@ -329,10 +356,26 @@ export class MaterialInventoryService {
     return { totalCreated, datesProcessed: results.length, results };
   }
 
+  /**
+   * Yesterday's closing stock becomes today's opening stock.
+   *
+   * This used to be `quantity + delivery - used`, which silently dropped every
+   * MaterialAdjustment: a 20 kg spoilage was recorded on the card and then
+   * carried forward as if the flour were still there, and the error compounded
+   * every day after. The shared helper folds the adjustments in with the same
+   * signs the sold formula uses.
+   */
   private computeCarryOver(
-    prev: { quantity: number; delivery: number; used: number } | undefined,
+    prev:
+      | {
+          quantity: number;
+          delivery: number;
+          used: number;
+          adjustments?: { type: string; value: number }[];
+        }
+      | undefined,
   ): number {
-    return prev ? Math.max(0, prev.quantity + prev.delivery - prev.used) : 0;
+    return prev ? computeMaterialClosing(prev) : 0;
   }
 
   private findGapEntries(

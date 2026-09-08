@@ -22,6 +22,7 @@ import {
   type CreateProductRequest,
   type ImportConflictMode,
 } from './inventory-import.service';
+import type { RequestUser } from '../common/utils/branch-access';
 import type { ProductType } from './sheet-sections';
 import type { Express } from 'express';
 import { RequireFeature } from '../common/decorators/require-feature.decorator';
@@ -108,6 +109,7 @@ export class InventoryImportController {
   @Roles(UserRole.MANAGER)
   @UseInterceptors(FileInterceptor('file'))
   preview(
+    @CurrentUser() user: RequestUser,
     @UploadedFile() file: Express.Multer.File,
     @Body('branchId') branchIdStr?: string,
   ) {
@@ -122,6 +124,7 @@ export class InventoryImportController {
       file.buffer,
       file.originalname,
       branchId,
+      user,
     );
   }
 
@@ -132,7 +135,7 @@ export class InventoryImportController {
   async import(
     @UploadedFile() file: Express.Multer.File,
     @Body('branchId') branchIdStr: string,
-    @CurrentUser() user: { id: number },
+    @CurrentUser() user: RequestUser,
     @Body('conflictMode') conflictMode?: string,
     @Body('createProducts') createProducts?: string,
     @Body('acknowledgeUnmatched') acknowledgeUnmatched?: string,
@@ -154,7 +157,7 @@ export class InventoryImportController {
       file.buffer,
       branchId,
       file.originalname,
-      user?.id,
+      user,
       (conflictMode as ImportConflictMode) ?? 'skip',
       parseCreateProducts(createProducts),
       parseLabelList(acknowledgeUnmatched, 'acknowledgeUnmatched'),
@@ -164,6 +167,7 @@ export class InventoryImportController {
   @Get('logs')
   @Roles(UserRole.MANAGER)
   getLogs(
+    @CurrentUser() user: RequestUser,
     @Query('branchId') branchId?: string,
     @Query('page') page = '1',
     @Query('limit') limit = '20',
@@ -177,11 +181,14 @@ export class InventoryImportController {
     const branchIdNum = branchId ? parseInt(branchId, 10) : undefined;
     if (branchId && isNaN(branchIdNum!))
       throw new BadRequestException('branchId must be a valid integer.');
-    return this.service.getLogs({
-      branchId: branchIdNum,
-      page: pageNum,
-      limit: Math.min(limitNum, 100),
-    });
+    return this.service.getLogs(
+      {
+        branchId: branchIdNum,
+        page: pageNum,
+        limit: Math.min(limitNum, 100),
+      },
+      user,
+    );
   }
 
   @Delete('logs/:id')

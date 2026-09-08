@@ -129,7 +129,7 @@ export class MaterialsService {
     // Batch-fetch the most recent inventory record per material in one query,
     // including adjustments so the stock formula matches the dashboard.
     const latestInventories = await this.prisma.materialInventory.findMany({
-      where: { materialId: { in: materials.map((m) => m.id) } },
+      where: { materialId: { in: materials.map((m) => m.id) }, deletedAt: null },
       select: {
         materialId: true,
         quantity: true,

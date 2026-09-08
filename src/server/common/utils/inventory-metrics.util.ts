@@ -41,3 +41,32 @@ export function computeSold(row: SoldRowLike): number {
     (row.reject ?? 0)
   );
 }
+
+export interface MaterialClosingRowLike {
+  quantity: number;
+  delivery: number;
+  used: number;
+  adjustments?: AdjustmentLike[];
+}
+
+/**
+ * Closing stock on a material card, and therefore the next day's opening:
+ *
+ *   closing = quantity + delivery + adjSum - used
+ *
+ * The adjSum term is the whole point. Materials have no counted "leftover"
+ * column to fall back on — unlike finished goods, where the closing figure is
+ * physically counted at end of day — so the card is the only record there is.
+ * Leaving adjustments out meant a recorded spoilage or restock never reached
+ * the next morning's opening balance, and the error compounded down the chain.
+ *
+ * Clamped at zero: a negative balance is a bookkeeping artefact, not stock that
+ * can be issued, and carrying it forward would silently suppress the next day's
+ * real deliveries.
+ */
+export function computeMaterialClosing(row: MaterialClosingRowLike): number {
+  return Math.max(
+    0,
+    row.quantity + row.delivery + computeAdjSum(row.adjustments) - row.used,
+  );
+}

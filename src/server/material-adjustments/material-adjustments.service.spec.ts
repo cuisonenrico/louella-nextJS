@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { MaterialAdjustmentsService } from './material-adjustments.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -6,7 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 function makePrisma() {
   return {
     materialInventory: {
-      findUnique: jest.fn(),
+      findFirst: jest.fn(),
     },
     materialAdjustment: {
       findFirst: jest.fn(),
@@ -44,14 +44,14 @@ describe('MaterialAdjustmentsService', () => {
     };
 
     it('rejects an unknown stock card', async () => {
-      prisma.materialInventory.findUnique.mockResolvedValue(null);
+      prisma.materialInventory.findFirst.mockResolvedValue(null);
       await expect(service.create(body)).rejects.toBeInstanceOf(
         NotFoundException,
       );
     });
 
     it('stamps the calling user as the author', async () => {
-      prisma.materialInventory.findUnique.mockResolvedValue({ id: 4 });
+      prisma.materialInventory.findFirst.mockResolvedValue({ id: 4 });
       prisma.materialAdjustment.create.mockResolvedValue({ id: 8 });
 
       await service.create(body, 7);
@@ -68,7 +68,7 @@ describe('MaterialAdjustmentsService', () => {
     });
 
     it('records no author when the caller is unknown', async () => {
-      prisma.materialInventory.findUnique.mockResolvedValue({ id: 4 });
+      prisma.materialInventory.findFirst.mockResolvedValue({ id: 4 });
       prisma.materialAdjustment.create.mockResolvedValue({ id: 8 });
 
       await service.create(body);
@@ -109,6 +109,77 @@ describe('MaterialAdjustmentsService', () => {
         where: { id: 1 },
         data: { deletedAt: expect.any(Date) },
       });
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Stock cap
+  //
+  // The finished-goods side caps a PULL_OUT at the stock on hand. Material
+  // stock had no equivalent, so a card could be pulled below zero and the
+  // negative balance carried into the next day's opening.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  describe('pull-out stock cap', () => {
+    const card = (adjustments: { type: string; value: number }[] = []) => ({
+      id: 4,
+      quantity: 10,
+      delivery: 5,
+      used: 3,
+      adjustments,
+    });
+
+    it('refuses a pull-out larger than the stock on the card', async () => {
+      prisma.materialInventory.findFirst.mockResolvedValue(card());
+
+      await expect(
+        service.create({
+          materialInventoryId: 4,
+          type: 'PULL_OUT',
+          value: 50,
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.materialAdjustment.create).not.toHaveBeenCalled();
+    });
+
+    it('allows a pull-out that the card can cover', async () => {
+      prisma.materialInventory.findFirst.mockResolvedValue(card());
+      prisma.materialAdjustment.create.mockResolvedValue({ id: 1 });
+
+      await service.create({
+        materialInventoryId: 4,
+        type: 'PULL_OUT',
+        value: 12,
+      });
+
+      expect(prisma.materialAdjustment.create).toHaveBeenCalled();
+    });
+
+    it('counts existing adjustments against the available stock', async () => {
+      prisma.materialInventory.findFirst.mockResolvedValue(
+        card([{ type: 'PULL_OUT', value: 10 }]),
+      );
+
+      await expect(
+        service.create({
+          materialInventoryId: 4,
+          type: 'PULL_OUT',
+          value: 8,
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('does not cap an ANOMALY, which records what already happened', async () => {
+      prisma.materialInventory.findFirst.mockResolvedValue(card());
+      prisma.materialAdjustment.create.mockResolvedValue({ id: 1 });
+
+      await service.create({
+        materialInventoryId: 4,
+        type: 'ANOMALY',
+        value: 500,
+      });
+
+      expect(prisma.materialAdjustment.create).toHaveBeenCalled();
     });
   });
 });

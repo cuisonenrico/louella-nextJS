@@ -208,6 +208,105 @@ describe('InventoryAdjustmentsService', () => {
   // update
   // ─────────────────────────────────────────────────────────────────────────
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // update — stock cap
+  //
+  // create() caps a PULL_OUT at the stock on hand. update() did not, so the cap
+  // was one PATCH away from being irrelevant.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  describe('update — pull-out stock cap', () => {
+    /** A standalone PULL_OUT of 5 against inventory row 9. */
+    const pullOut = (overrides: Record<string, unknown> = {}) => ({
+      id: 1,
+      inventoryId: 9,
+      type: 'PULL_OUT',
+      value: 5,
+      linkedAdjustmentId: null,
+      inventory: { branchId: 1 },
+      ...overrides,
+    });
+
+    it('refuses raising a pull-out above the stock on hand', async () => {
+      prisma.inventoryAdjustment.findFirst.mockResolvedValue(pullOut());
+      prisma.inventory.findFirst.mockResolvedValue({
+        quantity: 100,
+        delivery: 20,
+        adjustments: [{ type: 'PULL_OUT', value: 5 }],
+      });
+
+      await expect(
+        service.update(1, { value: 200 }, unscoped()),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.inventoryAdjustment.update).not.toHaveBeenCalled();
+    });
+
+    it('allows raising a pull-out that still fits the stock on hand', async () => {
+      prisma.inventoryAdjustment.findFirst.mockResolvedValue(pullOut());
+      prisma.inventory.findFirst.mockResolvedValue({
+        quantity: 100,
+        delivery: 20,
+        adjustments: [{ type: 'PULL_OUT', value: 5 }],
+      });
+      prisma.inventoryAdjustment.update.mockResolvedValue({ id: 1, value: 100 });
+
+      await service.update(1, { value: 100 }, unscoped());
+
+      expect(prisma.inventoryAdjustment.update).toHaveBeenCalled();
+    });
+
+    it('excludes the adjustment being edited from the stock it is checked against', async () => {
+      // Row holds 10 units and the pull-out under edit already claims all 10.
+      // Counting it against itself leaves 0 available and would refuse every
+      // edit, including lowering the value.
+      prisma.inventoryAdjustment.findFirst.mockResolvedValue(
+        pullOut({ value: 10 }),
+      );
+      prisma.inventory.findFirst.mockResolvedValue({
+        quantity: 10,
+        delivery: 0,
+        adjustments: [{ id: 1, type: 'PULL_OUT', value: 10 }],
+      });
+      prisma.inventoryAdjustment.update.mockResolvedValue({ id: 1, value: 8 });
+
+      await service.update(1, { value: 8 }, unscoped());
+
+      expect(prisma.inventoryAdjustment.update).toHaveBeenCalled();
+    });
+
+    it('does not cap an ANOMALY, which records what already happened', async () => {
+      prisma.inventoryAdjustment.findFirst.mockResolvedValue(
+        pullOut({ type: 'ANOMALY' }),
+      );
+      prisma.inventoryAdjustment.update.mockResolvedValue({ id: 1, value: 999 });
+
+      await service.update(1, { value: 999 }, unscoped());
+
+      expect(prisma.inventory.findFirst).not.toHaveBeenCalled();
+      expect(prisma.inventoryAdjustment.update).toHaveBeenCalled();
+    });
+
+    it('caps the source leg when the pull-in leg of a transfer is raised', async () => {
+      // Editing the destination leg mirrors the new value onto the source
+      // PULL_OUT, so the source branch is where the stock must exist.
+      prisma.inventoryAdjustment.findFirst
+        .mockResolvedValueOnce(
+          pullOut({ id: 2, type: 'PULL_IN', inventoryId: 20, linkedAdjustmentId: 1 }),
+        )
+        .mockResolvedValueOnce({ id: 1, inventoryId: 9, type: 'PULL_OUT' });
+      prisma.inventory.findFirst.mockResolvedValue({
+        quantity: 10,
+        delivery: 0,
+        adjustments: [{ id: 1, type: 'PULL_OUT', value: 5 }],
+      });
+
+      await expect(
+        service.update(2, { value: 500 }, unscoped()),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+  });
+
   describe('update', () => {
     it('rejects an unknown adjustment', async () => {
       prisma.inventoryAdjustment.findFirst.mockResolvedValue(null);
@@ -253,10 +352,16 @@ describe('InventoryAdjustmentsService', () => {
     it('mirrors a changed value onto the transfer counterpart', async () => {
       prisma.inventoryAdjustment.findFirst.mockResolvedValue({
         id: 1,
+        inventoryId: 9,
         type: 'PULL_OUT',
         value: 5,
         linkedAdjustmentId: 2,
         inventory: { branchId: 1 },
+      });
+      prisma.inventory.findFirst.mockResolvedValue({
+        quantity: 100,
+        delivery: 0,
+        adjustments: [{ id: 1, type: 'PULL_OUT', value: 5 }],
       });
       prisma.$transaction.mockResolvedValue([{ id: 1, value: 8 }, { count: 1 }]);
 

@@ -1,22 +1,21 @@
 import {
   BadRequestException,
-  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ALL_BRANCHES_KEY } from '@/lib/rbac/features';
 import { PrismaService } from '../prisma/prisma.service';
+import { assertBranchAccess } from '../common/utils/branch-access';
 import { computeAdjSum } from '../common/utils/inventory-metrics.util';
 import { CreateInventoryAdjustmentDto } from './dto/create-inventory-adjustment.dto';
 import { UpdateInventoryAdjustmentDto } from './dto/update-inventory-adjustment.dto';
 import { CreateTransferDto } from './dto/create-transfer.dto';
 
-/** The authenticated caller, as JwtStrategy puts it on the request. */
-export interface RequestUser {
-  id?: number;
-  branchId?: number | null;
-  permissions?: string[];
-}
+/**
+ * The authenticated caller, as JwtStrategy puts it on the request. Re-exported
+ * so the controller keeps importing it from here alongside the service.
+ */
+export type { RequestUser } from '../common/utils/branch-access';
+import type { RequestUser } from '../common/utils/branch-access';
 
 @Injectable()
 export class InventoryAdjustmentsService {
@@ -32,25 +31,14 @@ export class InventoryAdjustmentsService {
    * branch's revenue. The branch has to be resolved from the row instead, which
    * only the service can do.
    *
-   * Scope is driven by the `all-branches` permission, matching BranchGuard.
+   * The rule itself lives in common/utils/branch-access.ts, shared with the
+   * XLSX import, which is outside the guard's reach for a different reason.
    */
   private assertBranchAccess(
     user: RequestUser | undefined,
     branchId: number,
   ): void {
-    // No user means a @Public route: JwtAuthGuard runs globally and ahead of
-    // this, so there is nothing to scope.
-    if (!user) return;
-    if (user.permissions?.includes(ALL_BRANCHES_KEY)) return;
-
-    if (user.branchId == null) {
-      throw new ForbiddenException(
-        'This account is limited to a single branch but has no branch assigned. Ask an administrator to assign one.',
-      );
-    }
-    if (user.branchId !== branchId) {
-      throw new ForbiddenException('Access to this branch is not permitted');
-    }
+    assertBranchAccess(user, branchId);
   }
 
   /** Resolve the branch an adjustment belongs to, via its inventory row. */
@@ -76,6 +64,7 @@ export class InventoryAdjustmentsService {
   private async assertStockAvailable(
     inventoryId: number,
     value: number,
+    excludeAdjustmentId?: number,
   ): Promise<void> {
     const row = await this.prisma.inventory.findFirst({
       where: { id: inventoryId, deletedAt: null },
@@ -84,14 +73,21 @@ export class InventoryAdjustmentsService {
         delivery: true,
         adjustments: {
           where: { deletedAt: null },
-          select: { type: true, value: true },
+          select: { id: true, type: true, value: true },
         },
       },
     });
     if (!row) throw new NotFoundException('Inventory record not found');
 
-    const available =
-      row.quantity + row.delivery + computeAdjSum(row.adjustments);
+    // On an edit the row under revision must not be counted against itself: a
+    // pull-out that already claims the whole day's stock would otherwise leave
+    // nothing available and refuse even a reduction.
+    const others =
+      excludeAdjustmentId == null
+        ? row.adjustments
+        : row.adjustments.filter((a) => a.id !== excludeAdjustmentId);
+
+    const available = row.quantity + row.delivery + computeAdjSum(others);
     if (value > available) {
       throw new BadRequestException(
         `Cannot pull out ${value} units — only ${available} are on hand for this product and day.`,
@@ -151,6 +147,10 @@ export class InventoryAdjustmentsService {
         );
       }
       if (dto.value !== undefined && dto.value !== existing.value) {
+        // The new value lands on both legs, so the *source* branch is what has
+        // to be able to cover it — whichever leg the user happens to be editing.
+        await this.assertTransferStock(existing, dto.value);
+
         const [updated] = await this.prisma.$transaction([
           this.prisma.inventoryAdjustment.update({ where: { id }, data: dto }),
           this.prisma.inventoryAdjustment.updateMany({
@@ -162,7 +162,53 @@ export class InventoryAdjustmentsService {
       }
     }
 
+    // Standalone adjustment: cap it exactly as create() does, so the cap cannot
+    // be sidestepped by creating a small pull-out and then raising it.
+    const nextType = dto.type ?? existing.type;
+    const changesAmount = dto.value !== undefined || dto.type !== undefined;
+    if (nextType === 'PULL_OUT' && changesAmount) {
+      await this.assertStockAvailable(
+        existing.inventoryId,
+        dto.value ?? existing.value,
+        id,
+      );
+    }
+
     return this.prisma.inventoryAdjustment.update({ where: { id }, data: dto });
+  }
+
+  /**
+   * Cap the pull-out side of a transfer whose value is being revised.
+   *
+   * If the edited leg is itself the PULL_OUT, that is the row and the branch to
+   * check. If it is the PULL_IN, the mirrored write moves the units out of the
+   * counterpart's branch, so the counterpart is what must have the stock.
+   */
+  private async assertTransferStock(
+    existing: {
+      id: number;
+      type: string;
+      inventoryId: number;
+      linkedAdjustmentId: number | null;
+    },
+    value: number,
+  ): Promise<void> {
+    if (existing.type === 'PULL_OUT') {
+      await this.assertStockAvailable(existing.inventoryId, value, existing.id);
+      return;
+    }
+
+    const counterpart = await this.prisma.inventoryAdjustment.findFirst({
+      where: { id: existing.linkedAdjustmentId ?? -1, deletedAt: null },
+      select: { id: true, inventoryId: true, type: true },
+    });
+    if (counterpart?.type === 'PULL_OUT') {
+      await this.assertStockAvailable(
+        counterpart.inventoryId,
+        value,
+        counterpart.id,
+      );
+    }
   }
 
   async remove(id: number, user?: RequestUser) {

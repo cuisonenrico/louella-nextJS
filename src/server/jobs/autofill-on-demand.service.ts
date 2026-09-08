@@ -114,6 +114,7 @@ export class AutofillOnDemandService {
             select: { date: true },
           })
         : await this.prisma.materialInventory.findFirst({
+            where: { deletedAt: null },
             orderBy: { date: 'desc' },
             select: { date: true },
           });
