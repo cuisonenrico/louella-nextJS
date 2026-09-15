@@ -39,7 +39,8 @@ export interface User {
 
 export interface AuthResponse {
   accessToken: string;
-  refreshToken: string;
+  /** Mobile only. A browser gets it solely as the HttpOnly cookie. */
+  refreshToken?: string;
   user: User;
 }
 

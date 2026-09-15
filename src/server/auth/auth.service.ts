@@ -38,6 +38,20 @@ const REFRESH_ROTATION_GRACE_MS = 60_000;
 // spreading guesses across many IPs against one account still gets stopped.
 const MAX_FAILED_LOGIN_ATTEMPTS = 5;
 const LOCKOUT_MINUTES = 15;
+// One answer for every failed login — unknown email, wrong password, locked
+// or disabled account. Distinct messages told a caller which emails exist,
+// and a "disabled" reply after the password check confirmed the password.
+const LOGIN_FAILED_MESSAGE = `Invalid email or password. Repeated failures lock the account for ${LOCKOUT_MINUTES} minutes.`;
+
+// Compared against when no account matches, so an unknown email costs the
+// same bcrypt work as a real one and response timing does not reveal which
+// emails are registered. Hashed lazily: at cost 12 it would add a noticeable
+// delay to every cold start that never serves a login.
+let dummyHash: Promise<string> | null = null;
+function getDummyHash(): Promise<string> {
+  dummyHash ??= bcrypt.hash('not-a-real-password', BCRYPT_COST_FACTOR);
+  return dummyHash;
+}
 
 @Injectable()
 export class AuthService {
@@ -51,23 +65,25 @@ export class AuthService {
   async validateUser(email: string, password: string): Promise<UserEntity> {
     const user = await this.usersService.findByEmail(email);
     if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
+      await bcrypt.compare(password, await getDummyHash());
+      throw new UnauthorizedException(LOGIN_FAILED_MESSAGE);
     }
 
     if (user.lockedUntil && user.lockedUntil > new Date()) {
-      throw new UnauthorizedException(
-        'Account temporarily locked due to too many failed login attempts. Try again later.',
-      );
+      // Spend the same bcrypt work, but never against the real hash: the
+      // result must not be observable while the account is locked.
+      await bcrypt.compare(password, await getDummyHash());
+      throw new UnauthorizedException(LOGIN_FAILED_MESSAGE);
     }
 
     const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) {
       await this.registerFailedLoginAttempt(user);
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException(LOGIN_FAILED_MESSAGE);
     }
 
     if (!user.isActive) {
-      throw new UnauthorizedException('Account is disabled');
+      throw new UnauthorizedException(LOGIN_FAILED_MESSAGE);
     }
 
     // Opportunistically re-hash passwords still on an older (weaker) bcrypt
@@ -271,11 +287,24 @@ export class AuthService {
     if (!valid)
       throw new UnauthorizedException('Current password is incorrect');
     const passwordHash = await bcrypt.hash(newPassword, BCRYPT_COST_FACTOR);
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { passwordHash, mustChangePassword: false },
-    });
-    return { success: true };
+    // Revoke every outstanding refresh token in the same transaction. A
+    // password change is what a user does when they suspect a compromise, and
+    // leaving 30-day sessions alive would let whoever stole one keep it. The
+    // caller is issued a fresh session below, so only *other* sessions end.
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: userId },
+        data: { passwordHash, mustChangePassword: false },
+      }),
+      this.prisma.refreshToken.updateMany({
+        where: { userId, revoked: false },
+        data: { revoked: true },
+      }),
+    ]);
+
+    const accessToken = this.createAccessToken(user);
+    const { refreshToken, refreshTokenId } = await this.createRefreshToken(user);
+    return { success: true, accessToken, refreshToken, refreshTokenId };
   }
 
   private sanitizeUser(user: UserEntity) {

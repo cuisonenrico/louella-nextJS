@@ -78,8 +78,53 @@ describe('AuthService.validateUser (login lockout)', () => {
 
     await expect(
       service.validateUser('a@b.com', 'correct-password'),
-    ).rejects.toThrow('temporarily locked');
+    ).rejects.toThrow(UnauthorizedException);
     expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it('gives one message for unknown, wrong-password, locked and disabled logins', async () => {
+    // Distinct messages told a caller which emails exist, and a "disabled"
+    // reply after the password check confirmed the password was right.
+    const passwordHash = await hash('correct-password');
+    const base = { id: 1, email: 'a@b.com', passwordHash, failedLoginAttempts: 0 };
+    const cases: Array<[any, string]> = [
+      [null, 'anything'],
+      [{ ...base, isActive: true, lockedUntil: null }, 'wrong-password'],
+      [{ ...base, isActive: true, lockedUntil: new Date(Date.now() + 60_000) }, 'correct-password'],
+      [{ ...base, isActive: false, lockedUntil: null }, 'correct-password'],
+    ];
+
+    const messages = new Set<string>();
+    for (const [user, password] of cases) {
+      const { service } = makeService(user);
+      await service.validateUser('a@b.com', password).catch((e: Error) => {
+        expect(e).toBeInstanceOf(UnauthorizedException);
+        messages.add(e.message);
+      });
+    }
+    expect(messages.size).toBe(1);
+  });
+
+  it('spends bcrypt work on an unknown email, so timing does not reveal it', async () => {
+    // bcrypt's exports are non-configurable, so this measures rather than
+    // spies. The first call also pays for the lazily built dummy hash, so
+    // only the second is timed. Half a real compare is a loose bound: the
+    // unguarded path returned in well under a millisecond.
+    const { service } = makeService(null);
+    await service.validateUser('nobody@b.com', 'x').catch(() => undefined);
+
+    const realHash = await hash('some-password');
+    let started = performance.now();
+    await bcrypt.compare('x', realHash);
+    const realCompareMs = performance.now() - started;
+
+    started = performance.now();
+    await expect(service.validateUser('nobody@b.com', 'x')).rejects.toThrow(
+      UnauthorizedException,
+    );
+    const unknownEmailMs = performance.now() - started;
+
+    expect(unknownEmailMs).toBeGreaterThan(realCompareMs * 0.5);
   });
 
   it('allows login and clears a stale/expired lock once the correct password is supplied', async () => {
@@ -231,5 +276,63 @@ describe('AuthService.refresh (rotation grace window)', () => {
     );
 
     await expect(service.refresh(token)).rejects.toThrow(UnauthorizedException);
+  });
+});
+
+describe('AuthService.changePassword', () => {
+  async function setup(currentPassword = 'current-password') {
+    const user = {
+      id: 7,
+      email: 'a@b.com',
+      role: 'MANAGER',
+      branchId: 1,
+      passwordHash: await hash(currentPassword),
+    };
+    const usersService = { findById: jest.fn().mockResolvedValue(user) } as any;
+    const prisma = {
+      $transaction: jest.fn().mockResolvedValue([]),
+      user: { update: jest.fn().mockReturnValue('user-update') },
+      refreshToken: {
+        updateMany: jest.fn().mockReturnValue('revoke-all'),
+        create: jest.fn().mockResolvedValue({ id: 5 }),
+      },
+    } as any;
+    const jwtService = { sign: jest.fn().mockReturnValue('fresh-token') } as any;
+    const config = { get: () => 'test-secret' } as any;
+    return {
+      service: new AuthService(usersService, prisma, jwtService, config),
+      prisma,
+    };
+  }
+
+  it('revokes every outstanding refresh token alongside the password update', async () => {
+    const { service, prisma } = await setup();
+
+    await service.changePassword(7, 'current-password', 'brand-new-password');
+
+    expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+      where: { userId: 7, revoked: false },
+      data: { revoked: true },
+    });
+    expect(prisma.$transaction).toHaveBeenCalledWith(['user-update', 'revoke-all']);
+  });
+
+  it('issues the caller a fresh session so only other sessions end', async () => {
+    const { service, prisma } = await setup();
+
+    const result = await service.changePassword(7, 'current-password', 'brand-new-password');
+
+    expect(result.accessToken).toBe('fresh-token');
+    expect(result.refreshToken).toBe('fresh-token');
+    expect(prisma.refreshToken.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('revokes nothing when the current password is wrong', async () => {
+    const { service, prisma } = await setup();
+
+    await expect(
+      service.changePassword(7, 'wrong-password', 'brand-new-password'),
+    ).rejects.toThrow(UnauthorizedException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 });
