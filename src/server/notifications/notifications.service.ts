@@ -23,26 +23,21 @@ export class NotificationsService {
       return;
     }
     try {
-      // Lazy-require so the build does not fail when firebase-admin is absent
+      // Lazy-require so the build does not fail when firebase-admin is absent.
+      // firebase-admin 14 removed the namespaced API (`admin.credential`,
+      // `admin.apps`, `admin.messaging()`), so this uses the modular entry
+      // points — the old calls would now throw and disable push silently.
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const admin = require('firebase-admin');
+      const { cert, getApps, initializeApp } = require('firebase-admin/app');
 
-      let credential: any;
-      if (serviceAccountJson) {
-        // Cloud Run: secret value injected directly as JSON string
-        credential = admin.credential.cert(JSON.parse(serviceAccountJson));
-      } else {
-        // Local dev: path to service account JSON file
-        credential = admin.credential.cert(
-          JSON.parse(fs.readFileSync(serviceAccountPath!, 'utf8')),
-        );
-      }
+      const serviceAccount = serviceAccountJson
+        ? // Deployed: secret value injected directly as a JSON string
+          JSON.parse(serviceAccountJson)
+        : // Local dev: path to a service account JSON file
+          JSON.parse(fs.readFileSync(serviceAccountPath!, 'utf8'));
 
-      if (!admin.apps.length) {
-        this.firebaseApp = admin.initializeApp({ credential });
-      } else {
-        this.firebaseApp = admin.apps[0];
-      }
+      const [existing] = getApps();
+      this.firebaseApp = existing ?? initializeApp({ credential: cert(serviceAccount) });
       this.logger.log('Firebase Admin SDK initialised.');
     } catch (err) {
       this.logger.error('Failed to init Firebase Admin SDK', err);
@@ -82,7 +77,7 @@ export class NotificationsService {
     if (!tokens.length) return;
 
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const admin = require('firebase-admin');
+    const { getMessaging } = require('firebase-admin/messaging');
 
     const message = {
       notification: { title: payload.title, body: payload.body },
@@ -90,7 +85,7 @@ export class NotificationsService {
       tokens: tokens.map((t) => t.token),
     };
 
-    const response = await admin.messaging().sendEachForMulticast(message);
+    const response = await getMessaging(this.firebaseApp).sendEachForMulticast(message);
     this.logger.log(
       `Sent notification to user ${userId}: ${response.successCount} ok, ${response.failureCount} failed.`,
     );
