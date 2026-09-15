@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { S3Client } from '@aws-sdk/client-s3';
 import { createPresignedPost } from '@aws-sdk/s3-presigned-post';
@@ -60,6 +60,11 @@ export class FilesService {
   }
 
   async completeUpload(userId: number, key: string, filename: string) {
+    // Presigned keys are always `${userId}/...`. Without this check any user
+    // could register a File row pointing at someone else's object.
+    if (!key.startsWith(`${userId}/`) || key.includes('..')) {
+      throw new ForbiddenException('Upload key does not belong to this user');
+    }
     return this.prisma.file.create({
       data: {
         userId,

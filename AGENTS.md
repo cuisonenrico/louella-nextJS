@@ -121,7 +121,14 @@ with `trigger: 'auto'`. See `docs/DEPLOYMENT.md`.
   staleness beyond the TTL. `CACHE_ENABLED=false` disables it.
 - **`src/server/files/` (pre-signed S3 uploads) is built but unwired.** No
   caller exists in this app or in the Flutter client, and the AWS env vars are
-  placeholders. The XLSX import does *not* use it.
+  placeholders. The XLSX import does *not* use it. `FilesModule` is **not
+  registered** in `app.module.ts`, so `/files/*` routes do not exist — import
+  it there again when a real caller appears.
+- **Branch scoping must survive Express 5.** `req.query` is a re-parsing
+  getter, so assigning into it is silently discarded. `BranchGuard` replaces
+  the property instead; anything else that rewrites query values must do the
+  same. `branch.guard.http.spec.ts` is the test that catches a regression —
+  mocked-request unit tests cannot.
 
 ### Frontend
 

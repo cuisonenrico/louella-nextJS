@@ -35,6 +35,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { Autofill } from '../common/decorators/autofill.decorator';
 import { BranchGuard } from '../common/guards/branch.guard';
 import { RequireFeature } from '../common/decorators/require-feature.decorator';
+import { clampPage, clampPageSize } from '../common/utils/pagination.util';
 
 @Controller('inventory')
 @RequireFeature('inventory-history')
@@ -94,8 +95,8 @@ export class InventoryController {
     @Query('branchId') branchIdStr?: string,
   ) {
     return this.inventoryService.findAll(
-      page,
-      limit,
+      clampPage(page),
+      clampPageSize(limit),
       parseBranchId(branchIdStr),
     );
   }
@@ -109,8 +110,8 @@ export class InventoryController {
   ) {
     return this.inventoryService.search(
       q ?? '',
-      page,
-      limit,
+      clampPage(page),
+      clampPageSize(limit),
       parseBranchId(branchIdStr),
     );
   }
@@ -121,7 +122,7 @@ export class InventoryController {
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
   ) {
-    return this.inventoryService.findByBranch(branchId, page, limit);
+    return this.inventoryService.findByBranch(branchId, clampPage(page), clampPageSize(limit));
   }
 
   @Get('product/:productId')
@@ -133,8 +134,8 @@ export class InventoryController {
   ) {
     return this.inventoryService.findByProduct(
       productId,
-      page,
-      limit,
+      clampPage(page),
+      clampPageSize(limit),
       parseBranchId(branchIdStr),
     );
   }

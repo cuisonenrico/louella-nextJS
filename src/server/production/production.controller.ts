@@ -23,6 +23,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { Autofill } from '../common/decorators/autofill.decorator';
 import { BranchGuard } from '../common/guards/branch.guard';
 import { RequireFeature } from '../common/decorators/require-feature.decorator';
+import { clampPage, clampPageSize } from '../common/utils/pagination.util';
 
 @Controller('production')
 // The production-cost and production-efficiency SCREENS have their own keys and
@@ -83,8 +84,8 @@ export class ProductionController {
     @Query('branchId') branchIdStr?: string,
   ) {
     return this.productionService.findAll(
-      page,
-      limit,
+      clampPage(page),
+      clampPageSize(limit),
       parseBranchScope(branchIdStr),
     );
   }
@@ -95,7 +96,7 @@ export class ProductionController {
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
   ) {
-    return this.productionService.findByBranch(branchId, page, limit);
+    return this.productionService.findByBranch(branchId, clampPage(page), clampPageSize(limit));
   }
 
   @Get('product/:productId')
@@ -107,8 +108,8 @@ export class ProductionController {
   ) {
     return this.productionService.findByProduct(
       productId,
-      page,
-      limit,
+      clampPage(page),
+      clampPageSize(limit),
       parseBranchScope(branchIdStr),
     );
   }

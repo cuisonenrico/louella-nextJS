@@ -23,6 +23,7 @@ import { CurrentUser } from '../common/decorators/user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Autofill } from '../common/decorators/autofill.decorator';
 import { RequireFeature } from '../common/decorators/require-feature.decorator';
+import { clampPage, clampPageSize } from '../common/utils/pagination.util';
 
 @Controller('material-inventory')
 @RequireFeature('material-stock')
@@ -115,7 +116,7 @@ export class MaterialInventoryController {
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(200), ParseIntPipe) limit: number,
   ) {
-    return this.materialInventoryService.findAll(page, limit);
+    return this.materialInventoryService.findAll(clampPage(page), clampPageSize(limit));
   }
 
   @Get(':id')

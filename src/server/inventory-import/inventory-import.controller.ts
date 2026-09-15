@@ -25,6 +25,21 @@ import type { ProductType } from './sheet-sections';
 import type { Express } from 'express';
 import { RequireFeature } from '../common/decorators/require-feature.decorator';
 
+/**
+ * Multer holds the upload in memory, and Vercel accepts request bodies up to
+ * 100 MB — so without a cap, one request could exhaust the function's memory
+ * before the handler ever ran. Capping the upload also bounds how far a
+ * crafted XLSX (a zip) can inflate when parsed. A bakery's inventory workbook is tens of
+ * kilobytes; 10 MB is generous. Multer rejects oversize files with a 413.
+ */
+export const IMPORT_UPLOAD_LIMITS = {
+  fileSize: 10 * 1024 * 1024,
+  files: 1,
+  fields: 10,
+  fieldSize: 1024 * 1024,
+  parts: 12,
+} as const;
+
 const PRODUCT_TYPES: readonly ProductType[] = [
   'BREAD',
   'CAKE',
@@ -106,7 +121,7 @@ export class InventoryImportController {
   @Post('preview')
   @RequireFeature('inventory-import:preview')
   @Roles(UserRole.MANAGER)
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: IMPORT_UPLOAD_LIMITS }))
   preview(
     @CurrentUser() user: RequestUser,
     @UploadedFile() file: Express.Multer.File,
@@ -130,7 +145,7 @@ export class InventoryImportController {
   @Post('import')
   @RequireFeature('inventory-import:import')
   @Roles(UserRole.MANAGER)
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: IMPORT_UPLOAD_LIMITS }))
   async import(
     @UploadedFile() file: Express.Multer.File,
     @Body('branchId') branchIdStr: string,

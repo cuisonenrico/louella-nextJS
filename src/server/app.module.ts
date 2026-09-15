@@ -12,7 +12,6 @@ import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
-import { FilesModule } from './files/files.module';
 import { JobsModule } from './jobs/jobs.module';
 import { ProductsModule } from './products/products.module';
 import { BranchesModule } from './branches/branches.module';
@@ -46,7 +45,10 @@ import { CacheNamespaceModule } from './common/cache/cache-namespace.module';
     PrismaModule,
     UsersModule,
     AuthModule,
-    FilesModule,
+    // FilesModule (src/server/files, pre-signed S3 uploads) is deliberately not
+    // registered: nothing calls it and its AWS configuration is placeholder,
+    // so mounting it only exposed /files/presign and /files/complete to every
+    // signed-in user. Import it here again once a real caller exists.
     JobsModule,
     ProductsModule,
     BranchesModule,

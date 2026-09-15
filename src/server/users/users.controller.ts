@@ -18,6 +18,7 @@ import { UpdateBranchDto } from './dto/update-branch.dto';
 import { UpdateStatusDto } from './dto/update-status.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { RequireFeature } from '../common/decorators/require-feature.decorator';
+import { clampPage, clampPageSize } from '../common/utils/pagination.util';
 
 // Gated per-method rather than on the controller: `me/permissions` must remain
 // reachable by every authenticated user, since the client fetches it to learn
@@ -43,7 +44,11 @@ export class UsersController {
     @Query('limit') limit = '20',
     @Query('search') search?: string,
   ) {
-    return this.usersService.findAll(Number(page), Number(limit), search);
+    return this.usersService.findAll(
+      clampPage(Number(page)),
+      clampPageSize(Number(limit)),
+      search,
+    );
   }
 
   @Get(':id')

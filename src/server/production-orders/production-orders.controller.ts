@@ -22,6 +22,7 @@ import { CreateProductionOrderDto } from './dto/create-production-order.dto';
 import { UpdateProductionOrderDto } from './dto/update-production-order.dto';
 import { SuggestionsQueryDto } from './dto/suggestions-query.dto';
 import { RequireFeature } from '../common/decorators/require-feature.decorator';
+import { clampPage, clampPageSize } from '../common/utils/pagination.util';
 
 @Controller('production-orders')
 @RequireFeature('production-orders')
@@ -62,8 +63,8 @@ export class ProductionOrdersController {
     @Query('branchId') branchId?: string,
   ) {
     return this.service.findAll(
-      page,
-      limit,
+      clampPage(page),
+      clampPageSize(limit),
       this.parseOptionalBranchId(branchId),
     );
   }

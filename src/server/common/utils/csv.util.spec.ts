@@ -9,7 +9,7 @@ describe('csvField', () => {
     expect(csvField('12" Cake')).toBe('"12"" Cake"');
   });
 
-  it.each(['=cmd|calc', '+1+1', '-1+1', '@SUM(A1)'])(
+  it.each(['=cmd|calc', '+1+1', '-1+1', '@SUM(A1)', '\t=1+1', '\r=1+1', '|calc'])(
     'neutralizes formula-triggering leading characters: %s',
     (payload) => {
       const result = csvField(payload);
