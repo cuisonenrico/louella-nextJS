@@ -36,6 +36,26 @@ import { ALL_BRANCHES_KEY } from '@/lib/rbac/features';
  *     a mismatch is rejected, an absent value is stamped. This closes the
  *     write-side isolation bypass.
  */
+/**
+ * Replace `req.query` with a copy whose `branchId` is the user's own.
+ *
+ * Assigning into `req.query` does nothing under Express 5: `query` is a
+ * getter on the request prototype that re-parses the URL on every read, so a
+ * write lands on a throwaway object and the handler's `@Query('branchId')`
+ * sees the original (usually absent) value. That silently unscoped every
+ * listing and every `:id` read/write for branch-confined users. Defining an
+ * own property shadows the getter, so the stamp survives to the handler.
+ */
+function pinQueryBranchId(req: Request, branchId: number): void {
+  const query = { ...(req.query as Record<string, unknown> | undefined), branchId: String(branchId) };
+  Object.defineProperty(req, 'query', {
+    value: query,
+    writable: true,
+    configurable: true,
+    enumerable: true,
+  });
+}
+
 @Injectable()
 export class BranchGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
@@ -93,13 +113,15 @@ export class BranchGuard implements CanActivate {
         : null;
     const requestedBranchId = paramBranchId ?? queryBranchId;
 
-    if (requestedBranchId != null) {
-      if (requestedBranchId !== branchId) {
-        throw new ForbiddenException('Access to this branch is not permitted');
-      }
-    } else if (req.query) {
-      (req.query as Record<string, unknown>).branchId = String(branchId);
+    if (requestedBranchId != null && requestedBranchId !== branchId) {
+      throw new ForbiddenException('Access to this branch is not permitted');
     }
+
+    // Always pin the query to the user's own branch — also when it already
+    // matched, so a repeated (`?branchId=3&branchId=5`) or nested
+    // (`?branchId[x]=5`) value cannot reach a handler that parses it
+    // differently from the check above.
+    pinQueryBranchId(req, branchId);
   }
 
   /**
