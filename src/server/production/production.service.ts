@@ -21,6 +21,10 @@ type YieldKey = { branchId: number; productId: number; date: Date };
 const yieldKey = (k: YieldKey) => `${k.branchId}:${k.productId}:${dateKey(k.date)}`;
 import { toUtcDay } from '../common/utils/date-range.util';
 import {
+  loadRecipeVersions,
+  recipeOn,
+} from '../common/utils/recipe-version.util';
+import {
   lockMaterialChains,
   lockProductionKeys,
   reconcileMaterialChains,
@@ -48,7 +52,8 @@ export class ProductionService {
    * The one place the consumption formula lives for single-row writes:
    *   used += Δyield × recipeItem.quantity × factor / recipeYield
    * Recipes are read through `tx` too, so the recipe and the stock it moves
-   * are seen consistently. Deleted recipes do not consume.
+   * are seen consistently. Each change uses the recipe version in force on
+   * its day; deleted recipes do not consume.
    */
   private async consumeMaterials(
     tx: Prisma.TransactionClient,
@@ -57,29 +62,31 @@ export class ProductionService {
     const moving = changes.filter((c) => c.delta !== 0);
     if (moving.length === 0) return;
 
-    const recipes = await tx.recipe.findMany({
-      where: {
-        productId: { in: [...new Set(moving.map((c) => c.productId))] },
-        deletedAt: null,
-      },
-      include: { recipeItems: { include: { material: true } } },
-    });
-    const recipeByProduct = new Map(recipes.map((r) => [r.productId, r]));
+    // The recipe in force on each change's own day: editing a recipe today
+    // must not change what an edit to last week's production consumes. A
+    // deleted (retired) recipe consumes nothing from its deletion day on.
+    const versionsByProduct = await loadRecipeVersions(
+      tx,
+      moving.map((c) => c.productId),
+    );
+    const resolved = moving.map((change) => ({
+      change,
+      recipe: recipeOn(versionsByProduct.get(change.productId), change.date),
+    }));
 
     const conversionMap = await getConversionFactorMap(
       tx,
-      recipes.flatMap((r) =>
-        r.recipeItems.map((i) => ({ fromUnit: i.unit, toUnit: i.material.unit })),
+      resolved.flatMap(({ recipe }) =>
+        (recipe?.items ?? []).map((i) => ({ fromUnit: i.unit, toUnit: i.material.unit })),
       ),
     );
 
     // Sum per material and day first: two products sharing flour on one day
     // is one write, not two.
     const byCard = new Map<string, { materialId: number; date: Date; delta: number }>();
-    for (const change of moving) {
-      const recipe = recipeByProduct.get(change.productId);
+    for (const { change, recipe } of resolved) {
       if (!recipe) continue;
-      for (const item of recipe.recipeItems) {
+      for (const item of recipe.items) {
         const factor = requireFactor(
           conversionMap,
           item.unit,

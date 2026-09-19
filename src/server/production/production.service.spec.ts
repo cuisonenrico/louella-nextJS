@@ -9,7 +9,7 @@ import { FakeStockDb, day } from '../common/testing/fake-stock-db';
  */
 describe('ProductionService', () => {
   let db: FakeStockDb & {
-    recipe: { findMany: jest.Mock };
+    recipeVersion: { findMany: jest.Mock };
     unitConversion: { findMany: jest.Mock };
   };
   let service: ProductionService;
@@ -18,25 +18,33 @@ describe('ProductionService', () => {
   const FLOUR = { id: 3, name: 'Flour', unit: 'KG' };
   const SUGAR = { id: 4, name: 'Sugar', unit: 'KG' };
 
+  /** A recipe version as loadRecipeVersions returns it. */
+  const version = (
+    productId: number,
+    items: Array<{ quantity: number; unit: string; material: typeof FLOUR }>,
+    opts: { version?: number; from?: string; retired?: boolean } = {},
+  ) => ({
+    version: opts.version ?? 1,
+    effectiveFrom: day(opts.from ?? '2026-01-01'),
+    recipeYield: 1,
+    retired: opts.retired ?? false,
+    recipe: { productId },
+    items: items.map((i) => ({ ...i, materialId: i.material.id })),
+  });
+
   /** Product 2 uses 2 kg flour per piece; product 5 uses 1 kg sugar per piece. */
-  const recipes = [
-    {
-      productId: 2,
-      recipeYield: 1,
-      recipeItems: [{ quantity: 2, unit: 'KG', material: FLOUR }],
-    },
-    {
-      productId: 5,
-      recipeYield: 1,
-      recipeItems: [{ quantity: 1, unit: 'KG', material: SUGAR }],
-    },
-  ];
+  let versions: ReturnType<typeof version>[];
 
   beforeEach(() => {
+    versions = [
+      version(2, [{ quantity: 2, unit: 'KG', material: FLOUR }]),
+      version(5, [{ quantity: 1, unit: 'KG', material: SUGAR }]),
+    ];
     db = Object.assign(new FakeStockDb(), {
-      recipe: {
-        findMany: jest.fn(async ({ where }: { where: { productId: { in: number[] } } }) =>
-          recipes.filter((r) => where.productId.in.includes(r.productId)),
+      recipeVersion: {
+        findMany: jest.fn(
+          async ({ where }: { where: { recipe: { productId: { in: number[] } } } }) =>
+            versions.filter((v) => where.recipe.productId.in.includes(v.recipe.productId)),
         ),
       },
       unitConversion: { findMany: jest.fn().mockResolvedValue([]) },
@@ -116,26 +124,39 @@ describe('ProductionService', () => {
       expect(kinds.lastIndexOf('1')).toBeLessThan(kinds.indexOf('2'));
     });
 
-    it('asks only for live recipes', async () => {
-      await service.create({ branchId: 1, productId: 2, date: '2026-09-08', yield: 1 });
+    // Decision 2026-09-19: a past day uses the recipe as it was that day.
+    it('uses the recipe version in force on the production day', async () => {
+      versions = [
+        version(2, [{ quantity: 2, unit: 'KG', material: FLOUR }], { version: 1, from: '2026-01-01' }),
+        version(2, [{ quantity: 3, unit: 'KG', material: FLOUR }], { version: 2, from: '2026-09-10' }),
+      ];
 
-      expect(db.recipe.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { productId: { in: [2] }, deletedAt: null },
-        }),
-      );
+      await service.create({ branchId: 1, productId: 2, date: '2026-09-08', yield: 10 });
+      await service.create({ branchId: 1, productId: 2, date: '2026-09-12', yield: 10 });
+
+      expect(used(FLOUR.id)).toBe(20); // v1 on the 8th
+      expect(used(FLOUR.id, day('2026-09-12'))).toBe(30); // v2 on the 12th
+    });
+
+    it('stops consuming from the day a recipe was deleted, but not before', async () => {
+      versions = [
+        version(2, [{ quantity: 2, unit: 'KG', material: FLOUR }], { version: 1, from: '2026-01-01' }),
+        version(2, [], { version: 2, from: '2026-09-10', retired: true }),
+      ];
+
+      await service.create({ branchId: 1, productId: 2, date: '2026-09-08', yield: 10 });
+      await service.create({ branchId: 1, productId: 2, date: '2026-09-12', yield: 10 });
+
+      expect(used(FLOUR.id)).toBe(20);
+      expect(used(FLOUR.id, day('2026-09-12'))).toBe(0);
     });
   });
 
   describe('unit conversion', () => {
-    const gramRecipe = {
-      productId: 2,
-      recipeYield: 1,
-      recipeItems: [{ quantity: 500, unit: 'G', material: FLOUR }],
-    };
+    const gramRecipe = () => version(2, [{ quantity: 500, unit: 'G', material: FLOUR }]);
 
     it('converts the recipe unit into the material unit', async () => {
-      db.recipe.findMany.mockResolvedValue([gramRecipe]);
+      versions = [gramRecipe()];
       db.unitConversion.findMany.mockResolvedValue([
         { fromUnit: 'G', toUnit: 'KG', factor: 0.001 },
       ]);
@@ -147,7 +168,7 @@ describe('ProductionService', () => {
 
     it('refuses to save when no conversion exists, and writes nothing', async () => {
       // The old fallback booked 10 × 500 = 5000 "kg" of flour here.
-      db.recipe.findMany.mockResolvedValue([gramRecipe]);
+      versions = [gramRecipe()];
 
       await expect(
         service.create({ branchId: 1, productId: 2, date: '2026-09-08', yield: 10 }),
@@ -186,7 +207,7 @@ describe('ProductionService', () => {
 
     // A blanket catch used to report every failure as "not found".
     it('lets a real error through instead of calling it not found', async () => {
-      db.recipe.findMany.mockRejectedValueOnce(new UnprocessableEntityException('boom'));
+      db.recipeVersion.findMany.mockRejectedValueOnce(new UnprocessableEntityException('boom'));
 
       await expect(service.update(rowId(), { yield: 4 })).rejects.toThrow(
         UnprocessableEntityException,

@@ -440,6 +440,7 @@ model Material {
   deletedAt    DateTime?       // soft delete – null means active
 
   recipeItems         RecipeItem[]
+  recipeVersionItems  RecipeVersionItem[]
   materialInventories MaterialInventory[]
   priceHistory        MaterialPriceHistory[]
 }
@@ -455,6 +456,43 @@ model Recipe {
 
   product     Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
   recipeItems RecipeItem[]
+  versions    RecipeVersion[]
+}
+
+/// An immutable snapshot of a recipe, in force from `effectiveFrom` (a Manila
+/// calendar day) until the next version. RecipeItem is the recipe as it stands
+/// now; versions are its history, appended on every create, edit, delete
+/// (`retired`) and revive. Consumption and costing for day D use the latest
+/// version effective on or before D — so editing a recipe today no longer
+/// rewrites what last month's production consumed or cost.
+model RecipeVersion {
+  id            Int      @id @default(autoincrement())
+  recipeId      Int
+  version       Int      // 1, 2, 3… per recipe
+  effectiveFrom DateTime @db.Date
+  recipeYield   Float
+  retired       Boolean  @default(false) // recipe deleted from this day on
+  createdAt     DateTime @default(now())
+
+  recipe Recipe              @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  items  RecipeVersionItem[]
+
+  @@unique([recipeId, version])
+  @@index([recipeId, effectiveFrom])
+}
+
+model RecipeVersionItem {
+  id         Int             @id @default(autoincrement())
+  versionId  Int
+  materialId Int
+  quantity   Float
+  unit       MeasurementUnit
+
+  version  RecipeVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  material Material      @relation(fields: [materialId], references: [id], onDelete: Cascade)
+
+  @@index([versionId])
+  @@index([materialId])
 }
 
 model RecipeItem {
@@ -583,6 +621,7 @@ model MaterialPriceHistory {
 
   @@index([materialId])
   @@index([effectiveAt])
+  @@index([materialId, effectiveAt])
 }
 
 model ProductPriceHistory {
@@ -596,6 +635,7 @@ model ProductPriceHistory {
 
   @@index([productId])
   @@index([effectiveAt])
+  @@index([productId, effectiveAt])
 }
 
 // ---------------------------------------------------------------------------

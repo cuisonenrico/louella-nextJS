@@ -1,5 +1,4 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { MeasurementUnit } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   getConversionFactorMap,
@@ -14,11 +13,23 @@ import {
   assertDateRange,
   toUtcDay,
 } from '../common/utils/date-range.util';
+import {
+  loadMaterialPrices,
+  loadRecipeVersions,
+  materialPriceOn,
+  recipeOn,
+} from '../common/utils/recipe-version.util';
 
 @Injectable()
 export class ProductionAnalyticsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * Material cost of one production record, as it was on its day: the recipe
+   * version then in force and each material's price that day (decision
+   * 2026-09-19). Both used to be today's, so editing a recipe or repricing
+   * flour rewrote every past day's cost.
+   */
   async getMaterialConsumption(id: number, plannedYield?: number) {
     const production = await this.prisma.production.findUnique({
       where: { id },
@@ -29,46 +40,30 @@ export class ProductionAnalyticsService {
     // Use planned yield for cost calculation if provided
     const costYield = plannedYield ?? production.yield;
 
-    const recipe = await this.prisma.recipe.findFirst({
-      where: { productId: production.productId, deletedAt: null },
-      include: {
-        recipeItems: {
-          include: { material: true },
-        },
-      },
-    });
+    const versions = await loadRecipeVersions(this.prisma, [production.productId]);
+    const recipe = recipeOn(versions.get(production.productId), production.date);
 
-    if (!recipe || recipe.recipeItems.length === 0) {
-      return {
-        productionId: id,
-        productName: production.product.name,
-        date: production.date,
-        yield: production.yield,
-        plannedYield: costYield,
-        items: [],
-        totalMaterialCost: 0,
-      };
-    }
+    const empty = {
+      productionId: id,
+      productName: production.product.name,
+      date: production.date,
+      yield: production.yield,
+      plannedYield: costYield,
+      recipeVersion: recipe?.version ?? null,
+      items: [],
+      totalMaterialCost: 0,
+    };
+    if (!recipe || recipe.items.length === 0) return empty;
 
-    const conversionMap = await getConversionFactorMap(
-      this.prisma,
-      recipe.recipeItems.map((item) => ({
-        fromUnit: item.unit,
-        toUnit: item.material.unit,
-      })),
-    );
+    const [conversionMap, prices] = await Promise.all([
+      getConversionFactorMap(
+        this.prisma,
+        recipe.items.map((item) => ({ fromUnit: item.unit, toUnit: item.material.unit })),
+      ),
+      loadMaterialPrices(this.prisma, recipe.items.map((i) => i.materialId)),
+    ]);
 
-    const items: {
-      materialId: number;
-      materialName: string;
-      materialUnit: string;
-      recipeUnit: string;
-      consumed: number;
-      pricePerUnit: number;
-      totalCost: number;
-    }[] = [];
-
-    for (const item of recipe.recipeItems) {
+    const items = recipe.items.map((item) => {
       const factor = requireFactor(
         conversionMap,
         item.unit,
@@ -81,31 +76,23 @@ export class ProductionAnalyticsService {
         item.quantity,
         factor,
       );
-      const totalCost = consumed * item.material.pricePerUnit.toNumber();
-
-      items.push({
+      const pricePerUnit = materialPriceOn(item.material, production.date, prices);
+      const totalCost = consumed * pricePerUnit;
+      return {
         materialId: item.material.id,
         materialName: item.material.name,
         materialUnit: item.material.unit,
         recipeUnit: item.unit,
         consumed: Math.round(consumed * 10000) / 10000,
-        pricePerUnit: item.material.pricePerUnit.toNumber(),
+        pricePerUnit,
         totalCost: Math.round(totalCost * 100) / 100,
-      });
-    }
+      };
+    });
 
     const totalMaterialCost =
       Math.round(items.reduce((sum, i) => sum + i.totalCost, 0) * 100) / 100;
 
-    return {
-      productionId: id,
-      productName: production.product.name,
-      date: production.date,
-      yield: production.yield,
-      plannedYield: costYield,
-      items,
-      totalMaterialCost,
-    };
+    return { ...empty, items, totalMaterialCost };
   }
 
   private computeConsumedAmount(
@@ -117,42 +104,31 @@ export class ProductionAnalyticsService {
     return (yieldAmt / recipeYield) * qty * factor;
   }
 
+  /** A day's material use and cost, at that day's recipes and prices. */
   async getMaterialConsumptionSummary(date: string, branchId?: number) {
-    const where: { date: Date; branchId?: number } = { date: new Date(date) };
-    if (branchId) where.branchId = branchId;
-
+    const day = toUtcDay(date);
     const productions = await this.prisma.production.findMany({
-      where,
+      where: { date: day, ...(branchId ? { branchId } : {}) },
       include: { product: true },
     });
 
-    const productIds = Array.from(new Set(productions.map((p) => p.productId)));
-    const recipes = await this.prisma.recipe.findMany({
-      where: { productId: { in: productIds }, deletedAt: null },
-      include: {
-        recipeItems: {
-          include: { material: true },
-        },
-      },
-    });
-    const recipeByProductId = new Map(recipes.map((r) => [r.productId, r]));
-
-    const conversionPairs: Array<{
-      fromUnit: MeasurementUnit;
-      toUnit: MeasurementUnit;
-    }> = [];
-    for (const recipe of recipes) {
-      for (const item of recipe.recipeItems) {
-        conversionPairs.push({
-          fromUnit: item.unit,
-          toUnit: item.material.unit,
-        });
-      }
-    }
-    const conversionMap = await getConversionFactorMap(
+    const versions = await loadRecipeVersions(
       this.prisma,
-      conversionPairs,
+      productions.map((p) => p.productId),
     );
+    const resolved = productions.map((prod) => ({
+      prod,
+      recipe: recipeOn(versions.get(prod.productId), day),
+    }));
+    const allItems = resolved.flatMap(({ recipe }) => recipe?.items ?? []);
+
+    const [conversionMap, prices] = await Promise.all([
+      getConversionFactorMap(
+        this.prisma,
+        allItems.map((item) => ({ fromUnit: item.unit, toUnit: item.material.unit })),
+      ),
+      loadMaterialPrices(this.prisma, allItems.map((i) => i.materialId)),
+    ]);
 
     const materialMap = new Map<
       number,
@@ -165,11 +141,9 @@ export class ProductionAnalyticsService {
       }
     >();
 
-    for (const prod of productions) {
-      const recipe = recipeByProductId.get(prod.productId);
-      if (!recipe || recipe.recipeItems.length === 0) continue;
-
-      for (const item of recipe.recipeItems) {
+    for (const { prod, recipe } of resolved) {
+      if (!recipe) continue;
+      for (const item of recipe.items) {
         const factor = requireFactor(
           conversionMap,
           item.unit,
@@ -182,7 +156,7 @@ export class ProductionAnalyticsService {
           item.quantity,
           factor,
         );
-        const totalCost = consumed * item.material.pricePerUnit.toNumber();
+        const totalCost = consumed * materialPriceOn(item.material, day, prices);
 
         const existing = materialMap.get(item.materialId);
         if (existing) {

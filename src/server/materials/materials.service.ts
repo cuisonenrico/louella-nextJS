@@ -1,8 +1,25 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { toUtcDay } from '../common/utils/date-range.util';
 import { CreateMaterialDto } from './dto/create-material.dto';
 import { UpdateMaterialDto } from './dto/update-material.dto';
 import { computeAdjSum } from '../common/utils/inventory-metrics.util';
+
+/**
+ * The opening price-history row every material starts with, effective today
+ * (Manila). Costing a past day reads the price in force that day; without an
+ * opening row, the first price change would reprice all earlier days (the
+ * same flaw fixed for products).
+ */
+function openingPriceRow(pricePerUnit: number | undefined) {
+  return {
+    create: { pricePerUnit: pricePerUnit ?? 0, effectiveAt: toUtcDay(new Date()) },
+  };
+}
 
 @Injectable()
 export class MaterialsService {
@@ -15,6 +32,7 @@ export class MaterialsService {
         unit: body.unit,
         pricePerUnit: body.pricePerUnit,
         reorderLevel: body.reorderLevel,
+        priceHistory: openingPriceRow(body.pricePerUnit),
       },
     });
   }
@@ -28,6 +46,7 @@ export class MaterialsService {
             unit: item.unit,
             pricePerUnit: item.pricePerUnit,
             reorderLevel: item.reorderLevel,
+            priceHistory: openingPriceRow(item.pricePerUnit),
           },
         }),
       ),
@@ -70,6 +89,23 @@ export class MaterialsService {
   async update(id: number, body: UpdateMaterialDto) {
     const existing = await this.findOne(id);
 
+    // Every stock card, consumption and recipe line for this material is a
+    // number in its stock unit. Changing the unit would silently reinterpret
+    // all of them (40 KG of flour becoming 40 G), so it is only allowed on a
+    // material nothing has been recorded against yet.
+    if (body.unit !== undefined && body.unit !== existing.unit) {
+      const [cards, recipeLines] = await Promise.all([
+        this.prisma.materialInventory.count({ where: { materialId: id } }),
+        this.prisma.recipeItem.count({ where: { materialId: id } }),
+      ]);
+      if (cards > 0 || recipeLines > 0) {
+        throw new ConflictException(
+          `${existing.name} already has stock cards or recipe lines in ${existing.unit}. ` +
+            `Create a new material for the new unit instead.`,
+        );
+      }
+    }
+
     const needsPriceRecord =
       body.pricePerUnit !== undefined &&
       body.pricePerUnit !== existing.pricePerUnit.toNumber();
@@ -89,9 +125,9 @@ export class MaterialsService {
           data: {
             materialId: id,
             pricePerUnit: body.pricePerUnit!,
-            effectiveAt: body.priceEffectiveAt
-              ? new Date(body.priceEffectiveAt)
-              : new Date(),
+            // The Manila day, as UTC midnight, so a price set today costs
+            // today's production (see ProductsService.update).
+            effectiveAt: toUtcDay(body.priceEffectiveAt ?? new Date()),
           },
         }),
       ]);

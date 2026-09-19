@@ -13,6 +13,16 @@ function makePrisma() {
       findFirst: jest.fn(),
       create: jest.fn().mockResolvedValue({ id: 1 }),
       update: jest.fn().mockResolvedValue({ id: 7 }),
+      // What snapshot() copies into a version: the recipe as it now stands.
+      findUniqueOrThrow: jest.fn().mockResolvedValue({
+        id: 7,
+        recipeYield: 12,
+        recipeItems: [{ materialId: 3, quantity: 2, unit: 'KG' }],
+      }),
+    },
+    recipeVersion: {
+      findFirst: jest.fn().mockResolvedValue(null),
+      create: jest.fn(),
     },
     recipeItem: {
       findMany: jest.fn().mockResolvedValue([]),
@@ -173,6 +183,83 @@ describe('RecipesService', () => {
       await expect(service.calculateCost(7)).rejects.toThrow(
         UnprocessableEntityException,
       );
+    });
+  });
+
+  // Decision 2026-09-19: past days are consumed and costed with the recipe
+  // in force on that day, so every change appends a version.
+  describe('versions', () => {
+    const versionArgs = () => prisma.recipeVersion.create.mock.calls.map(([a]: any) => a.data);
+
+    it('writes version 1 when a recipe is created', async () => {
+      prisma.recipe.findFirst.mockResolvedValue(null);
+
+      await service.create(body());
+
+      expect(versionArgs()).toEqual([
+        expect.objectContaining({
+          version: 1,
+          recipeYield: 12,
+          retired: false,
+          items: { create: [{ materialId: 3, quantity: 2, unit: 'KG' }] },
+        }),
+      ]);
+    });
+
+    it('dates a version to today in Manila', async () => {
+      jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+      jest.setSystemTime(new Date('2026-09-18T22:30:00Z')); // 06:30 on the 19th
+      prisma.recipe.findFirst.mockResolvedValue(null);
+
+      await service.create(body());
+
+      jest.useRealTimers();
+      expect(versionArgs()[0].effectiveFrom).toEqual(new Date('2026-09-19T00:00:00.000Z'));
+    });
+
+    it('appends the next version when ingredients change', async () => {
+      prisma.recipe.findFirst.mockResolvedValue({ id: 7, deletedAt: null, recipeYield: 12 });
+      prisma.recipeVersion.findFirst.mockResolvedValue({ version: 3 });
+
+      await service.update(7, { items: [{ materialId: 3, quantity: 5, unit: 'KG' }] } as never);
+
+      expect(versionArgs()).toEqual([expect.objectContaining({ version: 4 })]);
+    });
+
+    it('appends a version when only the yield changes', async () => {
+      prisma.recipe.findFirst.mockResolvedValue({ id: 7, deletedAt: null, recipeYield: 12 });
+
+      await service.update(7, { recipeYield: 24 } as never);
+
+      expect(versionArgs()).toHaveLength(1);
+    });
+
+    it('does not version a notes-only edit', async () => {
+      prisma.recipe.findFirst.mockResolvedValue({ id: 7, deletedAt: null, recipeYield: 12 });
+
+      await service.update(7, { notes: 'use bread flour' } as never);
+
+      expect(versionArgs()).toHaveLength(0);
+    });
+
+    it('retires the recipe from today when it is deleted', async () => {
+      prisma.recipe.findFirst.mockResolvedValue({ id: 7, deletedAt: null });
+      prisma.recipeVersion.findFirst.mockResolvedValue({ version: 2 });
+
+      await service.remove(7);
+
+      expect(versionArgs()).toEqual([
+        expect.objectContaining({ version: 3, retired: true, items: undefined }),
+      ]);
+    });
+
+    it('starts a new active version when a deleted recipe is revived', async () => {
+      prisma.recipe.findFirst.mockResolvedValue({ id: 7, deletedAt: new Date('2026-09-01') });
+      prisma.recipeVersion.findFirst.mockResolvedValue({ version: 3 });
+
+      await service.create(body());
+
+      expect(versionArgs()).toEqual([expect.objectContaining({ version: 4, retired: false })]);
     });
   });
 });

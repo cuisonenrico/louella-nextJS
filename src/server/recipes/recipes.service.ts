@@ -4,7 +4,8 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { MeasurementUnit } from '@prisma/client';
+import { MeasurementUnit, Prisma } from '@prisma/client';
+import { toUtcDay } from '../common/utils/date-range.util';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   getConversionFactorMap,
@@ -71,6 +72,47 @@ export class RecipesService {
     }
   }
 
+  /**
+   * Append a version: the recipe as it now stands, in force from today
+   * (Manila). Every change goes through here, so the recipe for any past day
+   * can still be read back (see recipe-version.util).
+   */
+  private async snapshot(
+    tx: Prisma.TransactionClient,
+    recipeId: number,
+    retired = false,
+  ): Promise<void> {
+    const [recipe, last] = await Promise.all([
+      tx.recipe.findUniqueOrThrow({
+        where: { id: recipeId },
+        include: { recipeItems: true },
+      }),
+      tx.recipeVersion.findFirst({
+        where: { recipeId },
+        orderBy: { version: 'desc' },
+        select: { version: true },
+      }),
+    ]);
+    await tx.recipeVersion.create({
+      data: {
+        recipeId,
+        version: (last?.version ?? 0) + 1,
+        effectiveFrom: toUtcDay(new Date()),
+        recipeYield: recipe.recipeYield,
+        retired,
+        items: retired
+          ? undefined
+          : {
+              create: recipe.recipeItems.map((i) => ({
+                materialId: i.materialId,
+                quantity: i.quantity,
+                unit: i.unit,
+              })),
+            },
+      },
+    });
+  }
+
   async create(body: CreateRecipeDto) {
     // Deleted recipes included: `Recipe.productId` is unique, so a
     // soft-deleted recipe still owns the product's slot and a plain insert
@@ -88,10 +130,10 @@ export class RecipesService {
 
     if (existing) {
       return this.prisma.$transaction(async (tx) => {
-        // The deleted recipe's ingredient list is replaced, not kept. Recipe
-        // history is not modelled yet; when it is, this becomes a new version.
+        // The current ingredient list is replaced; the deleted recipe's
+        // earlier versions keep what it was.
         await tx.recipeItem.deleteMany({ where: { recipeId: existing.id } });
-        return tx.recipe.update({
+        await tx.recipe.update({
           where: { id: existing.id },
           data: {
             recipeYield: body.recipeYield ?? 1,
@@ -105,25 +147,33 @@ export class RecipesService {
               })),
             },
           },
+        });
+        await this.snapshot(tx, existing.id);
+        return tx.recipe.findUniqueOrThrow({
+          where: { id: existing.id },
           include: recipeInclude,
         });
       });
     }
 
-    return this.prisma.recipe.create({
-      data: {
-        productId: body.productId,
-        recipeYield: body.recipeYield,
-        notes: body.notes,
-        recipeItems: {
-          create: body.items.map((item) => ({
-            materialId: item.materialId,
-            quantity: item.quantity,
-            unit: item.unit,
-          })),
+    return this.prisma.$transaction(async (tx) => {
+      const created = await tx.recipe.create({
+        data: {
+          productId: body.productId,
+          recipeYield: body.recipeYield,
+          notes: body.notes,
+          recipeItems: {
+            create: body.items.map((item) => ({
+              materialId: item.materialId,
+              quantity: item.quantity,
+              unit: item.unit,
+            })),
+          },
         },
-      },
-      include: recipeInclude,
+        include: recipeInclude,
+      });
+      await this.snapshot(tx, created.id);
+      return created;
     });
   }
 
@@ -221,11 +271,17 @@ export class RecipesService {
         }
       }
 
-      return tx.recipe.update({
+      const updated = await tx.recipe.update({
         where: { id },
         data: { recipeYield: body.recipeYield, notes: body.notes },
         include: recipeInclude,
       });
+      // A notes-only edit does not change how the product is made.
+      const changesRecipe =
+        body.items !== undefined ||
+        (body.recipeYield !== undefined && body.recipeYield !== recipe.recipeYield);
+      if (changesRecipe) await this.snapshot(tx, id);
+      return updated;
     });
   }
 
@@ -234,9 +290,14 @@ export class RecipesService {
       where: { id, deletedAt: null },
     });
     if (!existing) throw new NotFoundException('Recipe not found');
-    return this.prisma.recipe.update({
-      where: { id },
-      data: { deletedAt: new Date() },
+    return this.prisma.$transaction(async (tx) => {
+      const removed = await tx.recipe.update({
+        where: { id },
+        data: { deletedAt: new Date() },
+      });
+      // From today the product has no recipe; earlier days keep theirs.
+      await this.snapshot(tx, id, true);
+      return removed;
     });
   }
 
