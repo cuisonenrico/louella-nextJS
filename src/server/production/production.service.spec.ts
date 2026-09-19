@@ -10,7 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 function makePrisma() {
   const prisma: Record<string, any> = {
     production: { upsert: jest.fn(), findUnique: jest.fn() },
-    recipe: { findUnique: jest.fn() },
+    recipe: { findFirst: jest.fn(), findMany: jest.fn() },
     unitConversion: { findMany: jest.fn() },
     materialInventory: { upsert: jest.fn() },
   };
@@ -45,14 +45,14 @@ describe('ProductionService material consumption', () => {
   function seedRecipe() {
     prisma.production.findUnique.mockResolvedValue(null);
     prisma.production.upsert.mockResolvedValue({ id: 1 });
-    prisma.recipe.findUnique.mockResolvedValue({
+    prisma.recipe.findFirst.mockResolvedValue({
       recipeYield: 1,
       recipeItems: [
         {
           materialId: 3,
           quantity: 2,
           unit: 'KG',
-          material: { id: 3, unit: 'KG' },
+          material: { id: 3, name: 'Flour', unit: 'KG' },
         },
       ],
     });
@@ -90,5 +90,74 @@ describe('ProductionService material consumption', () => {
 
     const args = prisma.materialInventory.upsert.mock.calls[0][0];
     expect(args.update.used).toEqual({ increment: 20 });
+  });
+
+  it('ignores a soft-deleted recipe', async () => {
+    seedRecipe();
+
+    await service.create({
+      branchId: 1,
+      productId: 2,
+      date: '2026-09-08',
+      yield: 10,
+    } as never);
+
+    expect(prisma.recipe.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { productId: 2, deletedAt: null },
+      }),
+    );
+  });
+
+  describe('unit conversion', () => {
+    /** 500 G of a KG-stocked material per batch of 1. */
+    function seedGramRecipe() {
+      seedRecipe();
+      prisma.recipe.findFirst.mockResolvedValue({
+        recipeYield: 1,
+        recipeItems: [
+          {
+            materialId: 3,
+            quantity: 500,
+            unit: 'G',
+            material: { id: 3, name: 'Flour', unit: 'KG' },
+          },
+        ],
+      });
+    }
+
+    it('converts the recipe unit into the material unit', async () => {
+      seedGramRecipe();
+      prisma.unitConversion.findMany.mockResolvedValue([
+        { fromUnit: 'G', toUnit: 'KG', factor: 0.001 },
+      ]);
+
+      await service.create({
+        branchId: 1,
+        productId: 2,
+        date: '2026-09-08',
+        yield: 10,
+      } as never);
+
+      const args = prisma.materialInventory.upsert.mock.calls[0][0];
+      // 10 batches × 500 g = 5 kg
+      expect(args.update.used.increment).toBeCloseTo(5);
+    });
+
+    it('refuses to save when no conversion exists, instead of assuming 1', async () => {
+      // The old fallback booked 10 × 500 = 5000 "kg" of flour here.
+      seedGramRecipe();
+      prisma.unitConversion.findMany.mockResolvedValue([]);
+
+      await expect(
+        service.create({
+          branchId: 1,
+          productId: 2,
+          date: '2026-09-08',
+          yield: 10,
+        } as never),
+      ).rejects.toThrow(/No unit conversion defined for G→KG \(Flour\)/);
+      expect(prisma.materialInventory.upsert).not.toHaveBeenCalled();
+    });
   });
 });

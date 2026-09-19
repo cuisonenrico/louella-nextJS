@@ -1,8 +1,26 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { toUtcDay } from '../common/utils/date-range.util';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { UpdateProductOrderDto } from './dto/update-product-order.dto';
+
+/**
+ * The opening price-history row every product starts with.
+ *
+ * Revenue for a day uses the price whose `effectiveAt` is on or before it. A
+ * product created with no history row had nothing to anchor its first price,
+ * so when that price was later changed, every earlier sale was revalued at the
+ * new one. Effective from the launch day, or today (Manila) when none is given.
+ */
+function openingPriceRow(price: number | undefined, launchDate?: string) {
+  return {
+    create: {
+      price: price ?? 0,
+      effectiveAt: toUtcDay(launchDate ?? new Date()),
+    },
+  };
+}
 
 @Injectable()
 export class ProductsService {
@@ -29,6 +47,7 @@ export class ProductsService {
         sortOrder,
         price: body.price,
         date: body.date ? new Date(body.date) : undefined,
+        priceHistory: openingPriceRow(body.price, body.date),
       },
     });
   }
@@ -69,6 +88,7 @@ export class ProductsService {
             sortOrder,
             price: item.price,
             date: item.date ? new Date(item.date) : undefined,
+            priceHistory: openingPriceRow(item.price, item.date),
           },
         });
       }),
@@ -127,9 +147,11 @@ export class ProductsService {
           data: {
             productId: id,
             price: body.price!,
-            effectiveAt: body.priceEffectiveAt
-              ? new Date(body.priceEffectiveAt)
-              : new Date(),
+            // The Manila calendar day, as UTC midnight — the same form as
+            // Inventory.date, which it is compared against. A raw timestamp
+            // (10:00 on the 18th) sorted *after* the 18th's rows, so a change
+            // made during the day only reached revenue the day after.
+            effectiveAt: toUtcDay(body.priceEffectiveAt ?? new Date()),
           },
         }),
       ]);

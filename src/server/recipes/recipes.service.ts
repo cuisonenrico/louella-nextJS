@@ -2,9 +2,14 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
+import { MeasurementUnit } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { getConversionFactorMap } from '../common/utils/unit-conversion.util';
+import {
+  getConversionFactorMap,
+  requireFactor,
+} from '../common/utils/unit-conversion.util';
 import { CreateRecipeDto } from './dto/create-recipe.dto';
 import { UpdateRecipeDto } from './dto/update-recipe.dto';
 
@@ -19,14 +24,90 @@ const recipeInclude = {
 export class RecipesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(body: CreateRecipeDto) {
-    const existing = await this.prisma.recipe.findFirst({
-      where: { productId: body.productId, deletedAt: null },
+  /**
+   * Refuse ingredients whose unit cannot be converted into the material's
+   * stock unit.
+   *
+   * Production consumption and costing both need that factor. Checking here
+   * surfaces a missing conversion when the recipe is written — by the person
+   * who can fix it — instead of on the next production save.
+   */
+  private async assertItemsConvertible(
+    items: Array<{ materialId: number; unit: MeasurementUnit }>,
+  ): Promise<void> {
+    if (items.length === 0) return;
+
+    const materialIds = [...new Set(items.map((i) => i.materialId))];
+    const materials = await this.prisma.material.findMany({
+      where: { id: { in: materialIds }, deletedAt: null },
+      select: { id: true, name: true, unit: true },
     });
-    if (existing) {
+    const byId = new Map(materials.map((m) => [m.id, m]));
+
+    const unknown = materialIds.filter((id) => !byId.has(id));
+    if (unknown.length > 0) {
+      throw new NotFoundException(`Materials not found: ${unknown.join(', ')}`);
+    }
+
+    const pairs = items.map((i) => ({
+      fromUnit: i.unit,
+      toUnit: byId.get(i.materialId)!.unit,
+    }));
+    const map = await getConversionFactorMap(this.prisma, pairs);
+    const missing = items.filter(
+      (i) => !map.has(`${i.unit}->${byId.get(i.materialId)!.unit}`),
+    );
+    if (missing.length > 0) {
+      const detail = missing
+        .map((i) => {
+          const m = byId.get(i.materialId)!;
+          return `${m.name} (${i.unit}→${m.unit})`;
+        })
+        .join(', ');
+      throw new UnprocessableEntityException(
+        `No unit conversion for: ${detail}. Add it under Unit Conversions, ` +
+          `or enter the ingredient in the material's own unit.`,
+      );
+    }
+  }
+
+  async create(body: CreateRecipeDto) {
+    // Deleted recipes included: `Recipe.productId` is unique, so a
+    // soft-deleted recipe still owns the product's slot and a plain insert
+    // collides with it (P2002). Re-creating is a revive.
+    const existing = await this.prisma.recipe.findFirst({
+      where: { productId: body.productId },
+    });
+    if (existing && existing.deletedAt === null) {
       throw new ConflictException(
         `A recipe for product ${body.productId} already exists`,
       );
+    }
+
+    await this.assertItemsConvertible(body.items);
+
+    if (existing) {
+      return this.prisma.$transaction(async (tx) => {
+        // The deleted recipe's ingredient list is replaced, not kept. Recipe
+        // history is not modelled yet; when it is, this becomes a new version.
+        await tx.recipeItem.deleteMany({ where: { recipeId: existing.id } });
+        return tx.recipe.update({
+          where: { id: existing.id },
+          data: {
+            recipeYield: body.recipeYield ?? 1,
+            notes: body.notes ?? null,
+            deletedAt: null,
+            recipeItems: {
+              create: body.items.map((item) => ({
+                materialId: item.materialId,
+                quantity: item.quantity,
+                unit: item.unit,
+              })),
+            },
+          },
+          include: recipeInclude,
+        });
+      });
     }
 
     return this.prisma.recipe.create({
@@ -96,6 +177,10 @@ export class RecipesService {
     });
     if (!recipe) {
       throw new NotFoundException('Recipe not found');
+    }
+
+    if (body.items !== undefined) {
+      await this.assertItemsConvertible(body.items);
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -183,8 +268,12 @@ export class RecipesService {
     );
 
     const itemCosts = recipe.recipeItems.map((item) => {
-      const factor =
-        conversionMap.get(`${item.unit}->${item.material.unit}`) ?? 1;
+      const factor = requireFactor(
+        conversionMap,
+        item.unit,
+        item.material.unit,
+        item.material.name,
+      );
       const quantityInBaseUnit = item.quantity * factor;
       const cost = quantityInBaseUnit * item.material.pricePerUnit.toNumber();
       return {

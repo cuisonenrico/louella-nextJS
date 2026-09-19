@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { JobsService } from './jobs.service';
+import { addDays, manilaToday } from '@/lib/manilaDate';
 
 export type AutofillScope = 'inventory' | 'materials';
 
@@ -169,16 +170,4 @@ export class AutofillOnDemandService {
       await this.jobs.autofillMaterialStockRange(start, today, 'auto');
     }
   }
-}
-
-/** Today's date in Manila as YYYY-MM-DD — the boundary every job uses. */
-function manilaToday(): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(
-    new Date(),
-  );
-}
-
-function addDays(dateStr: string, days: number): string {
-  const ts = new Date(`${dateStr}T00:00:00.000Z`).getTime();
-  return new Date(ts + days * 86_400_000).toISOString().slice(0, 10);
 }

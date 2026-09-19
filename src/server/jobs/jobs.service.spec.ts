@@ -265,6 +265,32 @@ describe('JobsService', () => {
         }),
       );
     });
+
+    // Pinned to the early shift, when UTC is still on yesterday: the default
+    // used to be `toISOString().slice(0, 10)` and initialised the wrong day.
+    describe('during the early shift (06:30 Manila = 22:30 UTC the day before)', () => {
+      beforeEach(() => {
+        jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+        jest.setSystemTime(new Date('2026-09-18T22:30:00Z'));
+      });
+      afterEach(() => jest.useRealTimers());
+
+      it('defaults to the Manila date, not the UTC one', async () => {
+        const result = await service.autofillMaterialStock();
+
+        expect(result.date).toBe('2026-09-19');
+        expect(materialInventoryService.initDate).toHaveBeenCalledWith(
+          '2026-09-19',
+        );
+      });
+
+      it('defaults the range end to yesterday in Manila', async () => {
+        const result = await service.autofillMaterialStockRange('2026-09-17');
+
+        // 17th and 18th: yesterday in Manila is the 18th, not the 17th.
+        expect(result.datesProcessed).toBe(2);
+      });
+    });
   });
 
   // The boot-backfill test was removed with onModuleInit itself: Nest now

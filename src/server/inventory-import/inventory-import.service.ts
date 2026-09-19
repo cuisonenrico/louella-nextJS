@@ -292,7 +292,9 @@ export class InventoryImportService {
   private async buildPriceHistory(): Promise<PriceHistoryMap> {
     const rows = await this.prisma.productPriceHistory.findMany({
       select: { productId: true, price: true, effectiveAt: true },
-      orderBy: { effectiveAt: 'asc' },
+      // id breaks ties: two prices set on one day share an effectiveAt,
+      // and the one entered later must win.
+      orderBy: [{ effectiveAt: 'asc' }, { id: 'asc' }],
     });
     const history: PriceHistoryMap = new Map();
     for (const r of rows) {

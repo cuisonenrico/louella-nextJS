@@ -11,6 +11,7 @@ import { ProductionAnalyticsService } from './production-analytics.service';
 import {
   dateKey,
   getConversionFactorMap,
+  requireFactor,
 } from '../common/utils/unit-conversion.util';
 import { toUtcDay } from '../common/utils/date-range.util';
 
@@ -60,7 +61,7 @@ export class ProductionService {
           materialId: number;
           unit: MeasurementUnit;
           quantity: number;
-          material: { id: number; unit: MeasurementUnit };
+          material: { id: number; name: string; unit: MeasurementUnit };
         }>;
       }
     >,
@@ -82,8 +83,12 @@ export class ProductionService {
       const recipe = recipeByProduct.get(item.productId);
       if (!recipe || recipe.recipeItems.length === 0) continue;
       for (const ri of recipe.recipeItems) {
-        const factor =
-          conversionMap.get(`${ri.unit}->${ri.material.unit}`) ?? 1;
+        const factor = requireFactor(
+          conversionMap,
+          ri.unit,
+          ri.material.unit,
+          ri.material.name,
+        );
         const delta =
           ((item.yield - oldYield) * ri.quantity * factor) / recipe.recipeYield;
         if (delta === 0) continue;
@@ -148,8 +153,10 @@ export class ProductionService {
     date: Date,
     tx?: Prisma.TransactionClient,
   ): Promise<void> {
-    const recipe = await this.prisma.recipe.findUnique({
-      where: { productId },
+    // A deleted recipe no longer describes how the product is made, so it
+    // must not consume materials. findUnique cannot filter on deletedAt.
+    const recipe = await this.prisma.recipe.findFirst({
+      where: { productId, deletedAt: null },
       include: { recipeItems: { include: { material: true } } },
     });
     if (!recipe || recipe.recipeItems.length === 0) return;
@@ -164,8 +171,12 @@ export class ProductionService {
 
     const client = tx ?? this.prisma;
     const upserts = recipe.recipeItems.flatMap((item) => {
-      const factor =
-        conversionMap.get(`${item.unit}->${item.material.unit}`) ?? 1;
+      const factor = requireFactor(
+        conversionMap,
+        item.unit,
+        item.material.unit,
+        item.material.name,
+      );
       const consumedPerUnit = (item.quantity / recipe.recipeYield) * factor;
       const delta = (newYield - oldYield) * consumedPerUnit;
       if (delta === 0) return [];
@@ -301,7 +312,7 @@ export class ProductionService {
     if (changedItems.length > 0) {
       const productIds = [...new Set(changedItems.map((i) => i.productId))];
       const recipes = await this.prisma.recipe.findMany({
-        where: { productId: { in: productIds } },
+        where: { productId: { in: productIds }, deletedAt: null },
         include: { recipeItems: { include: { material: true } } },
       });
       const recipeByProduct = new Map(recipes.map((r) => [r.productId, r]));
@@ -396,7 +407,7 @@ export class ProductionService {
     if (changedItems.length > 0) {
       const productIds = [...new Set(changedItems.map((i) => i.productId))];
       const recipes = await this.prisma.recipe.findMany({
-        where: { productId: { in: productIds } },
+        where: { productId: { in: productIds }, deletedAt: null },
         include: { recipeItems: { include: { material: true } } },
       });
       const recipeByProduct = new Map(recipes.map((r) => [r.productId, r]));

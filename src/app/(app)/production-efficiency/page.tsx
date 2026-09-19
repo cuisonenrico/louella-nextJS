@@ -33,14 +33,18 @@ export default function ProductionEfficiencyPage() {
     placeholderData: keepPreviousData,
   });
 
+  // Rates are shares of what was available (sold + reject + still on hand),
+  // matching the API. Leftover carries forward and is sold later, so it is
+  // not waste; waste is rejects only.
   const totals = useMemo(() => {
-    const totalYield = effItems.reduce((s, i) => s + i.totalYield, 0);
-    const totalSold = effItems.reduce((s, i) => s + i.sold, 0);
-    const totalLeftover = effItems.reduce((s, i) => s + i.totalLeftover, 0);
-    const totalReject = effItems.reduce((s, i) => s + i.totalReject, 0);
-    const avgSoldRate = totalYield > 0 ? (totalSold / totalYield) * 100 : 0;
-    const avgWasteRate = totalYield > 0 ? ((totalLeftover + totalReject) / totalYield) * 100 : 0;
-    return { totalYield, totalSold, totalLeftover, totalReject, avgSoldRate, avgWasteRate };
+    const sum = (f: (i: ProductionEfficiencyItem) => number) => effItems.reduce((s, i) => s + f(i), 0);
+    const totalYield = sum((i) => i.totalYield);
+    const totalSold = sum((i) => i.sold);
+    const totalReject = sum((i) => i.totalReject);
+    const totalAvailable = sum((i) => i.available);
+    const avgSoldRate = totalAvailable > 0 ? (totalSold / totalAvailable) * 100 : 0;
+    const avgWasteRate = totalAvailable > 0 ? (totalReject / totalAvailable) * 100 : 0;
+    return { totalYield, totalSold, totalReject, avgSoldRate, avgWasteRate };
   }, [effItems]);
 
   return (
@@ -91,9 +95,9 @@ export default function ProductionEfficiencyPage() {
           {['BREAD', 'CAKE', 'SPECIAL'].map((type) => {
             const items = effItems.filter((i) => i.productType === type);
             const sold = items.reduce((s, i) => s + i.sold, 0);
-            const leftover = items.reduce((s, i) => s + i.totalLeftover, 0);
+            const leftover = items.reduce((s, i) => s + i.closingStock, 0);
             const reject = items.reduce((s, i) => s + i.totalReject, 0);
-            const total = sold + leftover + reject;
+            const total = items.reduce((s, i) => s + i.available, 0);
             return (
               <Card key={type}>
                 <CardHeader className="pb-2"><CardTitle className="text-sm">{type}</CardTitle></CardHeader>
@@ -107,7 +111,7 @@ export default function ProductionEfficiencyPage() {
                     </div>}
                     <div className="flex gap-4 text-xs text-muted-foreground">
                       <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-primary" />Sold</span>
-                      <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-yellow-400" />Leftover</span>
+                      <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-yellow-400" />On hand</span>
                       <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-destructive" />Reject</span>
                     </div>
                   </div>
@@ -125,30 +129,32 @@ export default function ProductionEfficiencyPage() {
                 <TableHead>Product</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead className="text-right">Yield</TableHead>
+                <TableHead className="text-right">Opening</TableHead>
                 <TableHead className="text-right">Delivered</TableHead>
                 <TableHead className="text-right">Sold</TableHead>
-                <TableHead className="text-right">Leftover</TableHead>
                 <TableHead className="text-right">Reject</TableHead>
+                <TableHead className="text-right">On hand (end)</TableHead>
                 <TableHead className="text-right">Sold %</TableHead>
                 <TableHead className="text-right">Waste %</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRowsSkeleton rows={6} columns={9} />
+                <TableRowsSkeleton rows={6} columns={10} />
               ) : isError ? (
-                <TableRow><TableCell colSpan={9} className="p-0"><QueryError error={error} onRetry={() => refetch()} /></TableCell></TableRow>
+                <TableRow><TableCell colSpan={10} className="p-0"><QueryError error={error} onRetry={() => refetch()} /></TableCell></TableRow>
               ) : effItems.length === 0 ? (
-                <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No efficiency data.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">No efficiency data.</TableCell></TableRow>
               ) : effItems.map((item: ProductionEfficiencyItem) => (
                 <TableRow key={item.productId}>
                   <TableCell className="font-medium">{item.productName}</TableCell>
                   <TableCell><Badge variant="secondary">{item.productType}</Badge></TableCell>
                   <TableCell className="text-right">{item.totalYield}</TableCell>
+                  <TableCell className="text-right">{item.openingStock}</TableCell>
                   <TableCell className="text-right">{item.totalDelivered}</TableCell>
                   <TableCell className="text-right">{item.sold}</TableCell>
-                  <TableCell className="text-right">{item.totalLeftover}</TableCell>
                   <TableCell className="text-right">{item.totalReject}</TableCell>
+                  <TableCell className="text-right">{item.closingStock}</TableCell>
                   <TableCell className="text-right font-semibold">{(item.soldRate * 100).toFixed(1)}%</TableCell>
                   <TableCell className="text-right text-destructive">{(item.wasteRate * 100).toFixed(1)}%</TableCell>
                 </TableRow>

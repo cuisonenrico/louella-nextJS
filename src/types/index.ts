@@ -378,16 +378,29 @@ export interface ConsumptionSummary {
 // ────────────────────────────────────────────────────────────────
 // Production Efficiency
 // ────────────────────────────────────────────────────────────────
+/**
+ * One product's sell-through over a date range (GET /production/efficiency).
+ * Every unit available is sold, rejected, or still on hand at the end:
+ * `available = sold + totalReject + closingStock`. Leftover is not waste.
+ */
 export interface ProductionEfficiencyItem {
   productId: number;
   productName: string;
   productType: ProductType;
   totalYield: number;
+  /** Stock on hand when the range opened (first day's opening, per branch). */
+  openingStock: number;
   totalDelivered: number;
-  totalLeftover: number;
-  totalReject: number;
+  /** Net transfers/adjustments in (+) and out (−). */
+  netAdjustments: number;
   sold: number;
+  totalReject: number;
+  /** Leftover on the last day of the range, still sellable. */
+  closingStock: number;
+  available: number;
+  /** sold / available, 0–1 */
   soldRate: number;
+  /** totalReject / available, 0–1 */
   wasteRate: number;
 }
 

@@ -6,7 +6,8 @@
  *   sold   = quantity + delivery + adjSum - leftover - reject
  *
  * Rejects (spoiled/burnt units) are never counted as sold: they are waste, not
- * revenue. This matches the production efficiency report's definition.
+ * revenue. Leftover is not waste either — it is the next day's opening stock.
+ * The production efficiency report sums this per row (production-analytics).
  *
  * This lived twice — once in `src/server/common/utils/inventory-metrics.util.ts`
  * and once as a hand-written "mirror" in the inventory sheet's column hook —

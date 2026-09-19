@@ -16,6 +16,7 @@ import { UserRole } from '@prisma/client';
 import { ProductionService } from './production.service';
 import { CreateProductionDto } from './dto/create-production.dto';
 import { UpdateProductionDto } from './dto/update-production.dto';
+import { UpsertProductionItemDto } from './dto/upsert-production-item.dto';
 import { ProductionDateQueryDto } from './dto/production-date-query.dto';
 import { ProductionDateRangeQueryDto } from './dto/production-date-range-query.dto';
 import { CurrentUser } from '../common/decorators/user.decorator';
@@ -65,13 +66,8 @@ export class ProductionController {
   @RequireFeature('production:create')
   @Roles(UserRole.MANAGER)
   upsertBulk(
-    @Body()
-    body: Array<{
-      productId: number;
-      date: string;
-      yield: number;
-      branchId?: number;
-    }>,
+    @Body(new ParseArrayPipe({ items: UpsertProductionItemDto }))
+    body: UpsertProductionItemDto[],
     @CurrentUser() user: { id: number },
   ) {
     return this.productionService.upsertBulk(body, user?.id);

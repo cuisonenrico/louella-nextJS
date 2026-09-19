@@ -143,7 +143,7 @@ export class DashboardService {
       this.prisma.branch.count({ where: { deletedAt: null } }),
       this.prisma.branch.count({ where: { deletedAt: null, isActive: true } }),
       this.prisma.material.count({ where: { deletedAt: null } }),
-      this.prisma.recipe.count(),
+      this.prisma.recipe.count({ where: { deletedAt: null } }),
       this.prisma.production.findMany({
         where: { date: targetDate, ...(branchId != null ? { branchId } : {}) },
         select: { yield: true, product: { select: { type: true } } },

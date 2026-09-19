@@ -110,6 +110,33 @@ export class UnitConversionsService {
       throw new NotFoundException('Unit conversion not found');
     }
 
+    // Production consumption and recipe costing need this factor for any live
+    // recipe that mixes these two units, in either direction. Removing it
+    // would make every production save for those products fail.
+    const dependents = await this.prisma.recipeItem.findMany({
+      where: {
+        recipe: { deletedAt: null },
+        OR: [
+          { unit: record.fromUnit, material: { unit: record.toUnit } },
+          { unit: record.toUnit, material: { unit: record.fromUnit } },
+        ],
+      },
+      select: {
+        material: { select: { name: true } },
+        recipe: { select: { product: { select: { name: true } } } },
+      },
+      take: 5,
+    });
+    if (dependents.length > 0) {
+      const examples = dependents
+        .map((d) => `${d.recipe.product.name} / ${d.material.name}`)
+        .join(', ');
+      throw new ConflictException(
+        `${record.fromUnit}↔${record.toUnit} is used by live recipes ` +
+          `(e.g. ${examples}). Change those ingredients' units first.`,
+      );
+    }
+
     // Remove both directions
     await this.prisma.$transaction([
       this.prisma.unitConversion.delete({ where: { id } }),

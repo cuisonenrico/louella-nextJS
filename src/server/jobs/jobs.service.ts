@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { JobStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { MaterialInventoryService } from '../material-inventory/material-inventory.service';
+import { addDays, manilaToday } from '@/lib/manilaDate';
 
 /**
  * What caused a job to run, recorded on the JobRun row.
@@ -109,11 +110,7 @@ export class JobsService {
     productionCreated: number;
     date: string;
   }> {
-    const dateStr =
-      targetDate ??
-      new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(
-        new Date(),
-      );
+    const dateStr = targetDate ?? manilaToday();
 
     return this.recordRun('inventory-autofill', trigger, dateStr, async () => {
       this.logger.log(`Auto-fill running for date: ${dateStr}`);
@@ -332,11 +329,9 @@ export class JobsService {
     totalProductionCreated: number;
     datesProcessed: number;
   }> {
-    // Default endDate to yesterday (UTC).
-    const yesterdayStr = new Date(Date.now() - 86_400_000)
-      .toISOString()
-      .slice(0, 10);
-    const endStr = endDate ?? yesterdayStr;
+    // Default endDate to yesterday in Manila — the UTC date is a day behind
+    // from 00:00 to 08:00 Manila.
+    const endStr = endDate ?? addDays(manilaToday(), -1);
 
     const startTs = new Date(`${startDate}T00:00:00.000Z`).getTime();
     const endTs = new Date(`${endStr}T00:00:00.000Z`).getTime();
@@ -394,21 +389,24 @@ export class JobsService {
   }
 
   /**
-   * Runs every day at 11 PM (alongside the inventory fill).
    * Creates a stock card for every active material that has no entry for the
-   * target date, seeding quantity from the previous day's closing stock
-   * (quantity + delivery - used).
+   * target date, seeding quantity from the previous day's closing stock (see
+   * computeMaterialClosing).
    *
-   * @param targetDate - Optional YYYY-MM-DD string. Defaults to today.
-   * @param trigger    - 'cron' when called by the scheduler, 'manual' from the API.
+   * Not scheduled: driven on demand by AutofillOnDemandService when the
+   * material sheet is read, and manually via
+   * `POST /api/v1/jobs/autofill-material-stock`.
+   *
+   * @param targetDate - Optional YYYY-MM-DD string. Defaults to today (Manila).
+   * @param trigger    - 'auto' from the on-demand path, 'manual' from the API.
    */
-  // Scheduled by Vercel Cron at 11 PM Manila via
-  // POST /api/v1/jobs/autofill-material-stock.
   async autofillMaterialStock(
     targetDate?: string,
     trigger: JobTrigger = 'auto',
   ): Promise<{ created: number; date: string }> {
-    const dateStr = targetDate ?? new Date().toISOString().slice(0, 10);
+    // Manila, not UTC: a manual run between 00:00 and 08:00 Manila used to
+    // initialise yesterday's cards instead of today's.
+    const dateStr = targetDate ?? manilaToday();
 
     return this.recordRun('material-autofill', trigger, dateStr, async () => {
       this.logger.log(`Material stock auto-fill running for date: ${dateStr}`);
@@ -458,10 +456,7 @@ export class JobsService {
     startDate: string,
     endDate?: string,
   ): Promise<{ totalCreated: number; datesProcessed: number }> {
-    const yesterdayStr = new Date(Date.now() - 86_400_000)
-      .toISOString()
-      .slice(0, 10);
-    const endStr = endDate ?? yesterdayStr;
+    const endStr = endDate ?? addDays(manilaToday(), -1);
 
     const startTs = new Date(`${startDate}T00:00:00.000Z`).getTime();
     const endTs = new Date(`${endStr}T00:00:00.000Z`).getTime();

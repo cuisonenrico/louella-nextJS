@@ -34,9 +34,12 @@ import {
 
 import { extractError } from '@/lib/errors';
 import { getMaterialAdjSum, getMaterialClosing } from '@/lib/materialStock';
+import { addDays, manilaToday } from '@/lib/manilaDate';
 
-function todayStr() { return new Date().toISOString().slice(0, 10); }
-function addDays(dateStr: string, days: number) { const d = new Date(dateStr); d.setDate(d.getDate() + days); return d.toISOString().slice(0, 10); }
+// The Manila day, not the UTC one: `toISOString()` named yesterday from 00:00
+// to 08:00 Manila, so deliveries logged on the early shift landed on the
+// previous day's card.
+const todayStr = () => manilaToday();
 function fmt(n: number) { return n.toLocaleString(undefined, { maximumFractionDigits: 2 }); }
 
 // ── Main Page ──

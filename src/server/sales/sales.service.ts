@@ -77,7 +77,9 @@ export class SalesService {
     if (productIds.length === 0) return new Map();
     const histories = await this.prisma.productPriceHistory.findMany({
       where: { productId: { in: productIds } },
-      orderBy: { effectiveAt: 'asc' },
+      // id breaks ties: two prices set on one day share an effectiveAt,
+      // and the one entered later must win.
+      orderBy: [{ effectiveAt: 'asc' }, { id: 'asc' }],
     });
     const map: HistoryMap = new Map();
     for (const h of histories) {
