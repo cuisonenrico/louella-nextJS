@@ -385,3 +385,26 @@ I ran `audit-diagnostics.sql` against the database in `.env` (`aws-1-ap-northeas
 | Q14 material deliveries on the wrong day (F08) | 0 | — |
 
 **Conclusion.** Apart from F02 (7 material cards), these findings are **risks in the code, not damage already in the data**. The riskiest paths (production, recipes, orders, import) have never been used on this database. That makes now the cheapest time to fix them, and only a small repair is needed afterwards (re-cascading the material cards after the F02 fix).
+
+---
+
+## Fix status (2026-09-19)
+
+| Step | Commit | Findings addressed |
+|---|---|---|
+| 1 | `f716e1a` | F03 (unit conversion refuses instead of ×1), F04 (deleted recipes stop consuming; recipes can be re-created), F05 (opening price rows; earliest price before history), F06 (efficiency uses the shared sold formula; waste = rejects), F08 (Manila date on the material page and jobs), F09 partly (upsert-bulk validated) |
+| 2 | `02854ed` | F01 (production-order finalization adds yield and deliveries, consumes materials, claims the transition atomically), F24, F25 |
+| 3 | `2d69fd6` | F02 and F07 (opening stock follows the previous close from every writer, materials included), F14 partly (POST /inventory validated), the double-counted range leftover; the test database's 7 broken material cards repaired (21 rewritten) |
+| 4 | `0fa925c` | F10 (advisory chain locks; checks under lock; verified 5/5 on the test database), F12 for production (single transaction), the rest of F09 (re-keying moves consumption; no catch-all 404) |
+| 5a | `d34d276` | Transfers need the receiver to accept (decision 6) |
+| 5b | `54baade` | Past-day consumption and cost use that day's recipe version and prices (decision 10); F26 indexes; material unit changes refused once used |
+
+**Still open**
+- F11: there are no idempotency keys. The web client never retries writes, and double-submits are now serialised by the locks, but a deliberate resend of an adjustment still books twice.
+- F13: Production and ImportLog are still hard-deleted, and there is no change-history table. Adjustments, transfers and recipe versions now keep their records.
+- F16/F17: some list and range endpoints (sales, `/inventory/date` with no start date) are still uncapped.
+- F18: no CI. The test suite now includes an in-memory stock DB (`src/server/common/testing/fake-stock-db.ts`), but nothing runs the tests before a deploy.
+- F19/F20: money and material quantities are still JS doubles and Postgres `double precision`.
+- F22/F23/F27: cache invalidation on price changes, production cost read by id without branch scope, README's `NEXT_PUBLIC_API_URL`.
+- **Deploying:** run `npm run prisma:deploy` for the two new migrations, then `npx tsx scripts/repair-stock-chains.ts` (dry run), then add `--apply` against production.
+

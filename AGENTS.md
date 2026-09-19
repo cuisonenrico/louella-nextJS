@@ -10,13 +10,10 @@ This project is **one deployable**: the Next.js 16 frontend and the NestJS 11
 API (in `src/server/`) build and ship together as a single Vercel project.
 There is no separate backend service.
 
-Sibling folders outside this directory:
-
-- `../louella_mobile/` — Flutter app, consumes this REST API. Still pointed at
-  the old Cloud Run host until it is repointed and reshipped.
-- `../louella-be/` — **DEPRECATED and not deployed.** It is a near-complete
-  copy of `src/server/` (165 files, all 22 controllers). Nothing there runs.
-  If a search turns up a file in it, you are in the wrong folder.
+There is no mobile client: phones use this app's responsive layouts (the
+Flutter app was dropped in September 2026). A deprecated copy of the API,
+`louella-be`, may exist in an older checkout; nothing there runs. If a search
+turns up a file in it, you are in the wrong folder.
 
 ## Development
 
@@ -120,7 +117,7 @@ with `trigger: 'auto'`. See `docs/DEPLOYMENT.md`.
 - **The 45s cache is per-instance**, so the impact is a lower hit rate, not
   staleness beyond the TTL. `CACHE_ENABLED=false` disables it.
 - **`src/server/files/` (pre-signed S3 uploads) is built but unwired.** No
-  caller exists in this app or in the Flutter client, and the AWS env vars are
+  caller exists in this app, and the AWS env vars are
   placeholders. The XLSX import does *not* use it. `FilesModule` is **not
   registered** in `app.module.ts`, so `/files/*` routes do not exist — import
   it there again when a real caller appears.
@@ -157,17 +154,29 @@ Louella Bakery inventory management. The **inventory** and **production**
 modules are the most business-critical — the bakery previously used printed
 Excel sheets and these modules replace that workflow entirely.
 
-Key domain rules (from `PROJECT_SPEC.md`):
+Key domain rules (the original `PROJECT_SPEC.md` is gone; these, plus the
+decisions recorded at the end of `audit-findings.md`, are the spec):
 
-- Inventory is never set directly — it derives from deliveries, production, POS
-  transactions, and adjustments
+- **Sold is derived, never recorded:** `quantity + delivery + Σadj − leftover
+  − reject` (`src/lib/inventory/metrics.ts`). There is no POS or returns table.
+- **Opening stock always equals the previous day's close**, for finished goods
+  and material cards alike. Every stock writer keeps this true through
+  `src/server/common/utils/stock-chain.ts`, inside its own transaction, after
+  taking the chain's advisory lock. Never write `quantity` or a card's opening
+  any other way. `scripts/repair-stock-chains.ts` repairs history.
+- **Leftover carries forward and is still sellable; waste means rejects only.**
+- **Several production orders for one product and day add up**; finalizing
+  one adds to kitchen yield and branch delivery and consumes materials.
+- **Transfers need the receiving branch to accept.** Sending books the
+  sender's PULL_OUT at once; the receiver's PULL_IN exists only after accept.
+- **Past days use that day's recipe and prices** (`RecipeVersion`,
+  `MaterialPriceHistory`, `ProductPriceHistory`; see
+  `common/utils/recipe-version.util.ts`). Every price and recipe change is
+  dated to the Manila day.
 - The suggestion feature must use real historical sales data, never hardcoded
   estimates
-- No record in the audit trail (production orders, POS, deliveries, returns,
-  adjustments) can ever be hard-deleted — cancelled orders get status
-  `cancelled`
-- Returns do **not** auto-update inventory; a separate `InventoryAdjustment` is
-  required (two-step process)
+- No record in the audit trail (production orders, adjustments) can ever be
+  hard-deleted — cancelled orders get status `cancelled`
 - Branch managers see only their own branch's data
 
 ## Gotchas
