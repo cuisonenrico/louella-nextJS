@@ -22,7 +22,14 @@ function makePrisma() {
     },
     productAlias: { findMany: jest.fn() },
     productPriceHistory: { findMany: jest.fn(), createMany: jest.fn() },
-    inventory: { upsert: jest.fn(), groupBy: jest.fn() },
+    // findMany/$queryRaw back carry-forward, which finds no later days here;
+    // its behaviour is covered in stock-chain.spec.ts.
+    inventory: {
+      upsert: jest.fn(),
+      groupBy: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([]),
+    },
+    $queryRaw: jest.fn().mockResolvedValue([]),
     importLog: {
       findFirst: jest.fn(),
       create: jest.fn(),

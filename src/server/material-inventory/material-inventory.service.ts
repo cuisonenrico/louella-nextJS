@@ -8,6 +8,7 @@ import { CacheNamespaceService } from '../common/cache/cache-namespace.service';
 import { CACHE_NS } from '../common/cache/cache-namespaces';
 import { clampPageSize } from '../common/constants/inventory.constants';
 import { computeMaterialClosing } from '../common/utils/inventory-metrics.util';
+import { reconcileMaterialChains } from '../common/utils/stock-chain';
 import {
   assertDateRange,
   eachDayInclusive,
@@ -25,6 +26,9 @@ const materialInventoryInclude = {
   },
 };
 
+/** Card writes and the carry-forward they trigger commit together. */
+const WRITE_TX_OPTIONS = { timeout: 30_000, maxWait: 10_000 };
+
 @Injectable()
 export class MaterialInventoryService {
   constructor(
@@ -32,43 +36,28 @@ export class MaterialInventoryService {
     private readonly cache: CacheNamespaceService,
   ) {}
 
-  /** Upsert: one stock-card per material per day. */
-  create(body: CreateMaterialInventoryDto, userId?: number) {
-    const date = toUtcDay(body.date);
-    return this.prisma.materialInventory.upsert({
-      where: { materialId_date: { materialId: body.materialId, date } },
-      update: {
-        supplierId: body.supplierId,
-        batchNumber: body.batchNumber,
-        expiresAt: body.expiresAt ? toUtcDay(body.expiresAt) : undefined,
-        quantity: body.quantity,
-        delivery: body.delivery,
-        notes: body.notes,
-        // The unique key excludes deletedAt, so a deleted card still owns this
-        // (material, date) slot and this upsert matches it. Re-entering the day
-        // is a restore — without this the write lands on a row no read returns.
-        deletedAt: null,
-      },
-      create: {
-        materialId: body.materialId,
-        date,
-        supplierId: body.supplierId,
-        batchNumber: body.batchNumber,
-        expiresAt: body.expiresAt ? toUtcDay(body.expiresAt) : undefined,
-        quantity: body.quantity ?? 0,
-        delivery: body.delivery ?? 0,
-        notes: body.notes,
-        createdById: userId,
-      },
-      include: materialInventoryInclude,
-    });
+  /**
+   * Upsert: one stock-card per material per day.
+   *
+   * Opening stock is the previous card's close wherever one exists (see
+   * stock-chain.ts), so a typed `quantity` only stands on a material's first
+   * card; and any change here re-opens the following days on the new close.
+   */
+  async create(body: CreateMaterialInventoryDto, userId?: number) {
+    const [card] = await this.writeCards([body], userId);
+    return card;
   }
 
-  async createBulk(items: CreateMaterialInventoryDto[], userId?: number) {
-    return this.prisma.$transaction(
-      items.map((item) => {
+  createBulk(items: CreateMaterialInventoryDto[], userId?: number) {
+    return this.writeCards(items, userId);
+  }
+
+  private writeCards(items: CreateMaterialInventoryDto[], userId?: number) {
+    return this.prisma.$transaction(async (tx) => {
+      const ids: number[] = [];
+      for (const item of items) {
         const date = toUtcDay(item.date);
-        return this.prisma.materialInventory.upsert({
+        const card = await tx.materialInventory.upsert({
           where: { materialId_date: { materialId: item.materialId, date } },
           update: {
             supplierId: item.supplierId,
@@ -77,8 +66,11 @@ export class MaterialInventoryService {
             quantity: item.quantity,
             delivery: item.delivery,
             notes: item.notes,
-            // See create(): re-entering a deleted day restores it.
+            // The unique key excludes deletedAt, so a deleted card still owns
+            // this (material, date) slot and this upsert matches it.
+            // Re-entering the day is a restore.
             deletedAt: null,
+            updatedById: userId ?? null,
           },
           create: {
             materialId: item.materialId,
@@ -91,9 +83,35 @@ export class MaterialInventoryService {
             notes: item.notes,
             createdById: userId,
           },
+          select: { id: true },
         });
-      }),
-    );
+        ids.push(card.id);
+      }
+      await this.carryForward(tx, ids);
+      return tx.materialInventory.findMany({
+        where: { id: { in: ids } },
+        include: materialInventoryInclude,
+      }).then((cards) => {
+        const byId = new Map(cards.map((c) => [c.id, c]));
+        return ids.map((id) => byId.get(id)!);
+      });
+    }, WRITE_TX_OPTIONS);
+  }
+
+  /** Re-open every card after the given ones on the new closes. */
+  private async carryForward(
+    tx: Prisma.TransactionClient,
+    ids: number[],
+    extra: Array<{ materialId: number; fromDate: Date }> = [],
+  ): Promise<void> {
+    const cards = await tx.materialInventory.findMany({
+      where: { id: { in: ids } },
+      select: { materialId: true, date: true },
+    });
+    await reconcileMaterialChains(tx, [
+      ...cards.map((c) => ({ materialId: c.materialId, fromDate: c.date })),
+      ...extra,
+    ]);
   }
 
   /** Returns all unique dates that have material inventory records, newest first. */
@@ -270,27 +288,37 @@ export class MaterialInventoryService {
   ) {
     const existing = await this.prisma.materialInventory.findFirst({
       where: { id, deletedAt: null },
-      select: { id: true },
+      select: { id: true, materialId: true, date: true },
     });
     if (!existing) {
       throw new NotFoundException('Material inventory record not found');
     }
 
-    return this.prisma.materialInventory.update({
-      where: { id },
-      data: {
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.materialInventory.update({
+        where: { id },
+        data: {
           materialId: body.materialId,
           supplierId: body.supplierId,
           batchNumber: body.batchNumber,
           expiresAt: body.expiresAt ? toUtcDay(body.expiresAt) : undefined,
           quantity: body.quantity,
           delivery: body.delivery,
-        used: body.used,
-        notes: body.notes,
-        updatedById: userId ?? null,
-      },
-      include: materialInventoryInclude,
-    });
+          used: body.used,
+          notes: body.notes,
+          updatedById: userId ?? null,
+        },
+        select: { id: true },
+      });
+      // A card moved to another material leaves a gap in the old chain too.
+      await this.carryForward(tx, [updated.id], [
+        { materialId: existing.materialId, fromDate: existing.date },
+      ]);
+      return tx.materialInventory.findUniqueOrThrow({
+        where: { id },
+        include: materialInventoryInclude,
+      });
+    }, WRITE_TX_OPTIONS);
   }
 
   /**
@@ -325,9 +353,9 @@ export class MaterialInventoryService {
       );
     }
 
-    await this.prisma.$transaction(
-      items.map((item) =>
-        this.prisma.materialInventory.update({
+    await this.prisma.$transaction(async (tx) => {
+      for (const item of items) {
+        await tx.materialInventory.update({
           where: { id: item.id },
           data: {
             quantity: item.quantity,
@@ -336,9 +364,10 @@ export class MaterialInventoryService {
             notes: item.notes,
             updatedById: userId ?? null,
           },
-        }),
-      ),
-    );
+        });
+      }
+      await this.carryForward(tx, ids);
+    }, WRITE_TX_OPTIONS);
 
     return { updated: items.length };
   }
@@ -351,15 +380,45 @@ export class MaterialInventoryService {
   async remove(id: number) {
     const existing = await this.prisma.materialInventory.findFirst({
       where: { id, deletedAt: null },
-      select: { id: true },
+      select: { id: true, materialId: true, date: true },
     });
     if (!existing) {
       throw new NotFoundException('Material inventory record not found');
     }
-    return this.prisma.materialInventory.update({
-      where: { id },
-      data: { deletedAt: new Date() },
+    return this.prisma.$transaction(async (tx) => {
+      const removed = await tx.materialInventory.update({
+        where: { id },
+        data: { deletedAt: new Date() },
+      });
+      // The next card now opens on the one before the deleted card.
+      await reconcileMaterialChains(tx, [
+        { materialId: existing.materialId, fromDate: existing.date },
+      ]);
+      return removed;
+    }, WRITE_TX_OPTIONS);
+  }
+
+  /**
+   * Re-derive every card's opening stock from `fromDate` onwards, for every
+   * live material. Writers keep chains current; this repairs history written
+   * before they did (an edited past card never reached the following days).
+   */
+  async recascade(fromDate: string) {
+    const date = toUtcDay(fromDate);
+    const materials = await this.prisma.material.findMany({
+      where: { deletedAt: null },
+      select: { id: true },
     });
+    const updated = await this.prisma.$transaction(
+      (tx) =>
+        reconcileMaterialChains(
+          tx,
+          materials.map((m) => ({ materialId: m.id, fromDate: date })),
+          { full: true },
+        ),
+      { timeout: 60_000, maxWait: 10_000 },
+    );
+    return { updated };
   }
 
   /**

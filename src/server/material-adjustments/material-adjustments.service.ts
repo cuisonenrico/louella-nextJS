@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { computeAdjSum } from '../common/utils/inventory-metrics.util';
+import { reconcileMaterialChains } from '../common/utils/stock-chain';
 import { CreateMaterialAdjustmentDto } from './dto/create-material-adjustment.dto';
 
 @Injectable()
@@ -33,14 +34,21 @@ export class MaterialAdjustmentsService {
       }
     }
 
-    return this.prisma.materialAdjustment.create({
-      data: {
-        materialInventoryId: body.materialInventoryId,
-        type: body.type,
-        value: body.value,
-        notes: body.notes,
-        createdById: userId ?? null,
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const created = await tx.materialAdjustment.create({
+        data: {
+          materialInventoryId: body.materialInventoryId,
+          type: body.type,
+          value: body.value,
+          notes: body.notes,
+          createdById: userId ?? null,
+        },
+      });
+      // Spoilage or a restock moves this card's close; the next days follow.
+      await reconcileMaterialChains(tx, [
+        { materialId: inv.materialId, fromDate: inv.date },
+      ]);
+      return created;
     });
   }
 
@@ -61,11 +69,21 @@ export class MaterialAdjustmentsService {
   async remove(id: number) {
     const existing = await this.prisma.materialAdjustment.findFirst({
       where: { id, deletedAt: null },
+      include: { materialInventory: { select: { materialId: true, date: true } } },
     });
     if (!existing) throw new NotFoundException('Adjustment not found');
-    return this.prisma.materialAdjustment.update({
-      where: { id },
-      data: { deletedAt: new Date() },
+    return this.prisma.$transaction(async (tx) => {
+      const removed = await tx.materialAdjustment.update({
+        where: { id },
+        data: { deletedAt: new Date() },
+      });
+      await reconcileMaterialChains(tx, [
+        {
+          materialId: existing.materialInventory.materialId,
+          fromDate: existing.materialInventory.date,
+        },
+      ]);
+      return removed;
     });
   }
 }

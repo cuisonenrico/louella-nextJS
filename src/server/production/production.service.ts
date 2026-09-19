@@ -14,6 +14,7 @@ import {
   requireFactor,
 } from '../common/utils/unit-conversion.util';
 import { toUtcDay } from '../common/utils/date-range.util';
+import { reconcileMaterialChains } from '../common/utils/stock-chain';
 
 // Branch that owns production when an entry omits a branch. Materials are global
 // (central kitchen), so this only affects which branch a yield is attributed to.
@@ -109,9 +110,9 @@ export class ProductionService {
     deltaMap: Map<string, { materialId: number; date: Date; delta: number }>,
   ): Promise<void> {
     if (deltaMap.size === 0) return;
-    const upserts = Array.from(deltaMap.values()).map(
-      ({ materialId, date, delta }) =>
-        this.prisma.materialInventory.upsert({
+    await this.prisma.$transaction(async (tx) => {
+      for (const { materialId, date, delta } of deltaMap.values()) {
+        await tx.materialInventory.upsert({
           where: { materialId_date: { materialId, date } },
           // The unique key ignores deletedAt, so this can land on a deleted
           // card. Consumption that really happened must be visible, so writing
@@ -124,9 +125,13 @@ export class ProductionService {
             delivery: 0,
             used: Math.max(0, delta),
           },
-        }),
-    );
-    await this.prisma.$transaction(upserts);
+        });
+      }
+      await reconcileMaterialChains(
+        tx,
+        [...deltaMap.values()].map((c) => ({ materialId: c.materialId, fromDate: c.date })),
+      );
+    });
   }
 
   /** Returns the old yield for an existing production record, or 0 if none exists. */
@@ -204,6 +209,11 @@ export class ProductionService {
         create: { materialId, date, quantity: 0, delivery: 0, used: Math.max(0, delta) },
       });
     }
+    // Consumption lowers the day's close; later cards open on it.
+    await reconcileMaterialChains(
+      tx,
+      [...byCard.values()].map((c) => ({ materialId: c.materialId, fromDate: c.date })),
+    );
   }
 
   /** Single-row form of consumeMaterials, for create/update/remove. */

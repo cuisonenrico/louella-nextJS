@@ -11,10 +11,13 @@ import { PrismaService } from '../prisma/prisma.service';
 // Minimal Prisma mock factory
 // ---------------------------------------------------------------------------
 
-function makePrisma() {
-  return {
+function makePrisma(): Record<string, any> {
+  const prisma: Record<string, any> = {
     inventory: {
       findFirst: jest.fn(),
+      // Carry-forward reads the touched rows' keys; none here, so it no-ops.
+      // Its effect on the chain is covered in inventory.chain.spec.ts.
+      findMany: jest.fn().mockResolvedValue([]),
     },
     inventoryAdjustment: {
       findFirst: jest.fn(),
@@ -23,8 +26,14 @@ function makePrisma() {
       update: jest.fn(),
       updateMany: jest.fn(),
     },
-    $transaction: jest.fn(),
+    // Interactive form, as the service uses it: the callback gets the client.
+    $transaction: jest.fn((arg: unknown) =>
+      typeof arg === 'function'
+        ? (arg as (tx: unknown) => unknown)(prisma)
+        : Promise.all(arg as unknown[]),
+    ),
   };
+  return prisma;
 }
 
 // ---------------------------------------------------------------------------
@@ -331,7 +340,8 @@ describe('InventoryAdjustmentsService', () => {
         where: { id: 1 },
         data: { value: 3, updatedById: 1 },
       });
-      expect(prisma.$transaction).not.toHaveBeenCalled();
+      // One transaction: the edit and the carry-forward it triggers.
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     });
 
     it('refuses to re-type one leg of a transfer', async () => {
@@ -363,7 +373,6 @@ describe('InventoryAdjustmentsService', () => {
         delivery: 0,
         adjustments: [{ id: 1, type: 'PULL_OUT', value: 5 }],
       });
-      prisma.$transaction.mockResolvedValue([{ id: 1, value: 8 }, { count: 1 }]);
 
       await service.update(1, { value: 8 }, unscoped());
 
@@ -406,7 +415,6 @@ describe('InventoryAdjustmentsService', () => {
         linkedAdjustmentId: 2,
         inventory: { branchId: 1 },
       });
-      prisma.$transaction.mockResolvedValue([{ id: 1 }, { count: 1 }]);
 
       await service.remove(1, unscoped());
 
@@ -538,6 +546,7 @@ describe('InventoryAdjustmentsService', () => {
       prisma.inventory.findFirst.mockResolvedValueOnce(makeInvRow());
 
       const tx = {
+        inventory: { findMany: jest.fn().mockResolvedValue([]) },
         inventoryAdjustment: {
           create: jest
             .fn()

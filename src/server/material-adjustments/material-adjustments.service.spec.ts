@@ -3,10 +3,13 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { MaterialAdjustmentsService } from './material-adjustments.service';
 import { PrismaService } from '../prisma/prisma.service';
 
-function makePrisma() {
-  return {
+function makePrisma(): Record<string, any> {
+  const prisma: Record<string, any> = {
     materialInventory: {
       findFirst: jest.fn(),
+      // Carry-forward's read of later cards: none here. Its effect on the
+      // chain is covered in stock-chain.spec.ts.
+      findMany: jest.fn().mockResolvedValue([]),
     },
     materialAdjustment: {
       findFirst: jest.fn(),
@@ -15,6 +18,8 @@ function makePrisma() {
       update: jest.fn(),
     },
   };
+  prisma.$transaction = jest.fn((fn: (tx: unknown) => unknown) => fn(prisma));
+  return prisma;
 }
 
 describe('MaterialAdjustmentsService', () => {
@@ -107,7 +112,10 @@ describe('MaterialAdjustmentsService', () => {
     });
 
     it('soft-deletes rather than hard-deletes', async () => {
-      prisma.materialAdjustment.findFirst.mockResolvedValue({ id: 1 });
+      prisma.materialAdjustment.findFirst.mockResolvedValue({
+        id: 1,
+        materialInventory: { materialId: 3, date: new Date('2026-09-02') },
+      });
       prisma.materialAdjustment.update.mockResolvedValue({ id: 1 });
 
       await service.remove(1);

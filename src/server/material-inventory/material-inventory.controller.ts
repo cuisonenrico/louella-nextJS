@@ -63,6 +63,18 @@ export class MaterialInventoryController {
     return this.materialInventoryService.initDate(query.date, user?.id);
   }
 
+  /**
+   * Re-derive every card's opening stock from `date` onwards, for every
+   * material. Writes keep chains current; this repairs cards written before
+   * they did. Same permission as init, which derives openings too.
+   */
+  @Post('recascade')
+  @RequireFeature('material-stock:init')
+  @Roles(UserRole.INVENTORY)
+  recascade(@Query() query: MaterialInventoryDateQueryDto) {
+    return this.materialInventoryService.recascade(query.date);
+  }
+
   @Post('init-range')
   @RequireFeature('material-stock:init')
   @Roles(UserRole.INVENTORY)

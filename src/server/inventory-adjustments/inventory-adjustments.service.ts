@@ -3,8 +3,10 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertBranchAccess } from '../common/utils/branch-access';
+import { reconcileInventoryChains } from '../common/utils/stock-chain';
 import { computeAdjSum } from '../common/utils/inventory-metrics.util';
 import { CreateInventoryAdjustmentDto } from './dto/create-inventory-adjustment.dto';
 import { UpdateInventoryAdjustmentDto } from './dto/update-inventory-adjustment.dto';
@@ -17,9 +19,31 @@ import { CreateTransferDto } from './dto/create-transfer.dto';
 export type { RequestUser } from '../common/utils/branch-access';
 import type { RequestUser } from '../common/utils/branch-access';
 
+/** Adjustment writes and the carry-forward they trigger commit together. */
+const WRITE_TX_OPTIONS = { timeout: 30_000, maxWait: 10_000 };
+
 @Injectable()
 export class InventoryAdjustmentsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * An adjustment changes its day's stock on hand. On a placeholder day that
+   * moves the close; either way the following days must open on it. Carry
+   * forward from each touched row's day, inside the writer's transaction.
+   */
+  private async carryForward(
+    tx: Prisma.TransactionClient,
+    inventoryIds: number[],
+  ): Promise<void> {
+    const rows = await tx.inventory.findMany({
+      where: { id: { in: inventoryIds } },
+      select: { branchId: true, productId: true, date: true },
+    });
+    await reconcileInventoryChains(
+      tx,
+      rows.map((r) => ({ branchId: r.branchId, productId: r.productId, fromDate: r.date })),
+    );
+  }
 
   /**
    * Branch isolation for a domain BranchGuard cannot reach.
@@ -108,9 +132,13 @@ export class InventoryAdjustmentsService {
       await this.assertStockAvailable(dto.inventoryId, dto.value);
     }
 
-    return this.prisma.inventoryAdjustment.create({
-      data: { ...dto, createdById: user?.id ?? null },
-    });
+    return this.prisma.$transaction(async (tx) => {
+      const created = await tx.inventoryAdjustment.create({
+        data: { ...dto, createdById: user?.id ?? null },
+      });
+      await this.carryForward(tx, [dto.inventoryId]);
+      return created;
+    }, WRITE_TX_OPTIONS);
   }
 
   async findByInventory(inventoryId: number, user?: RequestUser) {
@@ -151,17 +179,26 @@ export class InventoryAdjustmentsService {
         // to be able to cover it — whichever leg the user happens to be editing.
         await this.assertTransferStock(existing, dto.value);
 
-        const [updated] = await this.prisma.$transaction([
-          this.prisma.inventoryAdjustment.update({
+        const linkedId = existing.linkedAdjustmentId;
+        return this.prisma.$transaction(async (tx) => {
+          const updated = await tx.inventoryAdjustment.update({
             where: { id },
             data: { ...dto, updatedById: user?.id ?? null },
-          }),
-          this.prisma.inventoryAdjustment.updateMany({
-            where: { id: existing.linkedAdjustmentId, deletedAt: null },
+          });
+          const counterpart = await tx.inventoryAdjustment.findFirst({
+            where: { id: linkedId, deletedAt: null },
+            select: { inventoryId: true },
+          });
+          await tx.inventoryAdjustment.updateMany({
+            where: { id: linkedId, deletedAt: null },
             data: { value: dto.value },
-          }),
-        ]);
-        return updated;
+          });
+          await this.carryForward(tx, [
+            existing.inventoryId,
+            ...(counterpart ? [counterpart.inventoryId] : []),
+          ]);
+          return updated;
+        }, WRITE_TX_OPTIONS);
       }
     }
 
@@ -177,10 +214,14 @@ export class InventoryAdjustmentsService {
       );
     }
 
-    return this.prisma.inventoryAdjustment.update({
-      where: { id },
-      data: { ...dto, updatedById: user?.id ?? null },
-    });
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.inventoryAdjustment.update({
+        where: { id },
+        data: { ...dto, updatedById: user?.id ?? null },
+      });
+      await this.carryForward(tx, [existing.inventoryId]);
+      return updated;
+    }, WRITE_TX_OPTIONS);
   }
 
   /**
@@ -226,24 +267,26 @@ export class InventoryAdjustmentsService {
     // Both legs of a transfer go together. Soft-deleting only the row the user
     // clicked would leave its counterpart live, inventing stock at one branch
     // that never left the other.
-    if (existing.linkedAdjustmentId) {
-      const [updated] = await this.prisma.$transaction([
-        this.prisma.inventoryAdjustment.update({
-          where: { id },
-          data: { deletedAt },
-        }),
-        this.prisma.inventoryAdjustment.updateMany({
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.inventoryAdjustment.update({
+        where: { id },
+        data: { deletedAt },
+      });
+      const touched = [existing.inventoryId];
+      if (existing.linkedAdjustmentId) {
+        const counterpart = await tx.inventoryAdjustment.findFirst({
+          where: { id: existing.linkedAdjustmentId, deletedAt: null },
+          select: { inventoryId: true },
+        });
+        await tx.inventoryAdjustment.updateMany({
           where: { id: existing.linkedAdjustmentId, deletedAt: null },
           data: { deletedAt },
-        }),
-      ]);
+        });
+        if (counterpart) touched.push(counterpart.inventoryId);
+      }
+      await this.carryForward(tx, touched);
       return updated;
-    }
-
-    return this.prisma.inventoryAdjustment.update({
-      where: { id },
-      data: { deletedAt },
-    });
+    }, WRITE_TX_OPTIONS);
   }
 
   /**
@@ -322,8 +365,9 @@ export class InventoryAdjustmentsService {
         where: { id: out.id },
         data: { linkedAdjustmentId: inn.id },
       });
+      await this.carryForward(tx, [dto.fromInventoryId, dto.toInventoryId]);
       return { pullOut: linked, pullIn: inn };
-    });
+    }, WRITE_TX_OPTIONS);
 
     return { pullOut, pullIn };
   }

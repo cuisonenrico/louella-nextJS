@@ -12,7 +12,12 @@ function makePrisma() {
     production: { upsert: jest.fn(), findUnique: jest.fn() },
     recipe: { findFirst: jest.fn(), findMany: jest.fn() },
     unitConversion: { findMany: jest.fn() },
-    materialInventory: { upsert: jest.fn() },
+    materialInventory: {
+      upsert: jest.fn(),
+      // Carry-forward's reads: no earlier or later cards in these tests.
+      findFirst: jest.fn().mockResolvedValue(null),
+      findMany: jest.fn().mockResolvedValue([]),
+    },
   };
   // Interactive form only — ProductionService.create uses the callback shape.
   prisma.$transaction = jest.fn((arg: unknown) =>

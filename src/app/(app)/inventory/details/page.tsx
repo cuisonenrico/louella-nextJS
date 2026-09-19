@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { usePageHeader } from '@/components/layout/usePageHeader';
 import SmallScreenNotice from '@/components/layout/SmallScreenNotice';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, AlertTriangle, Info } from 'lucide-react';
+import { Loader2, Info } from 'lucide-react';
 import dayjs from 'dayjs';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
@@ -14,7 +14,6 @@ import type { Branch, Inventory, InventorySummaryData, Product, ProductType } fr
 import { extractError } from '@/lib/errors';
 import { Button } from '@/components/ui/button';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useSaveShortcut } from '@/components/sheet/useSaveShortcut';
 import InventoryFilterBar from '../components/InventoryFilterBar';
 import InventorySummaryPanel from '../components/InventorySummaryPanel';
@@ -64,7 +63,6 @@ export default function InventoryDetailsPage() {
 
   // Pending edits
   const [pendingUpdates, setPendingUpdates] = useState<Map<number, Partial<Inventory>>>(new Map());
-  const [cascadeWarning, setCascadeWarning] = useState<{ branchId: number; productId: number; fromDate: string } | null>(null);
   const [adjRow, setAdjRow] = useState<Inventory | null>(null);
 
   // Queries
@@ -188,20 +186,6 @@ export default function InventoryDetailsPage() {
           ? `Changes saved — ${result.cascadeUpdated} later ${result.cascadeUpdated === 1 ? 'row' : 'rows'} carried forward`
           : 'Changes saved',
       );
-      // Rows the user did not re-count, but whose later days are still
-      // placeholders from an older leftover. Offer the explicit recascade.
-      setCascadeWarning(result.cascadeWarnings[0] ?? null);
-    },
-    onError: (err) => toast.error(extractError(err)),
-  });
-
-  const recascadeMutation = useMutation({
-    mutationFn: (data: { branchId: number; productId: number; fromDate: string }) =>
-      inventoryApi.recascade(data.branchId, data.productId, data.fromDate),
-    onSuccess: () => {
-      setCascadeWarning(null);
-      qc.invalidateQueries({ queryKey: ['inventory'] });
-      toast.success('Cascade applied');
     },
     onError: (err) => toast.error(extractError(err)),
   });
@@ -326,27 +310,6 @@ export default function InventoryDetailsPage() {
               onCellChange={handleCellChange}
             />
           )}
-
-          {/* Cascade warning dialog */}
-          <Dialog open={!!cascadeWarning} onOpenChange={() => setCascadeWarning(null)}>
-            <DialogContent className="sm:max-w-sm">
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <AlertTriangle className="h-5 w-5 text-amber-500" /> Cascade Update
-                </DialogTitle>
-              </DialogHeader>
-              <p className="text-sm text-muted-foreground">
-                Changing the leftover affects the opening quantity for subsequent days. Would you like to cascade the update forward?
-              </p>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setCascadeWarning(null)}>Skip</Button>
-                <Button onClick={() => { if (cascadeWarning) recascadeMutation.mutate(cascadeWarning); }} disabled={recascadeMutation.isPending}>
-                  {recascadeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
-                  Cascade
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
 
           {/* Adjustments dialog.
               `adjRow` is the row as it was when the gear was clicked. Re-reading

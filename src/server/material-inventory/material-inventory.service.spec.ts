@@ -6,11 +6,12 @@ import { CacheNamespaceService } from '../common/cache/cache-namespace.service';
 import { CACHE_NS } from '../common/cache/cache-namespaces';
 
 function makePrisma() {
-  return {
+  return withTransactions({
     materialInventory: {
-      findMany: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([]),
       findFirst: jest.fn(),
       findUnique: jest.fn(),
+      findUniqueOrThrow: jest.fn().mockResolvedValue({}),
       createMany: jest.fn(),
       upsert: jest.fn(),
       update: jest.fn(),
@@ -18,8 +19,18 @@ function makePrisma() {
       count: jest.fn(),
     },
     material: { findMany: jest.fn() },
-    $transaction: jest.fn((ops: unknown[]) => Promise.all(ops as Promise<unknown>[])),
-  };
+  });
+}
+
+/** Both transaction forms; the interactive one gets the client itself. */
+function withTransactions<T extends Record<string, any>>(prisma: T) {
+  return Object.assign(prisma, {
+    $transaction: jest.fn((arg: unknown) =>
+      typeof arg === 'function'
+        ? (arg as (tx: T) => unknown)(prisma)
+        : Promise.all(arg as Promise<unknown>[]),
+    ),
+  });
 }
 
 function makeCache() {
