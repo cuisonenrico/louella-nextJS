@@ -19,6 +19,8 @@ function makePrisma(): Record<string, any> {
     },
   };
   prisma.$transaction = jest.fn((fn: (tx: unknown) => unknown) => fn(prisma));
+  // Chain locks (pg_advisory_xact_lock); ordering is covered on FakeStockDb.
+  prisma.$executeRaw = jest.fn().mockResolvedValue(1);
   return prisma;
 }
 

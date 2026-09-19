@@ -11,7 +11,10 @@ import {
   resolveBranchScope,
   type RequestUser,
 } from '../common/utils/branch-access';
-import { reconcileInventoryChains } from '../common/utils/stock-chain';
+import {
+  lockInventoryChains,
+  reconcileInventoryChains,
+} from '../common/utils/stock-chain';
 import {
   LabelResolver,
   type PriceHistoryMap,
@@ -631,6 +634,10 @@ export class InventoryImportService {
   ) {
     if (accumulator.size === 0) return;
     await this.prisma.$transaction(async (tx) => {
+      await lockInventoryChains(
+        tx,
+        [...accumulator.keys()].map((productId) => ({ branchId, productId })),
+      );
       for (const [productId, counts] of accumulator) {
         await tx.inventory.upsert({
           where: {

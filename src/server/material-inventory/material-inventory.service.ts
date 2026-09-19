@@ -8,7 +8,10 @@ import { CacheNamespaceService } from '../common/cache/cache-namespace.service';
 import { CACHE_NS } from '../common/cache/cache-namespaces';
 import { clampPageSize } from '../common/constants/inventory.constants';
 import { computeMaterialClosing } from '../common/utils/inventory-metrics.util';
-import { reconcileMaterialChains } from '../common/utils/stock-chain';
+import {
+  lockMaterialChains,
+  reconcileMaterialChains,
+} from '../common/utils/stock-chain';
 import {
   assertDateRange,
   eachDayInclusive,
@@ -54,6 +57,8 @@ export class MaterialInventoryService {
 
   private writeCards(items: CreateMaterialInventoryDto[], userId?: number) {
     return this.prisma.$transaction(async (tx) => {
+      // Chain locks before any card is written (see stock-chain.ts).
+      await lockMaterialChains(tx, items.map((i) => i.materialId));
       const ids: number[] = [];
       for (const item of items) {
         const date = toUtcDay(item.date);
@@ -295,6 +300,10 @@ export class MaterialInventoryService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      await lockMaterialChains(tx, [
+        existing.materialId,
+        ...(body.materialId ? [body.materialId] : []),
+      ]);
       const updated = await tx.materialInventory.update({
         where: { id },
         data: {
@@ -341,7 +350,7 @@ export class MaterialInventoryService {
     const ids = items.map((i) => i.id);
     const existing = await this.prisma.materialInventory.findMany({
       where: { id: { in: ids }, deletedAt: null },
-      select: { id: true },
+      select: { id: true, materialId: true },
     });
 
     // All-or-nothing: a partial save is the failure mode this replaces.
@@ -354,6 +363,7 @@ export class MaterialInventoryService {
     }
 
     await this.prisma.$transaction(async (tx) => {
+      await lockMaterialChains(tx, existing.map((c) => c.materialId));
       for (const item of items) {
         await tx.materialInventory.update({
           where: { id: item.id },
@@ -386,6 +396,7 @@ export class MaterialInventoryService {
       throw new NotFoundException('Material inventory record not found');
     }
     return this.prisma.$transaction(async (tx) => {
+      await lockMaterialChains(tx, [existing.materialId]);
       const removed = await tx.materialInventory.update({
         where: { id },
         data: { deletedAt: new Date() },

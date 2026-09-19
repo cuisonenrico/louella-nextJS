@@ -11,7 +11,10 @@ import {
   computeSold,
 } from '../common/utils/inventory-metrics.util';
 import { csvField } from '../common/utils/csv.util';
-import { reconcileInventoryChains } from '../common/utils/stock-chain';
+import {
+  lockInventoryChains,
+  reconcileInventoryChains,
+} from '../common/utils/stock-chain';
 import { CreateInventoryDto } from './dto/create-inventory.dto';
 import { UpdateInventoryDto } from './dto/update-inventory.dto';
 import { UpdateInventoryItemDto } from './dto/update-inventory-bulk.dto';
@@ -128,6 +131,8 @@ export class InventoryService {
    */
   private writeEntries(items: CreateInventoryDto[], userId?: number) {
     return this.prisma.$transaction(async (tx) => {
+      // Chain locks before any row is written (see stock-chain.ts).
+      await lockInventoryChains(tx, items);
       const ids: number[] = [];
       for (const item of items) {
         const date = toUtcDay(item.date);
@@ -617,8 +622,10 @@ export class InventoryService {
           deletedAt: null,
           ...(branchId != null ? { branchId } : {}),
         },
-        select: { id: true },
+        select: { id: true, branchId: true, productId: true },
       });
+      // Chain locks before any row is written (see stock-chain.ts).
+      await lockInventoryChains(tx, existing);
 
       // A row missing from a branch-scoped read is one the caller may not touch.
       if (existing.length !== new Set(ids).size) {
@@ -662,6 +669,7 @@ export class InventoryService {
     });
     if (!existing) throw new NotFoundException('Inventory record not found');
     return this.prisma.$transaction(async (tx) => {
+      await lockInventoryChains(tx, [existing]);
       const removed = await tx.inventory.update({
         where: { id },
         data: { deletedAt: new Date() },
@@ -1059,6 +1067,7 @@ export class InventoryService {
     if (quantity <= 0) return;
     const { branchId, productId, date } = key;
 
+    await lockInventoryChains(tx, [key]);
     await tx.inventory.upsert({
       where: { branchId_productId_date: { branchId, productId, date } },
       // A tombstoned slot receiving real stock is restored, as everywhere

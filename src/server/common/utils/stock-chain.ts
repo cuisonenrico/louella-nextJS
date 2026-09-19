@@ -33,6 +33,66 @@ import {
 
 type Tx = Prisma.TransactionClient;
 
+// ---------------------------------------------------------------------------
+// Chain locks
+// ---------------------------------------------------------------------------
+
+/**
+ * Serialise writers on the same stock chain.
+ *
+ * Carry-forward reads a chain and rewrites it; so do the stock-cap checks
+ * (read what is on hand, then book a pull-out) and production (read the old
+ * yield, then consume the difference). Two of those interleaving on one chain
+ * under READ COMMITTED each act on a view the other is about to invalidate:
+ * two pull-outs of the last unit both pass, two production saves both consume
+ * the full yield. A transaction-scoped advisory lock per chain makes them
+ * queue instead. It is released at commit or rollback, so it cannot leak, and
+ * works through Supabase's transaction pooler because it never outlives the
+ * transaction.
+ *
+ * Lock order is fixed to rule out deadlock: production, then materials, then
+ * finished goods — the order a production-order finalization touches them —
+ * and within one kind, sorted. Every writer takes its locks through these
+ * helpers, before it reads anything it will base a write on. Re-taking a lock
+ * already held in the same transaction is a no-op.
+ */
+const LOCK_NS = { production: 1, material: 2, inventory: 3 } as const;
+
+async function advisoryLock(
+  tx: Tx,
+  ns: (typeof LOCK_NS)[keyof typeof LOCK_NS],
+  keys: string[],
+): Promise<void> {
+  for (const key of [...new Set(keys)].sort()) {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(${ns}::int, hashtext(${key}))`;
+  }
+}
+
+/** Lock finished-goods chains, one per (branch, product). */
+export function lockInventoryChains(
+  tx: Tx,
+  pairs: Array<{ branchId: number; productId: number }>,
+): Promise<void> {
+  return advisoryLock(tx, LOCK_NS.inventory, pairs.map((p) => `${p.branchId}:${p.productId}`));
+}
+
+/** Lock material stock-card chains, one per material. */
+export function lockMaterialChains(tx: Tx, materialIds: number[]): Promise<void> {
+  return advisoryLock(tx, LOCK_NS.material, materialIds.map(String));
+}
+
+/** Lock production rows by their (branch, product, day) key. */
+export function lockProductionKeys(
+  tx: Tx,
+  keys: Array<{ branchId: number; productId: number; date: Date }>,
+): Promise<void> {
+  return advisoryLock(
+    tx,
+    LOCK_NS.production,
+    keys.map((k) => `${k.branchId}:${k.productId}:${k.date.toISOString().slice(0, 10)}`),
+  );
+}
+
 export interface ChainOptions {
   /** Walk every later day instead of stopping at the first consistent one. */
   full?: boolean;
@@ -67,6 +127,8 @@ export async function reconcileInventoryChains(
     if (!prev || s.fromDate < prev) fromByPair.set(key, s.fromDate);
   }
   if (fromByPair.size === 0) return 0;
+
+  await lockInventoryChains(tx, starts);
 
   const branchIds = [...new Set(starts.map((s) => s.branchId))];
   const productIds = [...new Set(starts.map((s) => s.productId))];
@@ -179,6 +241,8 @@ export async function reconcileMaterialChains(
     const prev = byMaterial.get(s.materialId);
     if (!prev || s.fromDate < prev) byMaterial.set(s.materialId, s.fromDate);
   }
+  await lockMaterialChains(tx, [...byMaterial.keys()]);
+
   let written = 0;
   for (const [materialId, fromDate] of byMaterial) {
     written += await reconcileOneMaterialChain(tx, materialId, fromDate, opts);

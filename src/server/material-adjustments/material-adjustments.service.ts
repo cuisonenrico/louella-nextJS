@@ -5,7 +5,10 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { computeAdjSum } from '../common/utils/inventory-metrics.util';
-import { reconcileMaterialChains } from '../common/utils/stock-chain';
+import {
+  lockMaterialChains,
+  reconcileMaterialChains,
+} from '../common/utils/stock-chain';
 import { CreateMaterialAdjustmentDto } from './dto/create-material-adjustment.dto';
 
 @Injectable()
@@ -13,28 +16,38 @@ export class MaterialAdjustmentsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(body: CreateMaterialAdjustmentDto, userId?: number) {
-    const inv = await this.prisma.materialInventory.findFirst({
+    const target = await this.prisma.materialInventory.findFirst({
       where: { id: body.materialInventoryId, deletedAt: null },
-      include: { adjustments: { where: { deletedAt: null } } },
+      select: { materialId: true },
     });
-    if (!inv)
+    if (!target)
       throw new NotFoundException('Material inventory record not found');
 
-    // Same rule as InventoryAdjustmentsService: a pull-out cannot exceed what
-    // the card holds, an ANOMALY is never capped. Material stock needs this
-    // more than finished goods do — there is no counted leftover to correct a
-    // bad balance, so a negative card is carried forward indefinitely.
-    if (body.type === 'PULL_OUT') {
-      const available =
-        inv.quantity + inv.delivery - inv.used + computeAdjSum(inv.adjustments);
-      if (body.value > available) {
-        throw new BadRequestException(
-          `Cannot pull out ${body.value} — only ${available} is on hand for this material and day.`,
-        );
-      }
-    }
-
     return this.prisma.$transaction(async (tx) => {
+      // Read what the card holds under the material chain's lock, so two
+      // pull-outs cannot both be approved against the same stock.
+      await lockMaterialChains(tx, [target.materialId]);
+      const inv = await tx.materialInventory.findFirst({
+        where: { id: body.materialInventoryId, deletedAt: null },
+        include: { adjustments: { where: { deletedAt: null } } },
+      });
+      if (!inv)
+        throw new NotFoundException('Material inventory record not found');
+
+      // Same rule as InventoryAdjustmentsService: a pull-out cannot exceed
+      // what the card holds, an ANOMALY is never capped. Material stock needs
+      // this more than finished goods do — there is no counted leftover to
+      // correct a bad balance, so a negative card is carried forward.
+      if (body.type === 'PULL_OUT') {
+        const available =
+          inv.quantity + inv.delivery - inv.used + computeAdjSum(inv.adjustments);
+        if (body.value > available) {
+          throw new BadRequestException(
+            `Cannot pull out ${body.value} — only ${available} is on hand for this material and day.`,
+          );
+        }
+      }
+
       const created = await tx.materialAdjustment.create({
         data: {
           materialInventoryId: body.materialInventoryId,
@@ -73,6 +86,7 @@ export class MaterialAdjustmentsService {
     });
     if (!existing) throw new NotFoundException('Adjustment not found');
     return this.prisma.$transaction(async (tx) => {
+      await lockMaterialChains(tx, [existing.materialInventory.materialId]);
       const removed = await tx.materialAdjustment.update({
         where: { id },
         data: { deletedAt: new Date() },

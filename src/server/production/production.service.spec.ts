@@ -1,211 +1,227 @@
-import { Test, TestingModule } from '@nestjs/testing';
+import { NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import { ProductionService } from './production.service';
-import { ProductionAnalyticsService } from './production-analytics.service';
-import { PrismaService } from '../prisma/prisma.service';
+import { FakeStockDb, day } from '../common/testing/fake-stock-db';
 
-// ---------------------------------------------------------------------------
-// Minimal Prisma mock factory
-// ---------------------------------------------------------------------------
-
-function makePrisma() {
-  const prisma: Record<string, any> = {
-    production: { upsert: jest.fn(), findUnique: jest.fn() },
-    recipe: { findFirst: jest.fn(), findMany: jest.fn() },
-    unitConversion: { findMany: jest.fn() },
-    materialInventory: {
-      upsert: jest.fn(),
-      // Carry-forward's reads: no earlier or later cards in these tests.
-      findFirst: jest.fn().mockResolvedValue(null),
-      findMany: jest.fn().mockResolvedValue([]),
-    },
+/**
+ * Production yields and the material consumption they drive, tested on
+ * outcomes: the stored yield, `used` on each stock card, and the carried
+ * openings — not on which mocked call received what.
+ */
+describe('ProductionService', () => {
+  let db: FakeStockDb & {
+    recipe: { findMany: jest.Mock };
+    unitConversion: { findMany: jest.Mock };
   };
-  // Interactive form only — ProductionService.create uses the callback shape.
-  prisma.$transaction = jest.fn((arg: unknown) =>
-    typeof arg === 'function'
-      ? (arg as (tx: unknown) => unknown)(prisma)
-      : Promise.resolve([]),
-  );
-  return prisma;
-}
-
-describe('ProductionService material consumption', () => {
   let service: ProductionService;
-  let prisma: ReturnType<typeof makePrisma>;
 
-  beforeEach(async () => {
-    prisma = makePrisma();
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        ProductionService,
-        { provide: PrismaService, useValue: prisma },
-        { provide: ProductionAnalyticsService, useValue: {} },
-      ],
-    }).compile();
-    service = module.get(ProductionService);
-  });
+  const DATE = day('2026-09-08');
+  const FLOUR = { id: 3, name: 'Flour', unit: 'KG' };
+  const SUGAR = { id: 4, name: 'Sugar', unit: 'KG' };
 
-  afterEach(() => jest.clearAllMocks());
-
-  /** One product, one recipe line: 2 KG of material 3 per batch of 1. */
-  function seedRecipe() {
-    prisma.production.findUnique.mockResolvedValue(null);
-    prisma.production.upsert.mockResolvedValue({ id: 1 });
-    prisma.recipe.findMany.mockResolvedValue([{
+  /** Product 2 uses 2 kg flour per piece; product 5 uses 1 kg sugar per piece. */
+  const recipes = [
+    {
       productId: 2,
       recipeYield: 1,
-      recipeItems: [
-        {
-          materialId: 3,
-          quantity: 2,
-          unit: 'KG',
-          material: { id: 3, name: 'Flour', unit: 'KG' },
-        },
-      ],
-    }]);
-    prisma.unitConversion.findMany.mockResolvedValue([]);
-    prisma.materialInventory.upsert.mockResolvedValue({ id: 5 });
-  }
+      recipeItems: [{ quantity: 2, unit: 'KG', material: FLOUR }],
+    },
+    {
+      productId: 5,
+      recipeYield: 1,
+      recipeItems: [{ quantity: 1, unit: 'KG', material: SUGAR }],
+    },
+  ];
 
-  it('restores a deleted stock card that production consumes from', async () => {
-    // Material stock cards are soft-deleted now. The unique key ignores
-    // deletedAt, so this upsert lands on a deleted card — and the consumption
-    // it records would be invisible on every stock sheet unless the write
-    // revives the card it is writing to.
-    seedRecipe();
-
-    await service.create({
-      branchId: 1,
-      productId: 2,
-      date: '2026-09-08',
-      yield: 10,
-    } as never);
-
-    const args = prisma.materialInventory.upsert.mock.calls[0][0];
-    expect(args.update.deletedAt).toBeNull();
+  beforeEach(() => {
+    db = Object.assign(new FakeStockDb(), {
+      recipe: {
+        findMany: jest.fn(async ({ where }: { where: { productId: { in: number[] } } }) =>
+          recipes.filter((r) => where.productId.in.includes(r.productId)),
+        ),
+      },
+      unitConversion: { findMany: jest.fn().mockResolvedValue([]) },
+    });
+    service = new ProductionService(db as never, {} as never);
   });
 
-  it('still increments used by the consumed amount', async () => {
-    seedRecipe();
+  const used = (materialId: number, date = DATE) =>
+    db.live('materialInventory', { materialId, date })[0]?.used ?? 0;
+  const yieldOf = (productId: number, date = DATE, branchId = 1) =>
+    db.live('production', { productId, date, branchId })[0]?.yield;
 
-    await service.create({
-      branchId: 1,
-      productId: 2,
-      date: '2026-09-08',
-      yield: 10,
-    } as never);
+  describe('saving yields', () => {
+    it('consumes materials for a new yield', async () => {
+      await service.create({ branchId: 1, productId: 2, date: '2026-09-08', yield: 10 });
 
-    const args = prisma.materialInventory.upsert.mock.calls[0][0];
-    expect(args.update.used).toEqual({ increment: 20 });
-  });
+      expect(yieldOf(2)).toBe(10);
+      expect(used(FLOUR.id)).toBe(20);
+    });
 
-  it('ignores a soft-deleted recipe', async () => {
-    seedRecipe();
+    it('consumes only the difference when a yield is changed', async () => {
+      await service.create({ branchId: 1, productId: 2, date: '2026-09-08', yield: 10 });
+      await service.create({ branchId: 1, productId: 2, date: '2026-09-08', yield: 12 });
 
-    await service.create({
-      branchId: 1,
-      productId: 2,
-      date: '2026-09-08',
-      yield: 10,
-    } as never);
+      expect(used(FLOUR.id)).toBe(24);
+    });
 
-    expect(prisma.recipe.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { productId: { in: [2] }, deletedAt: null },
-      }),
-    );
+    it('is safe to resend: the same save twice consumes once', async () => {
+      const row = { productId: 2, date: '2026-09-08', yield: 10 };
+      await service.upsertBulk([row]);
+      await service.upsertBulk([row]);
+
+      expect(used(FLOUR.id)).toBe(20);
+    });
+
+    it('charges a key listed twice in one batch only for its final yield', async () => {
+      await service.upsertBulk([
+        { productId: 2, date: '2026-09-08', yield: 10 },
+        { productId: 2, date: '2026-09-08', yield: 15 },
+      ]);
+
+      expect(yieldOf(2)).toBe(15);
+      expect(used(FLOUR.id)).toBe(30);
+    });
+
+    it('books sheet rows without a branch to the production kitchen', async () => {
+      await service.upsertBulk([{ productId: 2, date: '2026-09-08', yield: 3 }]);
+
+      expect(yieldOf(2, DATE, 1)).toBe(3);
+    });
+
+    it('restores a deleted stock card that production consumes from', async () => {
+      db.seed('materialInventory', {
+        materialId: FLOUR.id, date: DATE, deletedAt: new Date(),
+      });
+
+      await service.create({ branchId: 1, productId: 2, date: '2026-09-08', yield: 5 });
+
+      expect(used(FLOUR.id)).toBe(10);
+    });
+
+    it('lowers later cards’ opening stock (carry-forward)', async () => {
+      db.seed('materialInventory', { materialId: FLOUR.id, date: DATE, quantity: 100 });
+      db.seed('materialInventory', { materialId: FLOUR.id, date: day('2026-09-09'), quantity: 100 });
+
+      await service.create({ branchId: 1, productId: 2, date: '2026-09-08', yield: 10 });
+
+      expect(db.live('materialInventory').map((c) => c.quantity)).toEqual([100, 80]);
+    });
+
+    it('locks the production key before the material chains', async () => {
+      await service.create({ branchId: 1, productId: 2, date: '2026-09-08', yield: 10 });
+
+      const kinds = db.locks.map((l) => l.split(':')[0]);
+      expect(kinds[0]).toBe('1'); // production
+      expect(kinds).toContain('2'); // material
+      expect(kinds.lastIndexOf('1')).toBeLessThan(kinds.indexOf('2'));
+    });
+
+    it('asks only for live recipes', async () => {
+      await service.create({ branchId: 1, productId: 2, date: '2026-09-08', yield: 1 });
+
+      expect(db.recipe.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { productId: { in: [2] }, deletedAt: null },
+        }),
+      );
+    });
   });
 
   describe('unit conversion', () => {
-    /** 500 G of a KG-stocked material per batch of 1. */
-    function seedGramRecipe() {
-      seedRecipe();
-      prisma.recipe.findMany.mockResolvedValue([{
-        productId: 2,
-        recipeYield: 1,
-        recipeItems: [
-          {
-            materialId: 3,
-            quantity: 500,
-            unit: 'G',
-            material: { id: 3, name: 'Flour', unit: 'KG' },
-          },
-        ],
-      }]);
-    }
+    const gramRecipe = {
+      productId: 2,
+      recipeYield: 1,
+      recipeItems: [{ quantity: 500, unit: 'G', material: FLOUR }],
+    };
 
     it('converts the recipe unit into the material unit', async () => {
-      seedGramRecipe();
-      prisma.unitConversion.findMany.mockResolvedValue([
+      db.recipe.findMany.mockResolvedValue([gramRecipe]);
+      db.unitConversion.findMany.mockResolvedValue([
         { fromUnit: 'G', toUnit: 'KG', factor: 0.001 },
       ]);
 
-      await service.create({
-        branchId: 1,
-        productId: 2,
-        date: '2026-09-08',
-        yield: 10,
-      } as never);
+      await service.create({ branchId: 1, productId: 2, date: '2026-09-08', yield: 10 });
 
-      const args = prisma.materialInventory.upsert.mock.calls[0][0];
-      // 10 batches × 500 g = 5 kg
-      expect(args.update.used.increment).toBeCloseTo(5);
+      expect(used(FLOUR.id)).toBeCloseTo(5);
     });
 
-    it('refuses to save when no conversion exists, instead of assuming 1', async () => {
+    it('refuses to save when no conversion exists, and writes nothing', async () => {
       // The old fallback booked 10 × 500 = 5000 "kg" of flour here.
-      seedGramRecipe();
-      prisma.unitConversion.findMany.mockResolvedValue([]);
+      db.recipe.findMany.mockResolvedValue([gramRecipe]);
 
       await expect(
-        service.create({
-          branchId: 1,
-          productId: 2,
-          date: '2026-09-08',
-          yield: 10,
-        } as never),
+        service.create({ branchId: 1, productId: 2, date: '2026-09-08', yield: 10 }),
       ).rejects.toThrow(/No unit conversion defined for G→KG \(Flour\)/);
-      expect(prisma.materialInventory.upsert).not.toHaveBeenCalled();
+      expect(db.live('production')).toHaveLength(0);
+      expect(db.live('materialInventory')).toHaveLength(0);
+    });
+  });
+
+  describe('editing and deleting', () => {
+    beforeEach(async () => {
+      await service.create({ branchId: 1, productId: 2, date: '2026-09-08', yield: 10 });
+    });
+    const rowId = () => db.live('production')[0].id;
+
+    it('moves consumption with a yield change', async () => {
+      await service.update(rowId(), { yield: 4 });
+
+      expect(used(FLOUR.id)).toBe(8);
+    });
+
+    // Re-keying used to leave the original consumption in place.
+    it('hands materials back to the old product and day when re-keyed', async () => {
+      await service.update(rowId(), { productId: 5, date: '2026-09-09' });
+
+      expect(used(FLOUR.id)).toBe(0);
+      expect(used(SUGAR.id, day('2026-09-09'))).toBe(10);
+    });
+
+    it('refuses an edit outside the caller’s branch', async () => {
+      await expect(service.update(rowId(), { yield: 1 }, 99)).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(used(FLOUR.id)).toBe(20);
+    });
+
+    // A blanket catch used to report every failure as "not found".
+    it('lets a real error through instead of calling it not found', async () => {
+      db.recipe.findMany.mockRejectedValueOnce(new UnprocessableEntityException('boom'));
+
+      await expect(service.update(rowId(), { yield: 4 })).rejects.toThrow(
+        UnprocessableEntityException,
+      );
+      expect(used(FLOUR.id)).toBe(20); // rolled back
+    });
+
+    it('returns the materials when a row is deleted', async () => {
+      await service.remove(rowId());
+
+      expect(used(FLOUR.id)).toBe(0);
+      expect(db.live('production')).toHaveLength(0);
     });
   });
 
   describe('addOrderYield (production-order finalization)', () => {
-    const DATE = new Date('2026-09-19T00:00:00.000Z');
-
     it('adds to the kitchen yield rather than replacing it', async () => {
-      seedRecipe();
+      await service.addOrderYield(db as never, DATE, [{ productId: 2, quantity: 30 }], 42);
+      await service.addOrderYield(db as never, DATE, [{ productId: 2, quantity: 20 }], 42);
 
-      await service.addOrderYield(prisma as never, DATE, [{ productId: 2, quantity: 30 }], 42);
-
-      const args = prisma.production.upsert.mock.calls[0][0];
-      expect(args.where.branchId_productId_date).toEqual({
-        branchId: 1,
-        productId: 2,
-        date: DATE,
-      });
-      expect(args.update.yield).toEqual({ increment: 30 });
-      expect(args.create).toEqual(
-        expect.objectContaining({ yield: 30, createdById: 42, isAutoGenerated: false }),
-      );
+      expect(yieldOf(2)).toBe(50);
+      expect(db.live('production')[0].createdById).toBe(42);
     });
 
-    // Finalization never consumed materials before.
     it('consumes materials for the added quantity', async () => {
-      seedRecipe();
+      await service.addOrderYield(db as never, DATE, [{ productId: 2, quantity: 30 }]);
 
-      await service.addOrderYield(prisma as never, DATE, [{ productId: 2, quantity: 30 }]);
-
-      const card = prisma.materialInventory.upsert.mock.calls[0][0];
-      expect(card.where.materialId_date).toEqual({ materialId: 3, date: DATE });
-      expect(card.update.used).toEqual({ increment: 60 }); // 30 × 2 kg
+      expect(used(FLOUR.id)).toBe(60);
     });
 
     it('skips zero-quantity lines entirely', async () => {
-      seedRecipe();
+      await service.addOrderYield(db as never, DATE, [{ productId: 2, quantity: 0 }]);
 
-      await service.addOrderYield(prisma as never, DATE, [{ productId: 2, quantity: 0 }]);
-
-      expect(prisma.production.upsert).not.toHaveBeenCalled();
-      expect(prisma.materialInventory.upsert).not.toHaveBeenCalled();
+      expect(db.live('production')).toHaveLength(0);
+      expect(db.live('materialInventory')).toHaveLength(0);
     });
   });
 });

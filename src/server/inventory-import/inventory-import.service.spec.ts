@@ -30,6 +30,7 @@ function makePrisma() {
       findMany: jest.fn().mockResolvedValue([]),
     },
     $queryRaw: jest.fn().mockResolvedValue([]),
+    $executeRaw: jest.fn().mockResolvedValue(1),
     importLog: {
       findFirst: jest.fn(),
       create: jest.fn(),

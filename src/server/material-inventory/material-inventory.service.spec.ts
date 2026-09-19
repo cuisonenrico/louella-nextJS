@@ -19,6 +19,8 @@ function makePrisma() {
       count: jest.fn(),
     },
     material: { findMany: jest.fn() },
+    // Chain locks (pg_advisory_xact_lock); ordering is covered on FakeStockDb.
+    $executeRaw: jest.fn().mockResolvedValue(1),
   });
 }
 

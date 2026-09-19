@@ -6,7 +6,10 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertBranchAccess } from '../common/utils/branch-access';
-import { reconcileInventoryChains } from '../common/utils/stock-chain';
+import {
+  lockInventoryChains,
+  reconcileInventoryChains,
+} from '../common/utils/stock-chain';
 import { computeAdjSum } from '../common/utils/inventory-metrics.util';
 import { CreateInventoryAdjustmentDto } from './dto/create-inventory-adjustment.dto';
 import { UpdateInventoryAdjustmentDto } from './dto/update-inventory-adjustment.dto';
@@ -25,6 +28,22 @@ const WRITE_TX_OPTIONS = { timeout: 30_000, maxWait: 10_000 };
 @Injectable()
 export class InventoryAdjustmentsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Lock the chains of the given rows before reading the stock that a cap
+   * check decides on. Without it, two pull-outs of the last unit each saw one
+   * unit available and both went through.
+   */
+  private async lockRows(
+    tx: Prisma.TransactionClient,
+    inventoryIds: number[],
+  ): Promise<void> {
+    const rows = await tx.inventory.findMany({
+      where: { id: { in: inventoryIds } },
+      select: { branchId: true, productId: true },
+    });
+    await lockInventoryChains(tx, rows);
+  }
 
   /**
    * An adjustment changes its day's stock on hand. On a placeholder day that
@@ -86,11 +105,12 @@ export class InventoryAdjustmentsService {
    * add up would suppress exactly the entry worth keeping.
    */
   private async assertStockAvailable(
+    tx: Prisma.TransactionClient,
     inventoryId: number,
     value: number,
     excludeAdjustmentId?: number,
   ): Promise<void> {
-    const row = await this.prisma.inventory.findFirst({
+    const row = await tx.inventory.findFirst({
       where: { id: inventoryId, deletedAt: null },
       select: {
         quantity: true,
@@ -128,11 +148,11 @@ export class InventoryAdjustmentsService {
     }
     this.assertBranchAccess(user, exists.branchId);
 
-    if (dto.type === 'PULL_OUT') {
-      await this.assertStockAvailable(dto.inventoryId, dto.value);
-    }
-
     return this.prisma.$transaction(async (tx) => {
+      await this.lockRows(tx, [dto.inventoryId]);
+      if (dto.type === 'PULL_OUT') {
+        await this.assertStockAvailable(tx, dto.inventoryId, dto.value);
+      }
       const created = await tx.inventoryAdjustment.create({
         data: { ...dto, createdById: user?.id ?? null },
       });
@@ -175,19 +195,24 @@ export class InventoryAdjustmentsService {
         );
       }
       if (dto.value !== undefined && dto.value !== existing.value) {
-        // The new value lands on both legs, so the *source* branch is what has
-        // to be able to cover it — whichever leg the user happens to be editing.
-        await this.assertTransferStock(existing, dto.value);
-
         const linkedId = existing.linkedAdjustmentId;
+        const newValue = dto.value;
         return this.prisma.$transaction(async (tx) => {
-          const updated = await tx.inventoryAdjustment.update({
-            where: { id },
-            data: { ...dto, updatedById: user?.id ?? null },
-          });
           const counterpart = await tx.inventoryAdjustment.findFirst({
             where: { id: linkedId, deletedAt: null },
             select: { inventoryId: true },
+          });
+          await this.lockRows(tx, [
+            existing.inventoryId,
+            ...(counterpart ? [counterpart.inventoryId] : []),
+          ]);
+          // The new value lands on both legs, so the *source* branch is what
+          // has to be able to cover it, whichever leg is being edited.
+          await this.assertTransferStock(tx, existing, newValue);
+
+          const updated = await tx.inventoryAdjustment.update({
+            where: { id },
+            data: { ...dto, updatedById: user?.id ?? null },
           });
           await tx.inventoryAdjustment.updateMany({
             where: { id: linkedId, deletedAt: null },
@@ -206,15 +231,17 @@ export class InventoryAdjustmentsService {
     // be sidestepped by creating a small pull-out and then raising it.
     const nextType = dto.type ?? existing.type;
     const changesAmount = dto.value !== undefined || dto.type !== undefined;
-    if (nextType === 'PULL_OUT' && changesAmount) {
-      await this.assertStockAvailable(
-        existing.inventoryId,
-        dto.value ?? existing.value,
-        id,
-      );
-    }
 
     return this.prisma.$transaction(async (tx) => {
+      await this.lockRows(tx, [existing.inventoryId]);
+      if (nextType === 'PULL_OUT' && changesAmount) {
+        await this.assertStockAvailable(
+          tx,
+          existing.inventoryId,
+          dto.value ?? existing.value,
+          id,
+        );
+      }
       const updated = await tx.inventoryAdjustment.update({
         where: { id },
         data: { ...dto, updatedById: user?.id ?? null },
@@ -232,6 +259,7 @@ export class InventoryAdjustmentsService {
    * counterpart's branch, so the counterpart is what must have the stock.
    */
   private async assertTransferStock(
+    tx: Prisma.TransactionClient,
     existing: {
       id: number;
       type: string;
@@ -241,16 +269,17 @@ export class InventoryAdjustmentsService {
     value: number,
   ): Promise<void> {
     if (existing.type === 'PULL_OUT') {
-      await this.assertStockAvailable(existing.inventoryId, value, existing.id);
+      await this.assertStockAvailable(tx, existing.inventoryId, value, existing.id);
       return;
     }
 
-    const counterpart = await this.prisma.inventoryAdjustment.findFirst({
+    const counterpart = await tx.inventoryAdjustment.findFirst({
       where: { id: existing.linkedAdjustmentId ?? -1, deletedAt: null },
       select: { id: true, inventoryId: true, type: true },
     });
     if (counterpart?.type === 'PULL_OUT') {
       await this.assertStockAvailable(
+        tx,
         counterpart.inventoryId,
         value,
         counterpart.id,
@@ -268,6 +297,16 @@ export class InventoryAdjustmentsService {
     // clicked would leave its counterpart live, inventing stock at one branch
     // that never left the other.
     return this.prisma.$transaction(async (tx) => {
+      const counterpartRow = existing.linkedAdjustmentId
+        ? await tx.inventoryAdjustment.findFirst({
+            where: { id: existing.linkedAdjustmentId },
+            select: { inventoryId: true },
+          })
+        : null;
+      await this.lockRows(tx, [
+        existing.inventoryId,
+        ...(counterpartRow ? [counterpartRow.inventoryId] : []),
+      ]);
       const updated = await tx.inventoryAdjustment.update({
         where: { id },
         data: { deletedAt },
@@ -338,10 +377,11 @@ export class InventoryAdjustmentsService {
     // scoped user pulling stock *from* a branch that is not theirs.
     this.assertBranchAccess(user, from.branchId);
 
-    await this.assertStockAvailable(dto.fromInventoryId, dto.value);
-
-    // Create both adjustments and link them in one interactive transaction.
+    // Create both adjustments and link them in one interactive transaction,
+    // with the source's stock checked under the chains' locks.
     const { pullOut, pullIn } = await this.prisma.$transaction(async (tx) => {
+      await this.lockRows(tx, [dto.fromInventoryId, dto.toInventoryId]);
+      await this.assertStockAvailable(tx, dto.fromInventoryId, dto.value);
       const out = await tx.inventoryAdjustment.create({
         data: {
           inventoryId: dto.fromInventoryId,

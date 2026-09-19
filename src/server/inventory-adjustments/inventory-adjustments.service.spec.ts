@@ -26,6 +26,8 @@ function makePrisma(): Record<string, any> {
       update: jest.fn(),
       updateMany: jest.fn(),
     },
+    // Chain locks (pg_advisory_xact_lock); ordering is covered on FakeStockDb.
+    $executeRaw: jest.fn().mockResolvedValue(1),
     // Interactive form, as the service uses it: the callback gets the client.
     $transaction: jest.fn((arg: unknown) =>
       typeof arg === 'function'
@@ -302,6 +304,8 @@ describe('InventoryAdjustmentsService', () => {
         .mockResolvedValueOnce(
           pullOut({ id: 2, type: 'PULL_IN', inventoryId: 20, linkedAdjustmentId: 1 }),
         )
+        // Read once to lock both legs' chains, once for the stock check.
+        .mockResolvedValueOnce({ id: 1, inventoryId: 9, type: 'PULL_OUT' })
         .mockResolvedValueOnce({ id: 1, inventoryId: 9, type: 'PULL_OUT' });
       prisma.inventory.findFirst.mockResolvedValue({
         quantity: 10,
@@ -312,7 +316,9 @@ describe('InventoryAdjustmentsService', () => {
       await expect(
         service.update(2, { value: 500 }, unscoped()),
       ).rejects.toBeInstanceOf(BadRequestException);
-      expect(prisma.$transaction).not.toHaveBeenCalled();
+      // Checked inside the locked transaction; nothing written.
+      expect(prisma.inventoryAdjustment.update).not.toHaveBeenCalled();
+      expect(prisma.inventoryAdjustment.updateMany).not.toHaveBeenCalled();
     });
   });
 
@@ -538,7 +544,8 @@ describe('InventoryAdjustmentsService', () => {
       await expect(service.transfer(dto, unscoped())).rejects.toBeInstanceOf(
         BadRequestException,
       );
-      expect(prisma.$transaction).not.toHaveBeenCalled();
+      // Checked inside the locked transaction; no leg written.
+      expect(prisma.inventoryAdjustment.create).not.toHaveBeenCalled();
     });
 
     it('writes a linked, positive-valued pair in one transaction', async () => {
@@ -546,7 +553,11 @@ describe('InventoryAdjustmentsService', () => {
       prisma.inventory.findFirst.mockResolvedValueOnce(makeInvRow());
 
       const tx = {
-        inventory: { findMany: jest.fn().mockResolvedValue([]) },
+        inventory: {
+          findMany: jest.fn().mockResolvedValue([]),
+          // The source's stock, read under the chains' locks.
+          findFirst: jest.fn().mockResolvedValue(makeInvRow()),
+        },
         inventoryAdjustment: {
           create: jest
             .fn()
