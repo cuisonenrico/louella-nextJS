@@ -7,6 +7,8 @@ import { inventoryAdjustmentsApi, inventoryApi } from '@/lib/apiServices';
 import { getAdjSum } from '../hooks/useInventoryColumns';
 import type { AdjustmentType, Branch, Inventory } from '@/types';
 import { extractError } from '@/lib/errors';
+import { toast } from 'sonner';
+import { PENDING_TRANSFERS_KEY } from './PendingTransfersPanel';
 import { Button } from '@/components/ui/button';
 import { useCan } from '@/lib/rbac/useHasFeature';
 import { Input } from '@/components/ui/input';
@@ -94,7 +96,11 @@ export default function InventoryAdjustmentsDialog({ inventory, productName, bra
     mutationFn: (data: { fromInventoryId: number; toInventoryId: number; value: number; notes?: string }) =>
       inventoryAdjustmentsApi.transfer(data),
     onSuccess: () => {
+      const toName = branches.find((b) => b.id === parseInt(form.toBranchId))?.name ?? 'the receiving branch';
       qc.invalidateQueries({ queryKey: ['inventory'] });
+      qc.invalidateQueries({ queryKey: PENDING_TRANSFERS_KEY });
+      // The stock has left this branch; the other side counts it once it accepts.
+      toast.success(`Sent — waiting for ${toName} to accept`);
       setForm((f) => ({ ...f, value: '', notes: '', toBranchId: '' }));
       setFormError('');
     },
@@ -103,7 +109,11 @@ export default function InventoryAdjustmentsDialog({ inventory, productName, bra
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => inventoryAdjustmentsApi.delete(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['inventory'] });
+      // Deleting a pending transfer cancels it.
+      qc.invalidateQueries({ queryKey: PENDING_TRANSFERS_KEY });
+    },
     onError: (err) => setFormError(extractError(err)),
   });
 
@@ -176,7 +186,11 @@ export default function InventoryAdjustmentsDialog({ inventory, productName, bra
                     {adj.type === 'PULL_IN' ? `+${adj.value}` : `-${adj.value}`}
                   </span>
                   <span className="text-sm text-muted-foreground flex-grow">{adj.notes ?? '—'}</span>
-                  {adj.linkedAdjustmentId && <Badge variant="outline" className="text-xs">Transfer</Badge>}
+                  {adj.transferStatus === 'PENDING' ? (
+                    <Badge variant="secondary" className="text-xs">Transfer · awaiting receiver</Badge>
+                  ) : adj.linkedAdjustmentId ? (
+                    <Badge variant="outline" className="text-xs">Transfer</Badge>
+                  ) : null}
                   {canDelete && (
                     <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" disabled={deleteMutation.isPending} onClick={() => setDeleteTarget(adj.id)}>
                       <Trash2 className="h-3.5 w-3.5" />

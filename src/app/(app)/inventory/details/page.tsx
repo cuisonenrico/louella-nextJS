@@ -17,6 +17,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { useSaveShortcut } from '@/components/sheet/useSaveShortcut';
 import InventoryFilterBar from '../components/InventoryFilterBar';
 import InventorySummaryPanel from '../components/InventorySummaryPanel';
+import PendingTransfersPanel from '../components/PendingTransfersPanel';
 import SheetPendingBar from '@/components/sheet/SheetPendingBar';
 import InventoryTypeTables from '../components/InventoryTypeTables';
 import InventoryAdjustmentsDialog from '../components/InventoryAdjustmentsDialog';
@@ -232,6 +233,8 @@ export default function InventoryDetailsPage() {
             onBranchChange={setFilterBranch}
             onImportOpen={canImport ? () => router.push('/inventory-import') : undefined}
           />
+
+          <PendingTransfersPanel branchId={selectedBranchId} />
 
           <InventorySummaryPanel
             summary={summaryQuery.data ?? null}

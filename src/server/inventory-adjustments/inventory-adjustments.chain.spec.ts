@@ -1,11 +1,21 @@
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { InventoryAdjustmentsService } from './inventory-adjustments.service';
 import { FakeStockDb, day } from '../common/testing/fake-stock-db';
 
-/** Adjustments move a day's stock, so the following days must follow. */
-describe('InventoryAdjustmentsService — carry-forward', () => {
+/**
+ * Adjustments move a day's stock, so the following days must follow; and a
+ * transfer only reaches the receiving branch once it accepts
+ * (decision 2026-09-19). Tested on the resulting data.
+ */
+describe('InventoryAdjustmentsService — stock movements', () => {
   let db: FakeStockDb;
   let service: InventoryAdjustmentsService;
   const admin = { id: 1, branchId: null, permissions: ['all-branches'] };
+  const atBranch = (branchId: number) => ({ id: 10 + branchId, branchId, permissions: [] });
 
   beforeEach(() => {
     db = new FakeStockDb();
@@ -34,30 +44,153 @@ describe('InventoryAdjustmentsService — carry-forward', () => {
   }
   const openings = (branchId: number) =>
     db.live('inventory', { branchId }).map((r) => r.quantity);
+  const send = (src: Record<string, any>, dst: Record<string, any>, value = 10, user: object = admin) =>
+    service.transfer({ fromInventoryId: src.id, toInventoryId: dst.id, value }, user as never);
 
-  it('moves both branches’ following days when a transfer is booked', async () => {
-    const { src, dst } = seed();
+  describe('sending', () => {
+    it('takes the stock from the sender at once, and gives the receiver nothing yet', async () => {
+      const { src, dst } = seed();
 
-    await service.transfer(
-      { fromInventoryId: src.id, toInventoryId: dst.id, value: 10 },
-      admin,
-    );
+      const result = await send(src, dst);
 
-    expect(openings(1)).toEqual([30, 20]);
-    expect(openings(2)).toEqual([5, 15]);
+      expect(result.status).toBe('PENDING');
+      expect(openings(1)).toEqual([30, 20]);
+      expect(openings(2)).toEqual([5, 5]);
+      expect(db.live('inventoryAdjustment', { inventoryId: dst.id })).toHaveLength(0);
+    });
+
+    it('still refuses to send more than the sender holds', async () => {
+      const { src, dst } = seed();
+
+      await expect(send(src, dst, 31)).rejects.toThrow(BadRequestException);
+      expect(db.live('inventoryAdjustment')).toHaveLength(0);
+    });
   });
 
-  it('puts the stock back on both sides when the transfer is deleted', async () => {
-    const { src, dst } = seed();
-    const { pullOut } = await service.transfer(
-      { fromInventoryId: src.id, toInventoryId: dst.id, value: 10 },
-      admin,
-    );
+  describe('accepting', () => {
+    it('credits the receiver, links both legs, and records who accepted', async () => {
+      const { src, dst } = seed();
+      const { pullOut } = await send(src, dst);
 
-    await service.remove(pullOut.id, admin);
+      await service.acceptTransfer(pullOut.id, atBranch(2) as never);
 
-    expect(openings(1)).toEqual([30, 30]);
-    expect(openings(2)).toEqual([5, 5]);
+      expect(openings(1)).toEqual([30, 20]);
+      expect(openings(2)).toEqual([5, 15]);
+      const out = db.tables.inventoryAdjustment.find((a) => a.id === pullOut.id)!;
+      const inn = db.live('inventoryAdjustment', { inventoryId: dst.id })[0];
+      expect(out).toEqual(
+        expect.objectContaining({ transferStatus: 'ACCEPTED', respondedById: 12, linkedAdjustmentId: inn.id }),
+      );
+      expect(inn).toEqual(
+        expect.objectContaining({ type: 'PULL_IN', value: 10, linkedAdjustmentId: pullOut.id }),
+      );
+    });
+
+    it('credits the corrected quantity if the sender changed it while pending', async () => {
+      const { src, dst } = seed();
+      const { pullOut } = await send(src, dst);
+      await service.update(pullOut.id, { value: 6 }, admin as never);
+
+      await service.acceptTransfer(pullOut.id, atBranch(2) as never);
+
+      expect(openings(1)).toEqual([30, 24]);
+      expect(openings(2)).toEqual([5, 11]);
+    });
+
+    it('is refused to the sending branch', async () => {
+      const { src, dst } = seed();
+      const { pullOut } = await send(src, dst, 10, atBranch(1));
+
+      await expect(
+        service.acceptTransfer(pullOut.id, atBranch(1) as never),
+      ).rejects.toThrow(ForbiddenException);
+      expect(openings(2)).toEqual([5, 5]);
+    });
+
+    it('cannot be answered twice', async () => {
+      const { src, dst } = seed();
+      const { pullOut } = await send(src, dst);
+      await service.acceptTransfer(pullOut.id, atBranch(2) as never);
+
+      await expect(
+        service.acceptTransfer(pullOut.id, atBranch(2) as never),
+      ).rejects.toThrow(ConflictException);
+      expect(openings(2)).toEqual([5, 15]); // credited once
+    });
+  });
+
+  describe('rejecting', () => {
+    it('returns the stock to the sender and keeps the record', async () => {
+      const { src, dst } = seed();
+      const { pullOut } = await send(src, dst);
+
+      await service.rejectTransfer(pullOut.id, atBranch(2) as never);
+
+      expect(openings(1)).toEqual([30, 30]);
+      expect(openings(2)).toEqual([5, 5]);
+      const out = db.tables.inventoryAdjustment.find((a) => a.id === pullOut.id)!;
+      expect(out.transferStatus).toBe('REJECTED');
+      expect(out.deletedAt).toBeInstanceOf(Object); // soft, not destroyed
+      expect(out.respondedById).toBe(12);
+    });
+
+    it('cannot follow an accept', async () => {
+      const { src, dst } = seed();
+      const { pullOut } = await send(src, dst);
+      await service.acceptTransfer(pullOut.id, atBranch(2) as never);
+
+      await expect(
+        service.rejectTransfer(pullOut.id, atBranch(2) as never),
+      ).rejects.toThrow(ConflictException);
+    });
+  });
+
+  describe('pending list', () => {
+    it('shows a branch what is coming in and what it sent, and who may answer', async () => {
+      const { src, dst } = seed();
+      await send(src, dst, 10, atBranch(1));
+
+      const forReceiver = await service.listPending(atBranch(2) as never);
+      const forSender = await service.listPending(atBranch(1) as never);
+
+      expect(forReceiver).toEqual([
+        expect.objectContaining({ value: 10, direction: 'incoming', canRespond: true }),
+      ]);
+      expect(forSender).toEqual([
+        expect.objectContaining({ value: 10, direction: 'outgoing', canRespond: false }),
+      ]);
+    });
+
+    it('drops a transfer once answered', async () => {
+      const { src, dst } = seed();
+      const { pullOut } = await send(src, dst);
+      await service.acceptTransfer(pullOut.id, admin as never);
+
+      expect(await service.listPending(admin as never)).toEqual([]);
+    });
+
+    it('drops a transfer the sender cancelled', async () => {
+      const { src, dst } = seed();
+      const { pullOut } = await send(src, dst);
+
+      await service.remove(pullOut.id, admin as never);
+
+      expect(await service.listPending(admin as never)).toEqual([]);
+      expect(openings(1)).toEqual([30, 30]);
+    });
+  });
+
+  describe('accepted transfers', () => {
+    it('puts the stock back on both sides when deleted', async () => {
+      const { src, dst } = seed();
+      const { pullOut } = await send(src, dst);
+      await service.acceptTransfer(pullOut.id, admin as never);
+
+      await service.remove(pullOut.id, admin as never);
+
+      expect(openings(1)).toEqual([30, 30]);
+      expect(openings(2)).toEqual([5, 5]);
+    });
   });
 
   it('carries a standalone pull-out forward', async () => {

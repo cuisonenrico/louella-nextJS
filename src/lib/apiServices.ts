@@ -40,6 +40,7 @@ import type {
   SaleSummary,
   Supplier,
   SuggestionPeriod,
+  PendingTransfer,
   TransferResult,
   UnitConversion,
   User,
@@ -237,6 +238,14 @@ export const inventoryAdjustmentsApi = {
     api.post<InventoryAdjustment>('/inventory-adjustments', data),
   transfer: (data: { fromInventoryId: number; toInventoryId: number; value: number; notes?: string }) =>
     api.post<TransferResult>('/inventory-adjustments/transfer', data),
+  pendingTransfers: (branchId?: number) =>
+    api.get<PendingTransfer[]>('/inventory-adjustments/transfers/pending', {
+      params: branchId != null ? { branchId } : undefined,
+    }),
+  acceptTransfer: (id: number) =>
+    api.post<TransferResult>(`/inventory-adjustments/${id}/accept`),
+  rejectTransfer: (id: number) =>
+    api.post<{ status: 'REJECTED' }>(`/inventory-adjustments/${id}/reject`),
   update: (id: number, data: { type?: InventoryAdjustment['type']; value?: number; notes?: string }) =>
     api.patch<InventoryAdjustment>(`/inventory-adjustments/${id}`, data),
   delete: (id: number) => api.delete(`/inventory-adjustments/${id}`),

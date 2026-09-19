@@ -38,7 +38,10 @@ const ADJUSTMENTS: Partial<Record<keyof Tables, { table: keyof Tables; fk: strin
 
 /** Parent rows attached by `include`/`select: { <name> }` on a child. */
 const PARENTS: Partial<Record<keyof Tables, Record<string, { table: keyof Tables; fk: string }>>> = {
-  inventoryAdjustment: { inventory: { table: 'inventory', fk: 'inventoryId' } },
+  inventoryAdjustment: {
+    inventory: { table: 'inventory', fk: 'inventoryId' },
+    transferTo: { table: 'inventory', fk: 'transferToInventoryId' },
+  },
   materialAdjustment: { materialInventory: { table: 'materialInventory', fk: 'materialInventoryId' } },
 };
 
@@ -257,7 +260,8 @@ function makeModel(db: FakeStockDb, table: keyof Tables) {
     for (const [name, rel] of Object.entries(PARENTS[table] ?? {})) {
       if (wants[name]) {
         const parent = db.tables[rel.table].find((r) => r.id === row[rel.fk]);
-        out[name] = parent ? { ...parent } : null;
+        const spec = wants[name] === true ? {} : wants[name];
+        out[name] = parent ? db[rel.table].shapeRow(parent, spec) : null;
       }
     }
     for (const name of ['branch', 'product', 'material']) {
@@ -267,6 +271,8 @@ function makeModel(db: FakeStockDb, table: keyof Tables) {
   };
 
   return {
+    /** Shape a row as a read with these include/select args would. */
+    shapeRow: (row: Row, args: Row) => shape(row, args),
     findUnique: async (args: Row) => shape(findByUnique(args.where), args),
     findUniqueOrThrow: async (args: Row) => {
       const row = findByUnique(args.where);

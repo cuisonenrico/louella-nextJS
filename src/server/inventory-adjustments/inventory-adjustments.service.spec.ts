@@ -524,14 +524,12 @@ describe('InventoryAdjustmentsService', () => {
       prisma.inventory.findFirst.mockResolvedValueOnce(
         makeInvRow({ quantity: 100, delivery: 20 }),
       );
-      prisma.$transaction.mockResolvedValue({
-        pullOut: { id: 1 },
-        pullIn: { id: 2 },
-      });
+      prisma.inventoryAdjustment.create.mockResolvedValue({ id: 1 });
 
       await expect(service.transfer(dto, scoped(1))).resolves.toEqual({
         pullOut: { id: 1 },
-        pullIn: { id: 2 },
+        pullIn: null,
+        status: 'PENDING',
       });
     });
 
@@ -548,60 +546,28 @@ describe('InventoryAdjustmentsService', () => {
       expect(prisma.inventoryAdjustment.create).not.toHaveBeenCalled();
     });
 
-    it('writes a linked, positive-valued pair in one transaction', async () => {
+    // The receiver must confirm (decision 2026-09-19): sending books only the
+    // sender's leg. The destination is credited on accept.
+    it('books only the sender’s pull-out, marked pending, pointing at the destination', async () => {
       mockEnds(makeInvRow(), makeInvRow({ id: 2, branchId: 2 }));
       prisma.inventory.findFirst.mockResolvedValueOnce(makeInvRow());
-
-      const tx = {
-        inventory: {
-          findMany: jest.fn().mockResolvedValue([]),
-          // The source's stock, read under the chains' locks.
-          findFirst: jest.fn().mockResolvedValue(makeInvRow()),
-        },
-        inventoryAdjustment: {
-          create: jest
-            .fn()
-            .mockResolvedValueOnce({ id: 11 })
-            .mockResolvedValueOnce({ id: 12 }),
-          update: jest.fn().mockResolvedValue({ id: 11, linkedAdjustmentId: 12 }),
-        },
-      };
-      prisma.$transaction.mockImplementation((fn: (t: typeof tx) => unknown) =>
-        fn(tx),
-      );
+      prisma.inventoryAdjustment.create.mockResolvedValue({ id: 11 });
 
       const result = await service.transfer(dto, unscoped());
 
-      // Source leg: PULL_OUT, magnitude positive — the sign lives in the formula.
-      expect(tx.inventoryAdjustment.create).toHaveBeenNthCalledWith(1, {
+      expect(prisma.inventoryAdjustment.create).toHaveBeenCalledTimes(1);
+      expect(prisma.inventoryAdjustment.create).toHaveBeenCalledWith({
         data: {
           inventoryId: 1,
           type: 'PULL_OUT',
           value: 10,
           notes: 'cover Cubao',
           createdById: 1,
+          transferStatus: 'PENDING',
+          transferToInventoryId: 2,
         },
       });
-      // Destination leg: PULL_IN, also positive, pointing back at the source.
-      expect(tx.inventoryAdjustment.create).toHaveBeenNthCalledWith(2, {
-        data: {
-          inventoryId: 2,
-          type: 'PULL_IN',
-          value: 10,
-          notes: 'cover Cubao',
-          linkedAdjustmentId: 11,
-          createdById: 1,
-        },
-      });
-      // And the link is closed in the other direction.
-      expect(tx.inventoryAdjustment.update).toHaveBeenCalledWith({
-        where: { id: 11 },
-        data: { linkedAdjustmentId: 12 },
-      });
-      expect(result).toEqual({
-        pullOut: { id: 11, linkedAdjustmentId: 12 },
-        pullIn: { id: 12 },
-      });
+      expect(result).toEqual({ pullOut: { id: 11 }, pullIn: null, status: 'PENDING' });
     });
   });
 

@@ -7,6 +7,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
@@ -44,12 +45,50 @@ export class InventoryAdjustmentsController {
   @RequireFeature('inventory-adjustments:transfer')
   @Roles(UserRole.INVENTORY)
   @ApiOperation({
-    summary: 'Transfer stock between two branches',
+    summary: 'Send stock to another branch (pending until the receiver accepts)',
     description:
-      'Atomically creates a linked PULL_OUT on the source inventory and a PULL_IN on the destination inventory. Both records must track the same product.',
+      'Books a PENDING PULL_OUT on the source inventory at once. The PULL_IN on the destination is created when the receiving branch accepts (POST /:id/accept); rejecting (POST /:id/reject) reverses the PULL_OUT. Both records must track the same product and day.',
   })
   transfer(@Body() dto: CreateTransferDto, @CurrentUser() user: RequestUser) {
     return this.inventoryAdjustmentsService.transfer(dto, user);
+  }
+
+  /**
+   * Transfers awaiting the receiving branch's answer. A branch-scoped caller
+   * sees their branch's incoming and outgoing ones.
+   */
+  @Get('transfers/pending')
+  listPendingTransfers(
+    @CurrentUser() user: RequestUser,
+    @Query('branchId') branchIdStr?: string,
+  ) {
+    const parsed = branchIdStr ? Number.parseInt(branchIdStr, 10) : undefined;
+    return this.inventoryAdjustmentsService.listPending(
+      user,
+      Number.isFinite(parsed) ? parsed : undefined,
+    );
+  }
+
+  /** The receiving branch confirms a transfer arrived. */
+  @Post(':id/accept')
+  @RequireFeature('inventory-adjustments:transfer')
+  @Roles(UserRole.INVENTORY)
+  acceptTransfer(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.inventoryAdjustmentsService.acceptTransfer(id, user);
+  }
+
+  /** The receiving branch says a transfer did not arrive; the sender is credited back. */
+  @Post(':id/reject')
+  @RequireFeature('inventory-adjustments:transfer')
+  @Roles(UserRole.INVENTORY)
+  rejectTransfer(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.inventoryAdjustmentsService.rejectTransfer(id, user);
   }
 
   @Get('inventory/:inventoryId')

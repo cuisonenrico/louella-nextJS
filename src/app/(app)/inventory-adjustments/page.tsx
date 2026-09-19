@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import QueryError from '@/components/QueryError';
 import { TableRowsSkeleton } from '@/components/loading/Skeletons';
+import PendingTransfersPanel from '../inventory/components/PendingTransfersPanel';
 
 const ADJ_TYPES: AdjustmentType[] = ['PULL_IN', 'PULL_OUT', 'ANOMALY'];
 
@@ -155,6 +156,8 @@ export default function InventoryAdjustmentsPage() {
             />
           </div>
         </div>
+
+        <PendingTransfersPanel branchId={bid || null} />
 
         <Card>
           <Table>

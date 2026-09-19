@@ -1,11 +1,16 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { assertBranchAccess } from '../common/utils/branch-access';
+import {
+  assertBranchAccess,
+  hasAllBranches,
+  resolveBranchScope,
+} from '../common/utils/branch-access';
 import {
   lockInventoryChains,
   reconcileInventoryChains,
@@ -183,6 +188,18 @@ export class InventoryAdjustmentsService {
     const existing = await this.branchOfAdjustment(id);
     this.assertBranchAccess(user, existing.inventory.branchId);
 
+    // A pending transfer is still a transfer: its type is fixed, though the
+    // sender may correct the quantity until the receiver answers.
+    if (
+      existing.transferStatus === 'PENDING' &&
+      dto.type !== undefined &&
+      dto.type !== existing.type
+    ) {
+      throw new BadRequestException(
+        'Cannot change the type of a pending transfer. Cancel it and create a new one.',
+      );
+    }
+
     // A transfer is one movement recorded as two opposite, equal legs. Letting
     // one leg drift breaks that invariant: a re-typed leg would have both
     // branches pulling the same direction, and a re-valued leg would move more
@@ -329,9 +346,14 @@ export class InventoryAdjustmentsService {
   }
 
   /**
-   * Atomically transfers stock between two inventory records (same product required).
-   * Creates a PULL_OUT on the source and a matching PULL_IN on the destination,
-   * linked via linkedAdjustmentId so the relationship is visible in both directions.
+   * Send stock to another branch. The receiving branch must accept it.
+   *
+   * The stock leaves the sender now — it is physically on its way — so the
+   * sender's PULL_OUT is booked immediately and marked PENDING. Nothing is
+   * added to the receiver until someone there accepts (decision 2026-09-19):
+   * a transfer used to credit the destination the moment the sender typed
+   * it, raising that branch's computed sales with no one there confirming the
+   * stock arrived.
    */
   async transfer(dto: CreateTransferDto, user?: RequestUser) {
     const [from, to] = await Promise.all([
@@ -370,17 +392,12 @@ export class InventoryAdjustmentsService {
       );
     }
 
-    // Scoped on the source only. A transfer is by definition cross-branch, so
-    // requiring both ends would deny it outright to a branch manager — who
-    // holds `inventory-adjustments:transfer` by default and is meant to push
-    // their own stock out. Owning the source is the real boundary: it stops a
-    // scoped user pulling stock *from* a branch that is not theirs.
+    // Scoped on the source: a branch manager pushes their own stock out. The
+    // destination is protected by acceptance, which is scoped to it.
     this.assertBranchAccess(user, from.branchId);
 
-    // Create both adjustments and link them in one interactive transaction,
-    // with the source's stock checked under the chains' locks.
-    const { pullOut, pullIn } = await this.prisma.$transaction(async (tx) => {
-      await this.lockRows(tx, [dto.fromInventoryId, dto.toInventoryId]);
+    const pullOut = await this.prisma.$transaction(async (tx) => {
+      await this.lockRows(tx, [dto.fromInventoryId]);
       await this.assertStockAvailable(tx, dto.fromInventoryId, dto.value);
       const out = await tx.inventoryAdjustment.create({
         data: {
@@ -389,26 +406,171 @@ export class InventoryAdjustmentsService {
           value: dto.value,
           notes: dto.notes ?? null,
           createdById: user?.id ?? null,
+          transferStatus: 'PENDING',
+          transferToInventoryId: dto.toInventoryId,
         },
       });
-      const inn = await tx.inventoryAdjustment.create({
+      await this.carryForward(tx, [dto.fromInventoryId]);
+      return out;
+    }, WRITE_TX_OPTIONS);
+
+    return { pullOut, pullIn: null, status: 'PENDING' as const };
+  }
+
+  /** Load a pending transfer and check the caller may answer for its destination. */
+  private async pendingTransfer(id: number, user?: RequestUser) {
+    const out = await this.prisma.inventoryAdjustment.findFirst({
+      where: { id, deletedAt: null },
+      include: {
+        transferTo: { select: { id: true, branchId: true, deletedAt: true } },
+      },
+    });
+    if (!out || out.transferStatus === null) {
+      throw new NotFoundException('Transfer not found');
+    }
+    if (out.transferStatus !== 'PENDING') {
+      throw new ConflictException(
+        `This transfer was already ${out.transferStatus.toLowerCase()}.`,
+      );
+    }
+    if (!out.transferTo || out.transferTo.deletedAt !== null) {
+      throw new NotFoundException(
+        'The destination day no longer exists. Reject the transfer, or cancel it from the sending branch.',
+      );
+    }
+    // Only the receiving branch answers (or someone who sees every branch).
+    this.assertBranchAccess(user, out.transferTo.branchId);
+    return out as typeof out & { transferTo: { id: number; branchId: number } };
+  }
+
+  /**
+   * The receiving branch confirms the stock arrived: its PULL_IN is booked
+   * now, linked to the sender's PULL_OUT, and both legs read ACCEPTED.
+   */
+  async acceptTransfer(id: number, user?: RequestUser) {
+    const out = await this.pendingTransfer(id, user);
+    const destinationId = out.transferTo.id;
+
+    return this.prisma.$transaction(async (tx) => {
+      await this.lockRows(tx, [out.inventoryId, destinationId]);
+      // Claim the answer: of two clicks, or an accept racing a reject, only
+      // one moves the transfer off PENDING.
+      const claimed = await tx.inventoryAdjustment.updateMany({
+        where: { id, transferStatus: 'PENDING', deletedAt: null },
         data: {
-          inventoryId: dto.toInventoryId,
+          transferStatus: 'ACCEPTED',
+          respondedById: user?.id ?? null,
+          respondedAt: new Date(),
+        },
+      });
+      if (claimed.count !== 1) {
+        throw new ConflictException('This transfer was already answered or cancelled.');
+      }
+      // The value as it stands now: the sender may have corrected it.
+      const current = await tx.inventoryAdjustment.findUniqueOrThrow({ where: { id } });
+      const pullIn = await tx.inventoryAdjustment.create({
+        data: {
+          inventoryId: destinationId,
           type: 'PULL_IN',
-          value: dto.value,
-          notes: dto.notes ?? null,
-          linkedAdjustmentId: out.id,
+          value: current.value,
+          notes: current.notes,
+          linkedAdjustmentId: id,
+          transferStatus: 'ACCEPTED',
           createdById: user?.id ?? null,
         },
       });
-      const linked = await tx.inventoryAdjustment.update({
-        where: { id: out.id },
-        data: { linkedAdjustmentId: inn.id },
+      const pullOut = await tx.inventoryAdjustment.update({
+        where: { id },
+        data: { linkedAdjustmentId: pullIn.id },
       });
-      await this.carryForward(tx, [dto.fromInventoryId, dto.toInventoryId]);
-      return { pullOut: linked, pullIn: inn };
+      await this.carryForward(tx, [destinationId]);
+      return { pullOut, pullIn, status: 'ACCEPTED' as const };
     }, WRITE_TX_OPTIONS);
+  }
 
-    return { pullOut, pullIn };
+  /**
+   * The receiving branch says the stock did not arrive: the sender's
+   * PULL_OUT is reversed (soft-deleted, so the record remains), and the
+   * transfer reads REJECTED.
+   */
+  async rejectTransfer(id: number, user?: RequestUser) {
+    const out = await this.pendingTransfer(id, user);
+
+    return this.prisma.$transaction(async (tx) => {
+      await this.lockRows(tx, [out.inventoryId]);
+      const claimed = await tx.inventoryAdjustment.updateMany({
+        where: { id, transferStatus: 'PENDING', deletedAt: null },
+        data: {
+          transferStatus: 'REJECTED',
+          respondedById: user?.id ?? null,
+          respondedAt: new Date(),
+          deletedAt: new Date(),
+        },
+      });
+      if (claimed.count !== 1) {
+        throw new ConflictException('This transfer was already answered or cancelled.');
+      }
+      await this.carryForward(tx, [out.inventoryId]);
+      return { status: 'REJECTED' as const };
+    }, WRITE_TX_OPTIONS);
+  }
+
+  /**
+   * Transfers awaiting an answer, for the sheets and dashboard to flag.
+   *
+   * A branch-scoped caller sees what is coming in to their branch (which they
+   * can accept or reject) and what they sent that is still unanswered.
+   */
+  async listPending(user?: RequestUser, branchId?: number) {
+    const scope = resolveBranchScope(user, branchId);
+    const rows = await this.prisma.inventoryAdjustment.findMany({
+      where: {
+        transferStatus: 'PENDING',
+        deletedAt: null,
+        ...(scope != null
+          ? {
+              OR: [
+                { inventory: { branchId: scope } },
+                { transferTo: { branchId: scope } },
+              ],
+            }
+          : {}),
+      },
+      orderBy: { createdAt: 'asc' },
+      include: {
+        inventory: {
+          select: {
+            id: true,
+            date: true,
+            branch: { select: { id: true, name: true } },
+            product: { select: { id: true, name: true } },
+          },
+        },
+        transferTo: {
+          select: { id: true, branch: { select: { id: true, name: true } } },
+        },
+      },
+    });
+
+    return rows.map((r) => {
+      const toBranchId = r.transferTo?.branch.id ?? null;
+      return {
+        id: r.id,
+        value: r.value,
+        notes: r.notes,
+        createdAt: r.createdAt,
+        date: r.inventory.date,
+        product: r.inventory.product,
+        fromBranch: r.inventory.branch,
+        toBranch: r.transferTo?.branch ?? null,
+        direction:
+          scope == null ? null : toBranchId === scope ? 'incoming' : 'outgoing',
+        // Only the receiving branch answers, or someone who sees every branch.
+        canRespond:
+          toBranchId != null &&
+          (hasAllBranches(user) || user?.branchId === toBranchId),
+      };
+    });
   }
 }
+

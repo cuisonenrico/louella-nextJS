@@ -62,6 +62,16 @@ enum AdjustmentType {
   ANOMALY
 }
 
+/// A branch transfer's state. Stock leaves the sender when the transfer is
+/// sent (its PULL_OUT counts at once); the receiver's PULL_IN is only created
+/// when the receiving branch accepts. Null on adjustments that are not
+/// transfers.
+enum TransferStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
 model User {
   id                 Int            @id @default(autoincrement())
   email              String         @unique
@@ -86,6 +96,7 @@ model User {
   productionOrders         ProductionOrder[]   @relation("ProductionOrderCreatedBy")
   inventoryAdjustments     InventoryAdjustment[] @relation("InventoryAdjustmentCreatedBy")
   inventoryAdjustmentEdits InventoryAdjustment[] @relation("InventoryAdjustmentUpdatedBy")
+  transferResponses        InventoryAdjustment[] @relation("TransferRespondedBy")
   materialAdjustments      MaterialAdjustment[]  @relation("MaterialAdjustmentCreatedBy")
   deviceTokens             DeviceToken[]
   importLogs               ImportLog[]         @relation("ImportLogCreatedBy")
@@ -287,6 +298,7 @@ model Inventory {
   createdBy   User?                 @relation("InventoryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   updatedBy   User?                 @relation("InventoryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
   adjustments InventoryAdjustment[]
+  incomingTransfers InventoryAdjustment[] @relation("TransferDestination")
 
   @@unique([branchId, productId, date])
   @@index([branchId])
@@ -311,11 +323,19 @@ model InventoryAdjustment {
   linkedAdjustmentId  Int?           // paired transfer counterpart (PULL_OUT ↔ PULL_IN)
   createdById         Int?           // user who entered this adjustment
   updatedById         Int?           // user who last revised it
+  // Transfers only. On the sender's PULL_OUT: where the stock is going, and
+  // whether the receiving branch has accepted it (see TransferStatus).
+  transferStatus        TransferStatus?
+  transferToInventoryId Int?
+  respondedById         Int?      // receiver who accepted or rejected
+  respondedAt           DateTime?
   createdAt           DateTime       @default(now())
   updatedAt           DateTime       @updatedAt
   deletedAt           DateTime?
 
   inventory        Inventory            @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  transferTo       Inventory?           @relation("TransferDestination", fields: [transferToInventoryId], references: [id], onDelete: SetNull)
+  respondedBy      User?                @relation("TransferRespondedBy", fields: [respondedById], references: [id], onDelete: SetNull)
   linkedAdjustment InventoryAdjustment? @relation("TransferLink", fields: [linkedAdjustmentId], references: [id], onDelete: SetNull)
   linkedBy         InventoryAdjustment[] @relation("TransferLink")
   createdBy        User?                @relation("InventoryAdjustmentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
@@ -325,6 +345,9 @@ model InventoryAdjustment {
   @@index([linkedAdjustmentId])
   @@index([createdById])
   @@index([updatedById])
+  @@index([transferToInventoryId])
+  @@index([transferStatus])
+  @@index([respondedById])
 }
 
 // ---------------------------------------------------------------------------

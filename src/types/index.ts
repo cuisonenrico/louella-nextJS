@@ -84,13 +84,36 @@ export interface InventoryAdjustment {
   value: number;
   notes: string | null;
   linkedAdjustmentId: number | null;
+  /** Transfers only: the receiving branch accepts before it is credited. */
+  transferStatus?: TransferStatus | null;
+  transferToInventoryId?: number | null;
   createdAt: string;
   updatedAt: string;
 }
 
+export type TransferStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED';
+
+/** Sending books the sender's PULL_OUT; the PULL_IN only exists once accepted. */
 export interface TransferResult {
   pullOut: InventoryAdjustment;
-  pullIn: InventoryAdjustment;
+  pullIn: InventoryAdjustment | null;
+  status: TransferStatus;
+}
+
+/** A transfer awaiting the receiving branch (GET /inventory-adjustments/transfers/pending). */
+export interface PendingTransfer {
+  id: number;
+  value: number;
+  notes: string | null;
+  createdAt: string;
+  date: string;
+  product: { id: number; name: string };
+  fromBranch: { id: number; name: string };
+  toBranch: { id: number; name: string } | null;
+  /** Relative to the caller's branch; null for callers who see every branch. */
+  direction: 'incoming' | 'outgoing' | null;
+  /** True when the caller may accept or reject it. */
+  canRespond: boolean;
 }
 
 export interface Inventory {
