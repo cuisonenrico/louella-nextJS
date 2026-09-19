@@ -1,6 +1,5 @@
 import { UnprocessableEntityException } from '@nestjs/common';
-import { MeasurementUnit } from '@prisma/client';
-import { PrismaService } from '../../prisma/prisma.service';
+import { MeasurementUnit, Prisma } from '@prisma/client';
 
 export function dateKey(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -22,7 +21,8 @@ function pairKey(fromUnit: MeasurementUnit, toUnit: MeasurementUnit): string {
  * refuses instead of guessing.
  */
 export async function getConversionFactorMap(
-  prisma: PrismaService,
+  // A transaction client works too, so reads can share the caller's snapshot.
+  prisma: Pick<Prisma.TransactionClient, 'unitConversion'>,
   pairs: UnitPair[],
 ): Promise<Map<string, number>> {
   const map = new Map<string, number>();

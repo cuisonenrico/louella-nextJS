@@ -1,23 +1,31 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma, ProductionOrderStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-
-// Branch where production yield records are attributed (central kitchen).
-// Set PRODUCTION_BRANCH_ID in env if branch 1 is not the production kitchen.
-const PRODUCTION_BRANCH_ID = parseInt(
-  process.env.PRODUCTION_BRANCH_ID ?? '1',
-  10,
-);
+import { ProductionService } from '../production/production.service';
+import { InventoryService } from '../inventory/inventory.service';
+import { toUtcDay } from '../common/utils/date-range.util';
 import { CreateProductionOrderDto } from './dto/create-production-order.dto';
 import { UpdateProductionOrderDto } from './dto/update-production-order.dto';
 
+/**
+ * Finalization writes one kitchen yield, one material card per ingredient and
+ * one delivery (plus carry-forward) per item, sequentially inside a single
+ * interactive transaction. Prisma's 5 s default is too tight for a full order.
+ */
+const FINALIZE_TX_OPTIONS = { timeout: 30_000, maxWait: 10_000 };
+
 @Injectable()
 export class ProductionOrdersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly production: ProductionService,
+    private readonly inventory: InventoryService,
+  ) {}
 
   private readonly defaultInclude = {
     items: {
@@ -49,7 +57,7 @@ export class ProductionOrdersService {
     return this.prisma.productionOrder.create({
       data: {
         branchId: dto.branchId,
-        date: new Date(dto.date),
+        date: toUtcDay(dto.date),
         notes: dto.notes,
         createdById: userId,
         items: {
@@ -85,7 +93,7 @@ export class ProductionOrdersService {
   async findByDate(date: string, branchId?: number) {
     return this.prisma.productionOrder.findMany({
       where: {
-        date: new Date(date),
+        date: toUtcDay(date),
         deletedAt: null,
         ...(branchId ? { branchId } : {}),
       },
@@ -111,6 +119,7 @@ export class ProductionOrdersService {
     id: number,
     dto: UpdateProductionOrderDto,
     branchScope?: number,
+    userId?: number,
   ) {
     const existing = await this.findOne(id, branchScope);
 
@@ -127,20 +136,25 @@ export class ProductionOrdersService {
       await this.ensureActiveBranch(dto.branchId);
     }
 
-    // Determine the effective items after this update (for production yield upsert)
-    const effectiveItems = dto.items
-      ? dto.items.map((item) => ({
-          productId: item.productId,
-          yield: item.yield ?? 0,
-        }))
-      : existing.items.map((item) => ({
-          productId: item.productId,
-          yield: item.yield,
-        }));
+    // Order edit and finalization commit together, so an order can never be
+    // FINALIZED without its yield, deliveries and material use booked.
+    return this.prisma.$transaction(async (tx) => {
+      if (isBeingFinalized) {
+        // Claim the transition before booking anything. Finalizing *adds*
+        // stock, so a second finalize (a double-click, a retry) must not get
+        // through the status check above, which ran outside this transaction.
+        // Only one request can move the row off DRAFT.
+        const claimed = await tx.productionOrder.updateMany({
+          where: { id, status: ProductionOrderStatus.DRAFT, deletedAt: null },
+          data: { status: ProductionOrderStatus.FINALIZED },
+        });
+        if (claimed.count !== 1) {
+          throw new ConflictException(
+            'This production order was already finalized or cancelled.',
+          );
+        }
+      }
 
-    // Order status update + finalization upserts in a single transaction so a
-    // crash cannot leave an order marked FINALIZED without inventory being updated.
-    const updatedOrder = await this.prisma.$transaction(async (tx) => {
       const order = await tx.productionOrder.update({
         where: { id },
         data: {
@@ -162,69 +176,47 @@ export class ProductionOrdersService {
         include: this.defaultInclude,
       });
 
-      if (isBeingFinalized && effectiveItems.length > 0) {
-        await this.applyFinalization(
-          tx,
-          existing.date,
-          existing.branchId,
-          effectiveItems,
-        );
+      if (isBeingFinalized) {
+        // The order as just saved: its items and, if this same request moved
+        // it, its new branch rather than the one it had before.
+        await this.applyFinalization(tx, order, userId);
       }
 
       return order;
-    });
-
-    return updatedOrder;
+    }, FINALIZE_TX_OPTIONS);
   }
 
+  /**
+   * Book a finalized order: the kitchen made it, the branch received it.
+   *
+   * Both are *added* to what is already recorded for the day, so several
+   * orders for the same product and date sum (decision 2026-09-19). Material
+   * consumption follows the kitchen yield, exactly as a production-sheet save
+   * does.
+   */
   private async applyFinalization(
     tx: Prisma.TransactionClient,
-    orderDate: Date,
-    deliveryBranchId: number | null,
-    effectiveItems: Array<{ productId: number; yield: number }>,
+    order: {
+      date: Date;
+      branchId: number | null;
+      items: Array<{ productId: number; yield: number }>;
+    },
+    userId?: number,
   ): Promise<void> {
-    const yieldedItems = effectiveItems.filter((item) => item.yield > 0);
+    const items = order.items
+      .filter((item) => item.yield > 0)
+      .map((item) => ({ productId: item.productId, quantity: item.yield }));
+    if (items.length === 0) return;
 
-    for (const item of yieldedItems) {
-      await tx.production.upsert({
-        where: {
-          branchId_productId_date: {
-            branchId: PRODUCTION_BRANCH_ID,
-            productId: item.productId,
-            date: orderDate,
-          },
-        },
-        update: { yield: item.yield },
-        create: {
-          branchId: PRODUCTION_BRANCH_ID,
-          productId: item.productId,
-          date: orderDate,
-          yield: item.yield,
-          isAutoGenerated: false,
-        },
-      });
+    await this.production.addOrderYield(tx, order.date, items, userId);
 
-      if (deliveryBranchId) {
-        await tx.inventory.upsert({
-          where: {
-            branchId_productId_date: {
-              branchId: deliveryBranchId,
-              productId: item.productId,
-              date: orderDate,
-            },
-          },
-          update: { delivery: item.yield },
-          create: {
-            branchId: deliveryBranchId,
-            productId: item.productId,
-            date: orderDate,
-            quantity: 0,
-            delivery: item.yield,
-            leftover: 0,
-            reject: 0,
-            isAutoGenerated: false,
-          },
-        });
+    if (order.branchId) {
+      for (const item of items) {
+        await this.inventory.addDeliveryInTx(
+          tx,
+          { branchId: order.branchId, productId: item.productId, date: order.date },
+          item.quantity,
+        );
       }
     }
   }
@@ -247,7 +239,7 @@ export class ProductionOrdersService {
   async getPlannedYieldByDate(date: string, branchId?: number) {
     const orders = await this.prisma.productionOrder.findMany({
       where: {
-        date: new Date(date),
+        date: toUtcDay(date),
         status: { not: ProductionOrderStatus.CANCELLED },
         deletedAt: null,
         ...(branchId ? { branchId } : {}),
@@ -283,13 +275,14 @@ export class ProductionOrdersService {
     branchId: number,
     dateStr: string,
   ): Promise<void> {
-    const date = new Date(`${dateStr}T00:00:00.000Z`);
+    const date = toUtcDay(dateStr);
 
     const [products, existing] = await Promise.all([
       this.prisma.product.findMany({
         where: { deletedAt: null, isActive: true },
         select: { id: true },
       }),
+      // Not filtered by deletedAt: a deleted row still owns its slot.
       this.prisma.inventory.findMany({
         where: { branchId, date },
         select: { productId: true },
@@ -300,38 +293,38 @@ export class ProductionOrdersService {
     const missing = products.filter((p) => !existingSet.has(p.id));
     if (missing.length === 0) return;
 
-    const missingIds = missing.map((p) => p.id);
-    const priorEntries = await this.prisma.inventory.findMany({
-      where: { branchId, productId: { in: missingIds }, date: { lt: date } },
-      orderBy: { date: 'desc' },
-      select: { productId: true, leftover: true },
-    });
-    const priorMap = new Map<number, number>();
-    for (const e of priorEntries) {
-      if (!priorMap.has(e.productId)) priorMap.set(e.productId, e.leftover);
-    }
+    // Newest live prior row per product, resolved in the database. This used
+    // to fetch every prior row for every missing product, deleted ones
+    // included, so a soft-deleted day could seed the opening balance.
+    const priorEntries = await this.prisma.$queryRaw<
+      Array<{ productId: number; leftover: number }>
+    >`
+      SELECT DISTINCT ON ("productId") "productId", "leftover"
+      FROM "Inventory"
+      WHERE "branchId" = ${branchId}
+        AND "productId" IN (${Prisma.join(missing.map((p) => p.id))})
+        AND "date" < ${date}
+        AND "deletedAt" IS NULL
+      ORDER BY "productId", "date" DESC
+    `;
+    const priorMap = new Map(priorEntries.map((e) => [e.productId, e.leftover]));
 
-    await this.prisma.$transaction(
-      missing.map((p) => {
+    await this.prisma.inventory.createMany({
+      data: missing.map((p) => {
         const prevLeftover = priorMap.get(p.id) ?? 0;
-        return this.prisma.inventory.upsert({
-          where: {
-            branchId_productId_date: { branchId, productId: p.id, date },
-          },
-          update: {},
-          create: {
-            branchId,
-            productId: p.id,
-            date,
-            quantity: prevLeftover,
-            delivery: 0,
-            leftover: prevLeftover,
-            reject: 0,
-            isAutoGenerated: true,
-            notes: `Auto-initialized for production order on ${dateStr}`,
-          },
-        });
+        return {
+          branchId,
+          productId: p.id,
+          date,
+          quantity: prevLeftover,
+          delivery: 0,
+          leftover: prevLeftover,
+          reject: 0,
+          isAutoGenerated: true,
+          notes: `Auto-initialized for production order on ${dateStr}`,
+        };
       }),
-    );
+      skipDuplicates: true,
+    });
   }
 }

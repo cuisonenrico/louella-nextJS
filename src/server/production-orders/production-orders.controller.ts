@@ -117,9 +117,15 @@ export class ProductionOrdersController {
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateProductionOrderDto,
+    @CurrentUser() user: { id: number },
     @Query('branchId') branchId?: string,
   ) {
-    return this.service.update(id, dto, this.parseOptionalBranchId(branchId));
+    return this.service.update(
+      id,
+      dto,
+      this.parseOptionalBranchId(branchId),
+      user?.id,
+    );
   }
 
   @Delete(':id')

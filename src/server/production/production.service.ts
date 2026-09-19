@@ -17,8 +17,8 @@ import { toUtcDay } from '../common/utils/date-range.util';
 
 // Branch that owns production when an entry omits a branch. Materials are global
 // (central kitchen), so this only affects which branch a yield is attributed to.
-// Keep in sync with PRODUCTION_BRANCH_ID in production-orders.service.ts.
-const PRODUCTION_BRANCH_ID = parseInt(
+// Finalized production orders also book their yield here (addOrderYield).
+export const PRODUCTION_BRANCH_ID = parseInt(
   process.env.PRODUCTION_BRANCH_ID ?? '1',
   10,
 );
@@ -142,69 +142,122 @@ export class ProductionService {
   }
 
   /**
-   * Calculates how much of each material is consumed by a given yield,
-   * then increments (or decrements) MaterialInventory.used by the delta
-   * for the specific production date.
+   * Consume (or, for a negative delta, return) materials for yield changes,
+   * inside the caller's transaction.
+   *
+   * The one place the consumption formula lives for single-row writes:
+   *   used += Δyield × recipeItem.quantity × factor / recipeYield
+   * Recipes are read through `tx` too, so the recipe and the stock it moves
+   * are seen consistently. Deleted recipes do not consume.
    */
-  private async updateMaterialUsed(
+  private async consumeMaterials(
+    tx: Prisma.TransactionClient,
+    changes: Array<{ productId: number; date: Date; delta: number }>,
+  ): Promise<void> {
+    const moving = changes.filter((c) => c.delta !== 0);
+    if (moving.length === 0) return;
+
+    const recipes = await tx.recipe.findMany({
+      where: {
+        productId: { in: [...new Set(moving.map((c) => c.productId))] },
+        deletedAt: null,
+      },
+      include: { recipeItems: { include: { material: true } } },
+    });
+    const recipeByProduct = new Map(recipes.map((r) => [r.productId, r]));
+
+    const conversionMap = await getConversionFactorMap(
+      tx,
+      recipes.flatMap((r) =>
+        r.recipeItems.map((i) => ({ fromUnit: i.unit, toUnit: i.material.unit })),
+      ),
+    );
+
+    // Sum per material and day first: two products sharing flour on one day
+    // is one write, not two.
+    const byCard = new Map<string, { materialId: number; date: Date; delta: number }>();
+    for (const change of moving) {
+      const recipe = recipeByProduct.get(change.productId);
+      if (!recipe) continue;
+      for (const item of recipe.recipeItems) {
+        const factor = requireFactor(
+          conversionMap,
+          item.unit,
+          item.material.unit,
+          item.material.name,
+        );
+        const delta =
+          (change.delta * item.quantity * factor) / recipe.recipeYield;
+        if (delta === 0) continue;
+        const key = `${item.material.id}:${change.date.toISOString()}`;
+        const entry = byCard.get(key);
+        if (entry) entry.delta += delta;
+        else byCard.set(key, { materialId: item.material.id, date: change.date, delta });
+      }
+    }
+
+    for (const { materialId, date, delta } of byCard.values()) {
+      await tx.materialInventory.upsert({
+        where: { materialId_date: { materialId, date } },
+        // See applyMaterialDeltaUpserts: consumption revives a deleted card.
+        update: { used: { increment: delta }, deletedAt: null },
+        create: { materialId, date, quantity: 0, delivery: 0, used: Math.max(0, delta) },
+      });
+    }
+  }
+
+  /** Single-row form of consumeMaterials, for create/update/remove. */
+  private updateMaterialUsed(
     productId: number,
     newYield: number,
     oldYield: number,
     date: Date,
-    tx?: Prisma.TransactionClient,
+    tx: Prisma.TransactionClient,
   ): Promise<void> {
-    // A deleted recipe no longer describes how the product is made, so it
-    // must not consume materials. findUnique cannot filter on deletedAt.
-    const recipe = await this.prisma.recipe.findFirst({
-      where: { productId, deletedAt: null },
-      include: { recipeItems: { include: { material: true } } },
-    });
-    if (!recipe || recipe.recipeItems.length === 0) return;
+    return this.consumeMaterials(tx, [
+      { productId, date, delta: newYield - oldYield },
+    ]);
+  }
 
-    const conversionMap = await getConversionFactorMap(
-      this.prisma,
-      recipe.recipeItems.map((item) => ({
-        fromUnit: item.unit,
-        toUnit: item.material.unit,
-      })),
-    );
-
-    const client = tx ?? this.prisma;
-    const upserts = recipe.recipeItems.flatMap((item) => {
-      const factor = requireFactor(
-        conversionMap,
-        item.unit,
-        item.material.unit,
-        item.material.name,
-      );
-      const consumedPerUnit = (item.quantity / recipe.recipeYield) * factor;
-      const delta = (newYield - oldYield) * consumedPerUnit;
-      if (delta === 0) return [];
-      return [
-        client.materialInventory.upsert({
-          where: { materialId_date: { materialId: item.material.id, date } },
-          // See applyMaterialDeltaUpserts: consumption revives a deleted card.
-          update: { used: { increment: delta }, deletedAt: null },
-          create: {
-            materialId: item.material.id,
+  /**
+   * Add finalized production-order quantities to the kitchen's yield and
+   * consume their materials, inside the caller's transaction.
+   *
+   * Adds rather than sets: several orders can cover one product on one day,
+   * and the kitchen made all of them. Setting the yield let the last order
+   * finalized overwrite the others — and never touched materials at all.
+   */
+  async addOrderYield(
+    tx: Prisma.TransactionClient,
+    date: Date,
+    items: Array<{ productId: number; quantity: number }>,
+    userId?: number,
+  ): Promise<void> {
+    const positive = items.filter((i) => i.quantity > 0);
+    for (const item of positive) {
+      await tx.production.upsert({
+        where: {
+          branchId_productId_date: {
+            branchId: PRODUCTION_BRANCH_ID,
+            productId: item.productId,
             date,
-            quantity: 0,
-            delivery: 0,
-            used: Math.max(0, delta),
           },
-        }),
-      ];
-    });
-
-    if (upserts.length === 0) return;
-
-    if (tx) {
-      for (const op of upserts) await op;
-    } else {
-      await this.prisma.$transaction(
-        upserts as Prisma.PrismaPromise<unknown>[],
-      );
+        },
+        update: { yield: { increment: item.quantity }, isAutoGenerated: false },
+        create: {
+          branchId: PRODUCTION_BRANCH_ID,
+          productId: item.productId,
+          date,
+          yield: item.quantity,
+          isAutoGenerated: false,
+          createdById: userId,
+        },
+      });
     }
+    await this.consumeMaterials(
+      tx,
+      positive.map((i) => ({ productId: i.productId, date, delta: i.quantity })),
+    );
   }
 
   async create(body: CreateProductionDto, userId?: number) {
