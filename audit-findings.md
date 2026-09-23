@@ -401,7 +401,7 @@ I ran `audit-diagnostics.sql` against the database in `.env` (`aws-1-ap-northeas
 | A | `c5f73ef` | F18 (CI), F16 (sales ranges capped at 90 days; `/inventory/date` and `/production/date` default to today), F22 (cache invalidation), F23 (branch-scoped material consumption), F27 (README) |
 | B | `398701b` | F11 (idempotency keys on adjustments, transfers, accept/reject and new production orders) |
 | C | `fffda51` | F13 (AuditEvent change history; Production and ImportLog soft-deleted) |
-| D | batch D commit | F19/F20 (material and recipe quantities `numeric(14,4)`, factors `numeric(18,9)`, money summed in centavos, every Decimal serialised as a number) |
+| D | `570fcca` | F19/F20 (material and recipe quantities `numeric(14,4)`, factors `numeric(18,9)`, money summed in centavos, every Decimal serialised as a number) |
 
 **Still open**
 - F17: PO finalization, production saves and long manual backfills still run many sequential statements in one interactive transaction, so a large order can hit Prisma's 5 s transaction timeout. Not measured against the test database yet.
