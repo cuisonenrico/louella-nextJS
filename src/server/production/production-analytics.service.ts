@@ -36,7 +36,7 @@ export class ProductionAnalyticsService {
     branchId?: number,
   ) {
     const production = await this.prisma.production.findFirst({
-      where: { id, ...(branchId != null ? { branchId } : {}) },
+      where: { id, deletedAt: null, ...(branchId != null ? { branchId } : {}) },
       include: { product: true },
     });
     if (!production) throw new NotFoundException('Production record not found');
@@ -112,7 +112,7 @@ export class ProductionAnalyticsService {
   async getMaterialConsumptionSummary(date: string, branchId?: number) {
     const day = toUtcDay(date);
     const productions = await this.prisma.production.findMany({
-      where: { date: day, ...(branchId ? { branchId } : {}) },
+      where: { date: day, deletedAt: null, ...(branchId ? { branchId } : {}) },
       include: { product: true },
     });
 
@@ -216,7 +216,7 @@ export class ProductionAnalyticsService {
     const branchFilter = branchId ? { branchId } : {};
     const [productions, inventoryRows] = await Promise.all([
       this.prisma.production.findMany({
-        where: { date: { gte: start, lte: end }, ...branchFilter },
+        where: { date: { gte: start, lte: end }, deletedAt: null, ...branchFilter },
         select: {
           productId: true,
           yield: true,

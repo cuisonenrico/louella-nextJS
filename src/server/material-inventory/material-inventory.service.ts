@@ -12,6 +12,7 @@ import {
   lockMaterialChains,
   reconcileMaterialChains,
 } from '../common/utils/stock-chain';
+import { recordChanges, type AuditEntry } from '../common/utils/audit.util';
 import {
   assertDateRange,
   eachDayInclusive,
@@ -59,9 +60,19 @@ export class MaterialInventoryService {
     return this.prisma.$transaction(async (tx) => {
       // Chain locks before any card is written (see stock-chain.ts).
       await lockMaterialChains(tx, items.map((i) => i.materialId));
+      const before = await tx.materialInventory.findMany({
+        where: {
+          OR: items.map((i) => ({ materialId: i.materialId, date: toUtcDay(i.date) })),
+        },
+      });
+      const beforeByKey = new Map(
+        before.map((c) => [`${c.materialId}:${c.date.toISOString()}`, c]),
+      );
       const ids: number[] = [];
+      const audit: AuditEntry[] = [];
       for (const item of items) {
         const date = toUtcDay(item.date);
+        const prior = beforeByKey.get(`${item.materialId}:${date.toISOString()}`);
         const card = await tx.materialInventory.upsert({
           where: { materialId_date: { materialId: item.materialId, date } },
           update: {
@@ -88,11 +99,18 @@ export class MaterialInventoryService {
             notes: item.notes,
             createdById: userId,
           },
-          select: { id: true },
         });
         ids.push(card.id);
+        audit.push({
+          entity: 'MaterialInventory',
+          entityId: card.id,
+          before: prior,
+          after: card,
+          action: !prior ? 'create' : prior.deletedAt ? 'restore' : 'update',
+        });
       }
-      await this.carryForward(tx, ids);
+      await recordChanges(tx, audit, userId);
+      await this.carryForward(tx, ids, [], userId);
       return tx.materialInventory.findMany({
         where: { id: { in: ids } },
         include: materialInventoryInclude,
@@ -108,15 +126,17 @@ export class MaterialInventoryService {
     tx: Prisma.TransactionClient,
     ids: number[],
     extra: Array<{ materialId: number; fromDate: Date }> = [],
+    userId?: number | null,
   ): Promise<void> {
     const cards = await tx.materialInventory.findMany({
       where: { id: { in: ids } },
       select: { materialId: true, date: true },
     });
-    await reconcileMaterialChains(tx, [
-      ...cards.map((c) => ({ materialId: c.materialId, fromDate: c.date })),
-      ...extra,
-    ]);
+    await reconcileMaterialChains(
+      tx,
+      [...cards.map((c) => ({ materialId: c.materialId, fromDate: c.date })), ...extra],
+      { userId },
+    );
   }
 
   /** Returns all unique dates that have material inventory records, newest first. */
@@ -293,7 +313,6 @@ export class MaterialInventoryService {
   ) {
     const existing = await this.prisma.materialInventory.findFirst({
       where: { id, deletedAt: null },
-      select: { id: true, materialId: true, date: true },
     });
     if (!existing) {
       throw new NotFoundException('Material inventory record not found');
@@ -317,12 +336,19 @@ export class MaterialInventoryService {
           notes: body.notes,
           updatedById: userId ?? null,
         },
-        select: { id: true },
       });
+      await recordChanges(
+        tx,
+        [{ entity: 'MaterialInventory', entityId: id, before: existing, after: updated }],
+        userId,
+      );
       // A card moved to another material leaves a gap in the old chain too.
-      await this.carryForward(tx, [updated.id], [
-        { materialId: existing.materialId, fromDate: existing.date },
-      ]);
+      await this.carryForward(
+        tx,
+        [updated.id],
+        [{ materialId: existing.materialId, fromDate: existing.date }],
+        userId,
+      );
       return tx.materialInventory.findUniqueOrThrow({
         where: { id },
         include: materialInventoryInclude,
@@ -350,7 +376,6 @@ export class MaterialInventoryService {
     const ids = items.map((i) => i.id);
     const existing = await this.prisma.materialInventory.findMany({
       where: { id: { in: ids }, deletedAt: null },
-      select: { id: true, materialId: true },
     });
 
     // All-or-nothing: a partial save is the failure mode this replaces.
@@ -364,8 +389,10 @@ export class MaterialInventoryService {
 
     await this.prisma.$transaction(async (tx) => {
       await lockMaterialChains(tx, existing.map((c) => c.materialId));
+      const beforeById = new Map(existing.map((c) => [c.id, c]));
+      const audit: AuditEntry[] = [];
       for (const item of items) {
-        await tx.materialInventory.update({
+        const after = await tx.materialInventory.update({
           where: { id: item.id },
           data: {
             quantity: item.quantity,
@@ -375,8 +402,15 @@ export class MaterialInventoryService {
             updatedById: userId ?? null,
           },
         });
+        audit.push({
+          entity: 'MaterialInventory',
+          entityId: item.id,
+          before: beforeById.get(item.id),
+          after,
+        });
       }
-      await this.carryForward(tx, ids);
+      await recordChanges(tx, audit, userId);
+      await this.carryForward(tx, ids, [], userId);
     }, WRITE_TX_OPTIONS);
 
     return { updated: items.length };
@@ -387,10 +421,9 @@ export class MaterialInventoryService {
    * destroy the card's spoilage and restock history — the one record of why the
    * numbers moved.
    */
-  async remove(id: number) {
+  async remove(id: number, userId?: number) {
     const existing = await this.prisma.materialInventory.findFirst({
       where: { id, deletedAt: null },
-      select: { id: true, materialId: true, date: true },
     });
     if (!existing) {
       throw new NotFoundException('Material inventory record not found');
@@ -399,14 +432,37 @@ export class MaterialInventoryService {
       await lockMaterialChains(tx, [existing.materialId]);
       const removed = await tx.materialInventory.update({
         where: { id },
-        data: { deletedAt: new Date() },
+        data: { deletedAt: new Date(), updatedById: userId ?? null },
       });
+      await recordChanges(
+        tx,
+        // after: null, so the event shows what was removed (value → null).
+        [{ entity: 'MaterialInventory', entityId: id, before: existing, after: null, action: 'delete' }],
+        userId,
+      );
       // The next card now opens on the one before the deleted card.
-      await reconcileMaterialChains(tx, [
-        { materialId: existing.materialId, fromDate: existing.date },
-      ]);
+      await reconcileMaterialChains(
+        tx,
+        [{ materialId: existing.materialId, fromDate: existing.date }],
+        { userId },
+      );
       return removed;
     }, WRITE_TX_OPTIONS);
+  }
+
+  /** Every recorded change to this stock card, newest first. */
+  async history(id: number) {
+    const card = await this.prisma.materialInventory.findFirst({
+      where: { id },
+      select: { id: true },
+    });
+    if (!card) throw new NotFoundException('Material inventory record not found');
+    return this.prisma.auditEvent.findMany({
+      where: { entity: 'MaterialInventory', entityId: id },
+      orderBy: [{ at: 'desc' }, { id: 'desc' }],
+      include: { user: { select: { id: true, email: true } } },
+      take: 200,
+    });
   }
 
   /**

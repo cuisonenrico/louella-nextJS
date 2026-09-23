@@ -275,6 +275,15 @@ export class InventoryController {
     return this.inventoryService.findOne(id, parseBranchId(branchIdStr));
   }
 
+  /** Every recorded change to this row: what, from what, who and when. */
+  @Get(':id/history')
+  history(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('branchId') branchIdStr?: string,
+  ) {
+    return this.inventoryService.history(id, parseBranchId(branchIdStr));
+  }
+
   @Patch(':id')
   @RequireFeature('inventory-history:edit')
   @Roles(UserRole.INVENTORY)
@@ -297,9 +306,14 @@ export class InventoryController {
   @Roles(UserRole.INVENTORY)
   remove(
     @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: { id: number },
     @Query('branchId') branchIdStr?: string,
   ) {
-    return this.inventoryService.remove(id, parseBranchId(branchIdStr));
+    return this.inventoryService.remove(
+      id,
+      parseBranchId(branchIdStr),
+      user?.id,
+    );
   }
 }
 

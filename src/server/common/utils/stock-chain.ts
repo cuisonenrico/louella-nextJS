@@ -3,6 +3,7 @@ import {
   computeAdjSum,
   computeMaterialClosing,
 } from './inventory-metrics.util';
+import { recordChanges, type AuditEntry } from './audit.util';
 
 /**
  * Keeps each day's opening stock equal to the previous day's close.
@@ -96,6 +97,11 @@ export function lockProductionKeys(
 export interface ChainOptions {
   /** Walk every later day instead of stopping at the first consistent one. */
   full?: boolean;
+  /**
+   * Whose write caused the carry-forward, for the change history. Every day
+   * rewritten here is recorded as a `carry-forward` event.
+   */
+  userId?: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -185,6 +191,7 @@ export async function reconcileInventoryChains(
   }
 
   let written = 0;
+  const audit: AuditEntry[] = [];
   for (const [key, fromDate] of fromByPair) {
     let previousClose = anchorByPair.get(key);
     let walked = 0;
@@ -204,6 +211,13 @@ export async function reconcileInventoryChains(
           where: { id: row.id },
           data: { quantity: opening, leftover: close },
         });
+        audit.push({
+          entity: 'Inventory',
+          entityId: row.id,
+          action: 'carry-forward',
+          before: row,
+          after: { ...row, quantity: opening, leftover: close },
+        });
         written++;
       } else if (walked > 0 && !opts.full) {
         break; // unchanged, and so is everything it feeds
@@ -212,6 +226,7 @@ export async function reconcileInventoryChains(
       previousClose = close;
     }
   }
+  await recordChanges(tx, audit, opts.userId);
   return written;
 }
 
@@ -291,6 +306,17 @@ async function reconcileOneMaterialChain(
         where: { id: card.id },
         data: { quantity: opening },
       });
+      await recordChanges(
+        tx,
+        [{
+          entity: 'MaterialInventory',
+          entityId: card.id,
+          action: 'carry-forward',
+          before: card,
+          after: { ...card, quantity: opening },
+        }],
+        opts.userId,
+      );
       written++;
     } else if (i > 0 && !opts.full) {
       break;

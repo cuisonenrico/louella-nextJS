@@ -15,6 +15,7 @@ import {
   lockInventoryChains,
   reconcileInventoryChains,
 } from '../common/utils/stock-chain';
+import { recordChanges, type AuditEntry } from '../common/utils/audit.util';
 import {
   LabelResolver,
   type PriceHistoryMap,
@@ -638,8 +639,14 @@ export class InventoryImportService {
         tx,
         [...accumulator.keys()].map((productId) => ({ branchId, productId })),
       );
+      const before = await tx.inventory.findMany({
+        where: { branchId, date: sheetDate, productId: { in: [...accumulator.keys()] } },
+      });
+      const beforeByProduct = new Map(before.map((r) => [r.productId, r]));
+      const audit: AuditEntry[] = [];
       for (const [productId, counts] of accumulator) {
-        await tx.inventory.upsert({
+        const prior = beforeByProduct.get(productId);
+        const after = await tx.inventory.upsert({
           where: {
             branchId_productId_date: { branchId, productId, date: sheetDate },
           },
@@ -668,7 +675,15 @@ export class InventoryImportService {
             createdById: userId ?? null,
           },
         });
+        audit.push({
+          entity: 'Inventory',
+          entityId: after.id,
+          before: prior,
+          after,
+          action: !prior ? 'create' : prior.deletedAt ? 'restore' : 'update',
+        });
       }
+      await recordChanges(tx, audit, userId);
       await reconcileInventoryChains(
         tx,
         [...accumulator.keys()].map((productId) => ({
@@ -676,6 +691,7 @@ export class InventoryImportService {
           productId,
           fromDate: sheetDate,
         })),
+        { userId },
       );
     }, { timeout: 60_000, maxWait: 10_000 });
   }
@@ -698,7 +714,7 @@ export class InventoryImportService {
       branch = await this.assertBranchExists(branchId);
       const fileHash = this.hashBuffer(buffer);
       const existing = await this.prisma.importLog.findFirst({
-        where: { branchId, fileHash },
+        where: { branchId, fileHash, deletedAt: null },
         select: { id: true, importedAt: true },
       });
       if (existing) {
@@ -847,7 +863,7 @@ export class InventoryImportService {
     const fileHash = this.hashBuffer(buffer);
 
     const existing = await this.prisma.importLog.findFirst({
-      where: { branchId, fileHash },
+      where: { branchId, fileHash, deletedAt: null },
       select: { id: true, importedAt: true },
     });
     if (existing) {
@@ -1086,7 +1102,7 @@ export class InventoryImportService {
     // A scoped caller sees only their own branch's import history, whether or
     // not they asked for a filter.
     const branchId = resolveBranchScope(user, opts.branchId);
-    const where = branchId != null ? { branchId } : {};
+    const where = { deletedAt: null, ...(branchId != null ? { branchId } : {}) };
     const [total, items] = await this.prisma.$transaction([
       this.prisma.importLog.count({ where }),
       this.prisma.importLog.findMany({
@@ -1103,9 +1119,20 @@ export class InventoryImportService {
     return { total, page: opts.page, limit: opts.limit, items };
   }
 
+  /**
+   * Release a file for a corrected re-import. A soft delete: the log of the
+   * earlier import stays on record (the duplicate guard only covers live logs,
+   * see the partial index ImportLog_live_file_key). This used to be a hard
+   * delete, which erased the only trace of what was imported and when.
+   */
   async deleteLog(id: number) {
-    const log = await this.prisma.importLog.findFirst({ where: { id } });
+    const log = await this.prisma.importLog.findFirst({
+      where: { id, deletedAt: null },
+    });
     if (!log) throw new NotFoundException('Import log not found');
-    return this.prisma.importLog.delete({ where: { id } });
+    return this.prisma.importLog.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
   }
 }

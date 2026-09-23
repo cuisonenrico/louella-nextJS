@@ -25,17 +25,21 @@ function makePrisma() {
     // findMany/$queryRaw back carry-forward, which finds no later days here;
     // its behaviour is covered in stock-chain.spec.ts.
     inventory: {
-      upsert: jest.fn(),
+      // Returns a row so the change history has an id to record.
+      upsert: jest.fn().mockResolvedValue({ id: 1 }),
       groupBy: jest.fn(),
       findMany: jest.fn().mockResolvedValue([]),
     },
     $queryRaw: jest.fn().mockResolvedValue([]),
     $executeRaw: jest.fn().mockResolvedValue(1),
+    // Change history; its contents are covered in audit.util.spec.ts.
+    auditEvent: { createMany: jest.fn() },
     importLog: {
       findFirst: jest.fn(),
       create: jest.fn(),
       count: jest.fn(),
       findMany: jest.fn(),
+      update: jest.fn(),
       delete: jest.fn(),
     },
   };
@@ -61,6 +65,7 @@ declare function _makePrismaShape(): {
     create: jest.Mock;
     count: jest.Mock;
     findMany: jest.Mock;
+    update: jest.Mock;
     delete: jest.Mock;
   };
   $transaction: jest.Mock;
@@ -1500,6 +1505,43 @@ describe('InventoryImportService', () => {
   // live in the service, exactly as InventoryAdjustmentsService does it.
   // ─────────────────────────────────────────────────────────────────────────
 
+  // The only record of an import used to be erased by DELETE /logs/:id.
+  describe('deleting an import log', () => {
+    it('soft-deletes it, keeping the record', async () => {
+      prisma.importLog.findFirst.mockResolvedValue({ id: 4 });
+
+      await service.deleteLog(4);
+
+      expect(prisma.importLog.delete).not.toHaveBeenCalled();
+      expect(prisma.importLog.update).toHaveBeenCalledWith({
+        where: { id: 4 },
+        data: { deletedAt: expect.any(Date) },
+      });
+    });
+
+    it('refuses a log that is already deleted', async () => {
+      prisma.importLog.findFirst.mockResolvedValue(null);
+
+      await expect(service.deleteLog(4)).rejects.toThrow('Import log not found');
+      expect(prisma.importLog.findFirst).toHaveBeenCalledWith({
+        where: { id: 4, deletedAt: null },
+      });
+    });
+
+    it('only lets a live log block a re-import of the same file', async () => {
+      prisma.branch.findFirst.mockResolvedValue({ id: 2, name: 'Cubao' });
+      prisma.importLog.findFirst.mockResolvedValue(null);
+
+      await service
+        .importWorkbook(Buffer.from('not a workbook'), 2, 'march.xlsx', undefined)
+        .catch(() => undefined);
+
+      expect(prisma.importLog.findFirst.mock.calls[0][0].where).toEqual(
+        expect.objectContaining({ branchId: 2, deletedAt: null }),
+      );
+    });
+  });
+
   describe('branch isolation', () => {
     /** A user scoped to one branch: no `all-branches`, a branchId assigned. */
     const scoped = (branchId: number) => ({
@@ -1558,7 +1600,7 @@ describe('InventoryImportService', () => {
       await service.getLogs({ page: 1, limit: 20 }, scoped(2));
 
       const where = prisma.importLog.count.mock.calls[0][0].where;
-      expect(where).toEqual({ branchId: 2 });
+      expect(where).toEqual({ deletedAt: null, branchId: 2 });
     });
 
     it('refuses a scoped listing of another branch logs', async () => {

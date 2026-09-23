@@ -104,7 +104,7 @@ describe('ProductionAnalyticsService.getMaterialConsumption — cost as of the d
       'Production record not found',
     );
     expect(prisma.production.findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 1, branchId: 4 } }),
+      expect.objectContaining({ where: { id: 1, deletedAt: null, branchId: 4 } }),
     );
   });
 });

@@ -168,6 +168,15 @@ export class ProductionController {
     return this.productionService.findOne(id, parseBranchScope(branchIdStr));
   }
 
+  /** Every recorded change to this production row: what, from what, who, when. */
+  @Get(':id/history')
+  history(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('branchId') branchIdStr?: string,
+  ) {
+    return this.productionService.history(id, parseBranchScope(branchIdStr));
+  }
+
   @Get(':id/material-consumption')
   getMaterialConsumption(
     @Param('id', ParseIntPipe) id: number,
@@ -192,12 +201,14 @@ export class ProductionController {
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() body: UpdateProductionDto,
+    @CurrentUser() user: { id: number },
     @Query('branchId') branchIdStr?: string,
   ) {
     return this.productionService.update(
       id,
       body,
       parseBranchScope(branchIdStr),
+      user?.id,
     );
   }
 
@@ -206,9 +217,14 @@ export class ProductionController {
   @Roles(UserRole.MANAGER)
   remove(
     @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: { id: number },
     @Query('branchId') branchIdStr?: string,
   ) {
-    return this.productionService.remove(id, parseBranchScope(branchIdStr));
+    return this.productionService.remove(
+      id,
+      parseBranchScope(branchIdStr),
+      user?.id,
+    );
   }
 }
 

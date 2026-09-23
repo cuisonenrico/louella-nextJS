@@ -42,6 +42,7 @@ import type {
   Supplier,
   SuggestionPeriod,
   PendingTransfer,
+  AuditEvent,
   TransferResult,
   UnitConversion,
   User,
@@ -135,6 +136,8 @@ export const branchesApi = {
 
 // ─── Inventory ───────────────────────────────────────────────────
 export const inventoryApi = {
+  /** Every recorded change to one row, newest first. */
+  history: (id: number) => api.get<AuditEvent[]>(`/inventory/${id}/history`),
   list: (page = 1, limit = 50) =>
     api.get<{ data: Inventory[]; total: number }>('/inventory', {
       params: { page, limit },

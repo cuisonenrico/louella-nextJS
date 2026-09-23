@@ -216,6 +216,7 @@ export class ProductionOrdersService {
           tx,
           { branchId: order.branchId, productId: item.productId, date: order.date },
           item.quantity,
+          userId,
         );
       }
     }

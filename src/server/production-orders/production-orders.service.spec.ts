@@ -205,6 +205,7 @@ describe('ProductionOrdersService', () => {
         prisma,
         { branchId: 2, productId: 1, date: DATE },
         50,
+        42, // attributed in the change history
       );
       // The old path upserted Production/Inventory with `update: { yield }`.
       expect(prisma.production.upsert).not.toHaveBeenCalled();
@@ -246,6 +247,7 @@ describe('ProductionOrdersService', () => {
         prisma,
         expect.objectContaining({ branchId: 3 }),
         50,
+        undefined,
       );
     });
 

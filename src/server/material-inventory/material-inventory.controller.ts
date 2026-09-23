@@ -147,10 +147,19 @@ export class MaterialInventoryController {
     return this.materialInventoryService.update(id, body, user?.id);
   }
 
+  /** Every recorded change to this stock card: what, from what, who, when. */
+  @Get(':id/history')
+  history(@Param('id', ParseIntPipe) id: number) {
+    return this.materialInventoryService.history(id);
+  }
+
   @Delete(':id')
   @RequireFeature('material-stock:delete')
   @Roles(UserRole.INVENTORY)
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.materialInventoryService.remove(id);
+  remove(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: { id: number },
+  ) {
+    return this.materialInventoryService.remove(id, user?.id);
   }
 }

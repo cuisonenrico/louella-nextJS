@@ -10,6 +10,7 @@ import { extractError } from '@/lib/errors';
 import { useIdempotencyKey } from '@/lib/useIdempotencyKey';
 import { toast } from 'sonner';
 import { PENDING_TRANSFERS_KEY } from './PendingTransfersPanel';
+import ChangeHistory from './ChangeHistory';
 import { Button } from '@/components/ui/button';
 import { useCan } from '@/lib/rbac/useHasFeature';
 import { Input } from '@/components/ui/input';
@@ -262,6 +263,11 @@ export default function InventoryAdjustmentsDialog({ inventory, productName, bra
               <Input id="notes-optional" value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} />
             </div>
           </div>
+
+          <ChangeHistory
+            queryKey={['inventory', inventory.id]}
+            load={() => inventoryApi.history(inventory.id).then((r) => r.data)}
+          />
         </div>
 
         <ResponsiveDialogFooter>

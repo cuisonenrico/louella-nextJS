@@ -15,6 +15,7 @@ import {
   lockInventoryChains,
   reconcileInventoryChains,
 } from '../common/utils/stock-chain';
+import { recordChanges } from '../common/utils/audit.util';
 import { computeAdjSum } from '../common/utils/inventory-metrics.util';
 import { CreateInventoryAdjustmentDto } from './dto/create-inventory-adjustment.dto';
 import { UpdateInventoryAdjustmentDto } from './dto/update-inventory-adjustment.dto';
@@ -231,6 +232,11 @@ export class InventoryAdjustmentsService {
             where: { id },
             data: { ...dto, updatedById: user?.id ?? null },
           });
+          await recordChanges(
+            tx,
+            [{ entity: 'InventoryAdjustment', entityId: id, before: existing, after: updated }],
+            user?.id,
+          );
           await tx.inventoryAdjustment.updateMany({
             where: { id: linkedId, deletedAt: null },
             data: { value: dto.value },
@@ -263,6 +269,11 @@ export class InventoryAdjustmentsService {
         where: { id },
         data: { ...dto, updatedById: user?.id ?? null },
       });
+      await recordChanges(
+        tx,
+        [{ entity: 'InventoryAdjustment', entityId: id, before: existing, after: updated }],
+        user?.id,
+      );
       await this.carryForward(tx, [existing.inventoryId]);
       return updated;
     }, WRITE_TX_OPTIONS);

@@ -28,6 +28,8 @@ function makePrisma(): Record<string, any> {
     },
     // Chain locks (pg_advisory_xact_lock); ordering is covered on FakeStockDb.
     $executeRaw: jest.fn().mockResolvedValue(1),
+    // Change history; its contents are covered in audit.util.spec.ts.
+    auditEvent: { createMany: jest.fn() },
     // Interactive form, as the service uses it: the callback gets the client.
     $transaction: jest.fn((arg: unknown) =>
       typeof arg === 'function'

@@ -93,6 +93,18 @@ export interface InventoryAdjustment {
 
 export type TransferStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED';
 
+/** One recorded change to a stock figure (GET …/:id/history). */
+export interface AuditEvent {
+  id: number;
+  entity: 'Inventory' | 'MaterialInventory' | 'Production' | 'InventoryAdjustment';
+  entityId: number;
+  action: 'create' | 'update' | 'delete' | 'restore' | 'carry-forward';
+  /** Each changed field as [before, after]. */
+  changes: Record<string, [unknown, unknown]>;
+  at: string;
+  user: { id: number; email: string } | null;
+}
+
 /** Sending books the sender's PULL_OUT; the PULL_IN only exists once accepted. */
 export interface TransferResult {
   pullOut: InventoryAdjustment;
