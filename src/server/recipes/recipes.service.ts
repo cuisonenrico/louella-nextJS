@@ -13,6 +13,7 @@ import {
 } from '../common/utils/unit-conversion.util';
 import { CreateRecipeDto } from './dto/create-recipe.dto';
 import { UpdateRecipeDto } from './dto/update-recipe.dto';
+import { costCentavos, num, pesos, q4 } from '../common/utils/decimal.util';
 
 const recipeInclude = {
   product: true,
@@ -246,7 +247,7 @@ export class RecipesService {
         for (const item of body.items) {
           const ext = existingByMaterial.get(item.materialId);
           if (ext) {
-            if (ext.quantity !== item.quantity || ext.unit !== item.unit) {
+            if (num(ext.quantity) !== item.quantity || ext.unit !== item.unit) {
               await tx.recipeItem.update({
                 where: { id: ext.id },
                 data: { quantity: item.quantity, unit: item.unit },
@@ -279,7 +280,7 @@ export class RecipesService {
       // A notes-only edit does not change how the product is made.
       const changesRecipe =
         body.items !== undefined ||
-        (body.recipeYield !== undefined && body.recipeYield !== recipe.recipeYield);
+        (body.recipeYield !== undefined && body.recipeYield !== num(recipe.recipeYield));
       if (changesRecipe) await this.snapshot(tx, id);
       return updated;
     });
@@ -335,12 +336,12 @@ export class RecipesService {
         item.material.unit,
         item.material.name,
       );
-      const quantityInBaseUnit = item.quantity * factor;
-      const cost = quantityInBaseUnit * item.material.pricePerUnit.toNumber();
+      const quantityInBaseUnit = q4(num(item.quantity) * factor);
+      const cost = pesos(costCentavos(quantityInBaseUnit, item.material.pricePerUnit));
       return {
         materialId: item.material.id,
         materialName: item.material.name,
-        quantity: item.quantity,
+        quantity: num(item.quantity),
         unit: item.unit,
         quantityInBaseUnit,
         baseUnit: item.material.unit,
@@ -350,7 +351,7 @@ export class RecipesService {
     });
 
     const totalBatchCost = itemCosts.reduce((sum, i) => sum + i.cost, 0);
-    const costPerUnit = totalBatchCost / recipe.recipeYield;
+    const costPerUnit = totalBatchCost / num(recipe.recipeYield);
     const productPrice = Number(recipe.product.price);
     const grossProfitPerUnit = productPrice - costPerUnit;
     const grossMarginPercent =

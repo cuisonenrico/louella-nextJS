@@ -8,6 +8,7 @@ import { toUtcDay } from '../common/utils/date-range.util';
 import { CreateMaterialDto } from './dto/create-material.dto';
 import { UpdateMaterialDto } from './dto/update-material.dto';
 import { computeAdjSum } from '../common/utils/inventory-metrics.util';
+import { num } from '../common/utils/decimal.util';
 
 /**
  * The opening price-history row every material starts with, effective today
@@ -188,9 +189,9 @@ export class MaterialsService {
       if (!latestByMaterial.has(inv.materialId)) {
         const adjDelta = computeAdjSum(inv.adjustments);
         latestByMaterial.set(inv.materialId, {
-          quantity: inv.quantity,
-          delivery: inv.delivery,
-          used: inv.used,
+          quantity: num(inv.quantity),
+          delivery: num(inv.delivery),
+          used: num(inv.used),
           adjDelta,
         });
       }

@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { computeAdjSum } from '../common/utils/inventory-metrics.util';
 import { CacheNamespaceService } from '../common/cache/cache-namespace.service';
 import { CACHE_NS } from '../common/cache/cache-namespaces';
+import { num } from '../common/utils/decimal.util';
 
 export interface DashboardStats {
   products: { total: number; active: number };
@@ -312,9 +313,9 @@ export class DashboardService {
       for (const inv of latestInventories) {
         const adjDelta = computeAdjSum(inv.adjustments);
         latestByMaterial.set(inv.materialId, {
-          quantity: inv.quantity,
-          delivery: inv.delivery,
-          used: inv.used,
+          quantity: num(inv.quantity),
+          delivery: num(inv.delivery),
+          used: num(inv.used),
           adjDelta,
         });
       }

@@ -10,6 +10,7 @@ import {
   reconcileMaterialChains,
 } from '../common/utils/stock-chain';
 import { CreateMaterialAdjustmentDto } from './dto/create-material-adjustment.dto';
+import { num, q4 } from '../common/utils/decimal.util';
 
 @Injectable()
 export class MaterialAdjustmentsService {
@@ -39,8 +40,9 @@ export class MaterialAdjustmentsService {
       // this more than finished goods do — there is no counted leftover to
       // correct a bad balance, so a negative card is carried forward.
       if (body.type === 'PULL_OUT') {
-        const available =
-          inv.quantity + inv.delivery - inv.used + computeAdjSum(inv.adjustments);
+        const available = q4(
+          num(inv.quantity) + num(inv.delivery) - num(inv.used) + computeAdjSum(inv.adjustments),
+        );
         if (body.value > available) {
           throw new BadRequestException(
             `Cannot pull out ${body.value} — only ${available} is on hand for this material and day.`,

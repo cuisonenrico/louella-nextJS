@@ -456,7 +456,7 @@ model Material {
 model Recipe {
   id          Int      @id @default(autoincrement())
   productId   Int      @unique // enforces 1:1 with Product
-  recipeYield Float     @default(1) // number of product units produced per batch of this recipe
+  recipeYield Decimal   @db.Decimal(14, 4) @default(1) // number of product units produced per batch of this recipe
   notes       String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -478,7 +478,7 @@ model RecipeVersion {
   recipeId      Int
   version       Int      // 1, 2, 3… per recipe
   effectiveFrom DateTime @db.Date
-  recipeYield   Float
+  recipeYield   Decimal  @db.Decimal(14, 4)
   retired       Boolean  @default(false) // recipe deleted from this day on
   createdAt     DateTime @default(now())
 
@@ -493,7 +493,7 @@ model RecipeVersionItem {
   id         Int             @id @default(autoincrement())
   versionId  Int
   materialId Int
-  quantity   Float
+  quantity   Decimal         @db.Decimal(14, 4)
   unit       MeasurementUnit
 
   version  RecipeVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
@@ -507,7 +507,7 @@ model RecipeItem {
   id         Int             @id @default(autoincrement())
   recipeId   Int
   materialId Int
-  quantity   Float           // how much of the material is required per batch
+  quantity   Decimal         @db.Decimal(14, 4) // how much of the material is required per batch
   unit       MeasurementUnit // unit for this recipe step – may differ from material base unit
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
@@ -534,14 +534,18 @@ model MaterialInventory {
   // normalised through toUtcDay as well; this makes the column itself incapable
   // of holding the bad value.
   date        DateTime  @db.Date // one stock-card per material per day
+  // Quantities are exact decimals (4 dp: 0.0001 kg = 0.1 g). They were
+  // `double precision`, and every production edit incremented `used` by a
+  // binary fraction, so residue built up with each save. Writers round to the
+  // scale before writing (common/utils/decimal.util.ts).
   supplierId  Int?
   createdById Int?
   updatedById Int?
   batchNumber String?
   expiresAt   DateTime?
-  quantity    Float     @default(0) // opening stock (carried over from previous day)
-  delivery    Float     @default(0) // received on this day
-  used        Float     @default(0) // consumed by production (auto-updated)
+  quantity    Decimal   @db.Decimal(14, 4) @default(0) // opening stock (carried over from previous day)
+  delivery    Decimal   @db.Decimal(14, 4) @default(0) // received on this day
+  used        Decimal   @db.Decimal(14, 4) @default(0) // consumed by production (auto-updated)
   notes       String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -570,7 +574,7 @@ model MaterialInventory {
 // Two deliberate differences from InventoryAdjustment, both worth knowing before
 // you "fix" one of them:
 //
-//   - `value` is Float here, Int there. Materials are weighed (2.5 KG of flour);
+//   - `value` is a decimal here, Int there. Materials are weighed (2.5 KG of flour);
 //     finished goods are counted in whole pieces.
 //   - There is no update endpoint and no transfer pairing. Material stock is
 //     global to the central kitchen — MaterialInventory has no branchId — so
@@ -582,7 +586,7 @@ model MaterialAdjustment {
   id                  Int            @id @default(autoincrement())
   materialInventoryId Int
   type                AdjustmentType // PULL_IN = restock, PULL_OUT = transfer out, ANOMALY = loss/spoilage
-  value               Float          // magnitude (always positive; direction conveyed by type)
+  value               Decimal        @db.Decimal(14, 4)// magnitude (always positive; direction conveyed by type)
   notes               String?
   createdById         Int?           // user who entered this adjustment
   createdAt           DateTime       @default(now())
@@ -657,7 +661,7 @@ model UnitConversion {
   // Multiply a quantity in fromUnit by this factor to get the quantity in toUnit.
   // e.g. fromUnit=KG, toUnit=G, factor=1000  →  1 kg * 1000 = 1000 g
   // The inverse pair (G→KG, factor=0.001) is always stored alongside this record.
-  factor   Float
+  factor   Decimal         @db.Decimal(18, 9)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

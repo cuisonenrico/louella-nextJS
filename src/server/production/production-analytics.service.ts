@@ -19,6 +19,7 @@ import {
   materialPriceOn,
   recipeOn,
 } from '../common/utils/recipe-version.util';
+import { costCentavos, num, pesos, q4 } from '../common/utils/decimal.util';
 
 @Injectable()
 export class ProductionAnalyticsService {
@@ -76,12 +77,12 @@ export class ProductionAnalyticsService {
       );
       const consumed = this.computeConsumedAmount(
         costYield,
-        recipe.recipeYield,
-        item.quantity,
+        num(recipe.recipeYield),
+        num(item.quantity),
         factor,
       );
       const pricePerUnit = materialPriceOn(item.material, production.date, prices);
-      const totalCost = consumed * pricePerUnit;
+      const totalCost = pesos(costCentavos(consumed, pricePerUnit));
       return {
         materialId: item.material.id,
         materialName: item.material.name,
@@ -105,7 +106,7 @@ export class ProductionAnalyticsService {
     qty: number,
     factor: number,
   ): number {
-    return (yieldAmt / recipeYield) * qty * factor;
+    return q4((yieldAmt / recipeYield) * qty * factor);
   }
 
   /** A day's material use and cost, at that day's recipes and prices. */
@@ -156,11 +157,13 @@ export class ProductionAnalyticsService {
         );
         const consumed = this.computeConsumedAmount(
           prod.yield,
-          recipe.recipeYield,
-          item.quantity,
+          num(recipe.recipeYield),
+          num(item.quantity),
           factor,
         );
-        const totalCost = consumed * materialPriceOn(item.material, day, prices);
+        const totalCost = pesos(
+          costCentavos(consumed, materialPriceOn(item.material, day, prices)),
+        );
 
         const existing = materialMap.get(item.materialId);
         if (existing) {

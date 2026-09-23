@@ -83,3 +83,29 @@ describe('SalesService — bounded ranges', () => {
     });
   });
 });
+
+describe('SalesService — exact money', () => {
+  it('adds sales in centavos: ten ₱0.10 sales total exactly ₱1.00', async () => {
+    const prisma = makePrisma();
+    prisma.inventory.findMany.mockResolvedValue(
+      Array.from({ length: 10 }, (_, i) => ({
+        id: i + 1,
+        date: new Date('2026-09-01T00:00:00Z'),
+        branch: { id: 1, name: 'Main' },
+        product: { id: i + 1, name: `Candy ${i}`, type: 'MISCELLANEOUS', price: 0.1 },
+        quantity: 1,
+        delivery: 0,
+        leftover: 0,
+        reject: 0,
+        adjustments: [],
+        notes: null,
+      })),
+    );
+    const service = new SalesService(prisma as never);
+
+    const result = await service.getByBranchAndDate(1, '2026-09-01');
+
+    expect(result.totals.totalSales).toBe(1);
+    expect(result.breakdown.every((r) => r.sales === 0.1)).toBe(true);
+  });
+});

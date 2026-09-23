@@ -6,7 +6,7 @@ export class UpdateUnitConversionDto {
    * automatically (1 / newFactor).
    */
   @IsOptional()
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 9 })
   @IsPositive()
   factor?: number;
 }

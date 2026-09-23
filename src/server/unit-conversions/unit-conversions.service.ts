@@ -9,6 +9,7 @@ import { MeasurementUnit } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUnitConversionDto } from './dto/create-unit-conversion.dto';
 import { UpdateUnitConversionDto } from './dto/update-unit-conversion.dto';
+import { inverseFactor, num } from '../common/utils/decimal.util';
 
 @Injectable()
 export class UnitConversionsService {
@@ -47,11 +48,11 @@ export class UnitConversionsService {
         where: {
           fromUnit_toUnit: { fromUnit: body.toUnit, toUnit: body.fromUnit },
         },
-        update: { factor: 1 / body.factor },
+        update: { factor: inverseFactor(body.factor) },
         create: {
           fromUnit: body.toUnit,
           toUnit: body.fromUnit,
-          factor: 1 / body.factor,
+          factor: inverseFactor(body.factor),
         },
       }),
     ]);
@@ -95,7 +96,7 @@ export class UnitConversionsService {
       }),
       this.prisma.unitConversion.updateMany({
         where: { fromUnit: record.toUnit, toUnit: record.fromUnit },
-        data: { factor: 1 / body.factor },
+        data: { factor: inverseFactor(body.factor) },
       }),
     ]);
 
@@ -175,6 +176,6 @@ export class UnitConversionsService {
       );
     }
 
-    return quantity * conversion.factor;
+    return quantity * num(conversion.factor);
   }
 }

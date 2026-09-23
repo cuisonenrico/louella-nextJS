@@ -7,6 +7,7 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { FeatureGuard } from './common/guards/feature.guard';
 import { AutofillInterceptor } from './common/interceptors/autofill.interceptor';
+import { DecimalInterceptor } from './common/interceptors/decimal.interceptor';
 import { IdempotencyInterceptor } from './common/interceptors/idempotency.interceptor';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -84,6 +85,8 @@ import { CacheNamespaceModule } from './common/cache/cache-namespace.module';
     { provide: APP_INTERCEPTOR, useClass: AutofillInterceptor },
     // Inert unless a handler carries @Idempotent(); see the interceptor.
     { provide: APP_INTERCEPTOR, useClass: IdempotencyInterceptor },
+    // Innermost: Decimals leave as numbers, and idempotency stores numbers.
+    { provide: APP_INTERCEPTOR, useClass: DecimalInterceptor },
   ],
 })
 export class AppModule {}

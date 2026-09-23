@@ -187,6 +187,11 @@ decisions recorded at the end of `audit-findings.md`, are the spec):
   this folder**
 - The `AdjustmentType` enum (`PULL_IN` / `PULL_OUT` / `ANOMALY`) is shared
   between `InventoryAdjustment` and `MaterialAdjustment`
+- Material and recipe quantities are `numeric(14,4)`, factors `numeric(18,9)`,
+  prices `numeric`. Prisma returns them as `Decimal`: read through `num()`, round
+  quantities with `q4()` before writing, and add money in centavos
+  (`common/utils/decimal.util.ts`). `DecimalInterceptor` sends every Decimal
+  as a JSON number; the DTOs reject more decimals than the column holds
 - `UnitConversion` always stores both directions (e.g. KG→G and G→KG) as
   separate rows
 - `MaterialInventory` has **no `branchId`** on purpose — stock is tracked

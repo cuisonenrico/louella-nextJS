@@ -58,7 +58,9 @@ describe('MaterialAdjustmentsService', () => {
     });
 
     it('stamps the calling user as the author', async () => {
-      prisma.materialInventory.findFirst.mockResolvedValue({ id: 4 });
+      prisma.materialInventory.findFirst.mockResolvedValue({
+        id: 4, quantity: 10, delivery: 0, used: 0, adjustments: [],
+      });
       prisma.materialAdjustment.create.mockResolvedValue({ id: 8 });
 
       await service.create(body, 7);
@@ -75,7 +77,9 @@ describe('MaterialAdjustmentsService', () => {
     });
 
     it('records no author when the caller is unknown', async () => {
-      prisma.materialInventory.findFirst.mockResolvedValue({ id: 4 });
+      prisma.materialInventory.findFirst.mockResolvedValue({
+        id: 4, quantity: 10, delivery: 0, used: 0, adjustments: [],
+      });
       prisma.materialAdjustment.create.mockResolvedValue({ id: 8 });
 
       await service.create(body);

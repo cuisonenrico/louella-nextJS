@@ -4,6 +4,7 @@ import {
   computeMaterialClosing,
 } from './inventory-metrics.util';
 import { recordChanges, type AuditEntry } from './audit.util';
+import { num } from './decimal.util';
 
 /**
  * Keeps each day's opening stock equal to the previous day's close.
@@ -299,9 +300,9 @@ async function reconcileOneMaterialChain(
     : undefined;
   for (let i = 0; i < cards.length; i++) {
     const card = cards[i];
-    const opening = previousClose ?? card.quantity;
+    const opening = previousClose ?? num(card.quantity);
 
-    if (Math.abs(card.quantity - opening) > EPSILON) {
+    if (Math.abs(num(card.quantity) - opening) > EPSILON) {
       await tx.materialInventory.update({
         where: { id: card.id },
         data: { quantity: opening },

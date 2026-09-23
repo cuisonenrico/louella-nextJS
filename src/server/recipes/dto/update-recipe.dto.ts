@@ -11,7 +11,7 @@ import { CreateRecipeItemDto } from './create-recipe-item.dto';
 
 export class UpdateRecipeDto {
   @IsOptional()
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 4 })
   @Min(0.01)
   recipeYield?: number;
 

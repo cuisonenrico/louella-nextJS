@@ -26,6 +26,7 @@ import {
   lockProductionKeys,
   reconcileMaterialChains,
 } from '../common/utils/stock-chain';
+import { num, q4 } from '../common/utils/decimal.util';
 
 // Branch that owns production when an entry omits a branch. Materials are global
 // (central kitchen), so this only affects which branch a yield is attributed to.
@@ -34,6 +35,9 @@ export const PRODUCTION_BRANCH_ID = parseInt(
   process.env.PRODUCTION_BRANCH_ID ?? '1',
   10,
 );
+
+/** A production row's yield moving by `delta` from `from` (default 0). */
+type YieldChange = { productId: number; date: Date; delta: number; from?: number };
 
 @Injectable()
 export class ProductionService {
@@ -48,13 +52,18 @@ export class ProductionService {
    *
    * The one place the consumption formula lives for single-row writes:
    *   used += Δyield × recipeItem.quantity × factor / recipeYield
+   * computed as q4(new × rate) − q4(old × rate), where `from` is the row's
+   * yield before the change. A row therefore always accounts for exactly
+   * q4(yield × rate) of the card, however many edits it took to get there —
+   * rounding each delta instead would drift (1 → 2 → 3 pieces at ⅓ kg books
+   * 0.9999 kg, entering 3 at once books 1).
    * Recipes are read through `tx` too, so the recipe and the stock it moves
    * are seen consistently. Each change uses the recipe version in force on
    * its day; deleted recipes do not consume.
    */
   private async consumeMaterials(
     tx: Prisma.TransactionClient,
-    changes: Array<{ productId: number; date: Date; delta: number }>,
+    changes: YieldChange[],
     userId?: number | null,
   ): Promise<void> {
     const moving = changes.filter((c) => c.delta !== 0);
@@ -91,12 +100,13 @@ export class ProductionService {
           item.material.unit,
           item.material.name,
         );
-        const delta =
-          (change.delta * item.quantity * factor) / recipe.recipeYield;
+        const rate = (num(item.quantity) * factor) / num(recipe.recipeYield);
+        const from = change.from ?? 0;
+        const delta = q4(q4((from + change.delta) * rate) - q4(from * rate));
         if (delta === 0) continue;
         const key = `${item.material.id}:${change.date.toISOString()}`;
         const entry = byCard.get(key);
-        if (entry) entry.delta += delta;
+        if (entry) entry.delta = q4(entry.delta + delta);
         else byCard.set(key, { materialId: item.material.id, date: change.date, delta });
       }
     }
@@ -160,6 +170,7 @@ export class ProductionService {
       positive.map((i) => ({ branchId: PRODUCTION_BRANCH_ID, productId: i.productId, date })),
     );
     const audit: AuditEntry[] = [];
+    const startedFrom = new Map<number, number>();
     for (const item of positive) {
       const key = {
         branchId_productId_date: {
@@ -169,6 +180,7 @@ export class ProductionService {
         },
       };
       const before = await tx.production.findUnique({ where: key });
+      startedFrom.set(item.productId, before && !before.deletedAt ? before.yield : 0);
       // A deleted row's yield was already handed back when it was deleted,
       // so a restore starts from this order's quantity, not from it.
       const after = await tx.production.upsert({
@@ -196,7 +208,12 @@ export class ProductionService {
     await recordChanges(tx, audit, userId);
     await this.consumeMaterials(
       tx,
-      positive.map((i) => ({ productId: i.productId, date, delta: i.quantity })),
+      positive.map((i) => ({
+        productId: i.productId,
+        date,
+        delta: i.quantity,
+        from: startedFrom.get(i.productId) ?? 0,
+      })),
       userId,
     );
   }
@@ -239,7 +256,7 @@ export class ProductionService {
 
       const results = [];
       const audit: AuditEntry[] = [];
-      const changes: Array<{ productId: number; date: Date; delta: number }> = [];
+      const changes: YieldChange[] = [];
       for (const item of items) {
         const before = current.get(yieldKey(item)) ?? 0;
         const prior = existingByKey.get(yieldKey(item));
@@ -275,7 +292,7 @@ export class ProductionService {
           after: saved,
           action: !prior ? 'create' : prior.deletedAt ? 'restore' : 'update',
         });
-        changes.push({ productId: item.productId, date: item.date, delta: item.yield - before });
+        changes.push({ productId: item.productId, date: item.date, delta: item.yield - before, from: before });
         current.set(yieldKey(item), item.yield);
         existingByKey.set(yieldKey(item), saved);
       }
@@ -511,7 +528,7 @@ export class ProductionService {
       await this.consumeMaterials(
         tx,
         [
-          { productId: locked.productId, date: locked.date, delta: -locked.yield },
+          { productId: locked.productId, date: locked.date, delta: -locked.yield, from: locked.yield },
           { productId: updated.productId, date: updated.date, delta: updated.yield },
         ],
         userId,
@@ -548,7 +565,7 @@ export class ProductionService {
       );
       await this.consumeMaterials(
         tx,
-        [{ productId: locked.productId, date: locked.date, delta: -locked.yield }],
+        [{ productId: locked.productId, date: locked.date, delta: -locked.yield, from: locked.yield }],
         userId,
       );
       return removed;

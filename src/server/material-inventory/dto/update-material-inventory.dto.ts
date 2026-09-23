@@ -37,19 +37,19 @@ export class UpdateMaterialInventoryDto {
   expiresAt?: string;
 
   @IsOptional()
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 4 })
   @Min(0)
   @Max(MAX_UNITS)
   quantity?: number;
 
   @IsOptional()
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 4 })
   @Min(0)
   @Max(MAX_UNITS)
   delivery?: number;
 
   @IsOptional()
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 4 })
   @Min(0)
   @Max(MAX_UNITS)
   used?: number;

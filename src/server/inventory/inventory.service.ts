@@ -6,6 +6,7 @@ import {
 import { Prisma, ProductType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { getEffectivePrice } from '../common/utils/price-history.util';
+import { centavos, pesos } from '../common/utils/decimal.util';
 import {
   computeAdjSum,
   computeSold,
@@ -379,15 +380,11 @@ export class InventoryService {
     // product's leftover on its last day.
     const lastLeftover = new Map<string, { date: Date; leftover: number }>();
 
+    // Money is added up in whole centavos (sold is whole pieces, a price has
+    // 2 dp), so the totals are exact whatever order the rows arrive in.
     for (const inv of rows) {
       const sold = computeSold(inv);
-      const effectivePrice = getEffectivePrice(
-        inv.productId,
-        inv.date,
-        Number(inv.product.price),
-        historyByProduct,
-      );
-      const revenue = sold * effectivePrice;
+      const revenue = sold * this.priceCentavos(inv, historyByProduct);
 
       totalRevenue += revenue;
       totalSold += sold;
@@ -412,8 +409,13 @@ export class InventoryService {
 
     for (const { leftover } of lastLeftover.values()) totalLeftover += leftover;
 
+    for (const type of Object.keys(revenueByType)) {
+      revenueByType[type] = pesos(revenueByType[type]);
+    }
+    for (const entry of revenueByProduct.values()) entry.revenue = pesos(entry.revenue);
+
     return {
-      totalRevenue,
+      totalRevenue: pesos(totalRevenue),
       totalSold,
       totalDelivery,
       totalLeftover,
@@ -421,6 +423,16 @@ export class InventoryService {
       revenueByType,
       revenueByProduct,
     };
+  }
+
+  /** A row's price on its own day, in centavos. */
+  private priceCentavos(
+    inv: { productId: number; date: Date; product: { price: number | { toNumber(): number } } },
+    historyByProduct: Map<number, Array<{ effectiveAt: Date; price: number }>>,
+  ): number {
+    return centavos(
+      getEffectivePrice(inv.productId, inv.date, Number(inv.product.price), historyByProduct),
+    );
   }
 
   private async fetchHistoryMap(
@@ -875,13 +887,7 @@ export class InventoryService {
     >();
     for (const inv of rows) {
       const sold = computeSold(inv);
-      const effectivePrice = getEffectivePrice(
-        inv.productId,
-        inv.date,
-        Number(inv.product.price),
-        historyByProduct,
-      );
-      const revenue = sold * effectivePrice;
+      const revenue = sold * this.priceCentavos(inv, historyByProduct);
       const dk = inv.date.toISOString().slice(0, 10);
       const day = dailyMap.get(dk) ?? {
         revenue: 0,
@@ -902,7 +908,7 @@ export class InventoryService {
     );
     const dailyBreakdown = Array.from(dailyMap.entries())
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, v]) => ({ date, ...v }));
+      .map(([date, v]) => ({ date, ...v, revenue: pesos(v.revenue) }));
 
     return {
       dateRange,

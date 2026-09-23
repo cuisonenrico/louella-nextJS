@@ -1,5 +1,6 @@
 import { UnprocessableEntityException } from '@nestjs/common';
 import { MeasurementUnit, Prisma } from '@prisma/client';
+import { num } from './decimal.util';
 
 export function dateKey(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -47,7 +48,7 @@ export async function getConversionFactorMap(
       },
     });
     for (const conv of conversions) {
-      map.set(pairKey(conv.fromUnit, conv.toUnit), conv.factor);
+      map.set(pairKey(conv.fromUnit, conv.toUnit), num(conv.factor));
     }
   }
 

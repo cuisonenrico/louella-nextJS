@@ -51,14 +51,14 @@ export class CreateMaterialInventoryDto {
 
   @ApiPropertyOptional({ example: 50.0, description: 'Current stock on hand' })
   @IsOptional()
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 4 })
   @Min(0)
   @Max(MAX_UNITS)
   quantity?: number;
 
   @ApiPropertyOptional({ example: 25.0, description: 'Cumulative deliveries' })
   @IsOptional()
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 4 })
   @Min(0)
   @Max(MAX_UNITS)
   delivery?: number;

@@ -26,21 +26,21 @@ export class UpdateMaterialInventoryItemDto {
 
   @ApiPropertyOptional({ example: 50.0 })
   @IsOptional()
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 4 })
   @Min(0)
   @Max(MAX_UNITS)
   quantity?: number;
 
   @ApiPropertyOptional({ example: 25.0 })
   @IsOptional()
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 4 })
   @Min(0)
   @Max(MAX_UNITS)
   delivery?: number;
 
   @ApiPropertyOptional({ example: 12.5 })
   @IsOptional()
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 4 })
   @Min(0)
   @Max(MAX_UNITS)
   used?: number;

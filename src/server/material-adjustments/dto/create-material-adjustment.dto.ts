@@ -26,7 +26,7 @@ export class CreateMaterialAdjustmentDto {
    * Always positive — direction is conveyed by type. Zero is rejected too: a
    * zero-magnitude adjustment records nothing and only adds noise to the card.
    */
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 4 })
   @IsPositive()
   @Max(MAX_UNITS)
   value: number;

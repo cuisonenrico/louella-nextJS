@@ -22,7 +22,7 @@ export class CreateRecipeDto {
     description: 'Number of product units produced per batch',
   })
   @IsOptional()
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 4 })
   @Min(0.01)
   recipeYield?: number;
 

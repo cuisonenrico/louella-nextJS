@@ -398,13 +398,12 @@ I ran `audit-diagnostics.sql` against the database in `.env` (`aws-1-ap-northeas
 | 4 | `0fa925c` | F10 (advisory chain locks; checks under lock; verified 5/5 on the test database), F12 for production (single transaction), the rest of F09 (re-keying moves consumption; no catch-all 404) |
 | 5a | `d34d276` | Transfers need the receiver to accept (decision 6) |
 | 5b | `54baade` | Past-day consumption and cost use that day's recipe version and prices (decision 10); F26 indexes; material unit changes refused once used |
+| A | `c5f73ef` | F18 (CI), F16 (sales ranges capped at 90 days; `/inventory/date` and `/production/date` default to today), F22 (cache invalidation), F23 (branch-scoped material consumption), F27 (README) |
+| B | `398701b` | F11 (idempotency keys on adjustments, transfers, accept/reject and new production orders) |
+| C | `fffda51` | F13 (AuditEvent change history; Production and ImportLog soft-deleted) |
+| D | batch D commit | F19/F20 (material and recipe quantities `numeric(14,4)`, factors `numeric(18,9)`, money summed in centavos, every Decimal serialised as a number) |
 
 **Still open**
-- F11: there are no idempotency keys. The web client never retries writes, and double-submits are now serialised by the locks, but a deliberate resend of an adjustment still books twice.
-- F13: Production and ImportLog are still hard-deleted, and there is no change-history table. Adjustments, transfers and recipe versions now keep their records.
-- F16/F17: some list and range endpoints (sales, `/inventory/date` with no start date) are still uncapped.
-- F18: no CI. The test suite now includes an in-memory stock DB (`src/server/common/testing/fake-stock-db.ts`), but nothing runs the tests before a deploy.
-- F19/F20: money and material quantities are still JS doubles and Postgres `double precision`.
-- F22/F23/F27: cache invalidation on price changes, production cost read by id without branch scope, README's `NEXT_PUBLIC_API_URL`.
-- **Deploying:** run `npm run prisma:deploy` for the two new migrations, then `npx tsx scripts/repair-stock-chains.ts` (dry run), then add `--apply` against production.
+- F17: PO finalization, production saves and long manual backfills still run many sequential statements in one interactive transaction, so a large order can hit Prisma's 5 s transaction timeout. Not measured against the test database yet.
+- **Deploying:** run `npm run prisma:deploy`, then `npx tsx scripts/repair-stock-chains.ts` (dry run), then add `--apply` against production. The exact-decimals migration rounds existing doubles to 4 dp, so run the repair after it.
 

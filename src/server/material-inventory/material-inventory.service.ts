@@ -7,7 +7,10 @@ import { UpdateMaterialInventoryItemDto } from './dto/update-material-inventory-
 import { CacheNamespaceService } from '../common/cache/cache-namespace.service';
 import { CACHE_NS } from '../common/cache/cache-namespaces';
 import { clampPageSize } from '../common/constants/inventory.constants';
-import { computeMaterialClosing } from '../common/utils/inventory-metrics.util';
+import {
+  computeMaterialClosing,
+  type NumericMaterialRow,
+} from '../common/utils/inventory-metrics.util';
 import {
   lockMaterialChains,
   reconcileMaterialChains,
@@ -560,16 +563,7 @@ export class MaterialInventoryService {
    * every day after. The shared helper folds the adjustments in with the same
    * signs the sold formula uses.
    */
-  private computeCarryOver(
-    prev:
-      | {
-          quantity: number;
-          delivery: number;
-          used: number;
-          adjustments?: { type: string; value: number }[];
-        }
-      | undefined,
-  ): number {
+  private computeCarryOver(prev: NumericMaterialRow | undefined): number {
     return prev ? computeMaterialClosing(prev) : 0;
   }
 

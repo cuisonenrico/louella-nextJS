@@ -21,7 +21,7 @@ export class CreateUnitConversionDto {
     example: 1000,
     description: 'Conversion factor (fromUnit → toUnit)',
   })
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 9 })
   @IsPositive()
   factor: number;
 }

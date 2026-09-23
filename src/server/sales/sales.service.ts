@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { getEffectivePrice } from '../common/utils/price-history.util';
+import { centavos, pesos } from '../common/utils/decimal.util';
 import { computeSold } from '../common/utils/inventory-metrics.util';
 import {
   MAX_REPORT_RANGE_DAYS,
@@ -64,7 +65,7 @@ function computeRow(row: InventoryRow, historyByProduct: HistoryMap) {
     leftover: row.leftover,
     reject: row.reject,
     sold,
-    sales: parseFloat((sold * effectivePrice).toFixed(2)),
+    sales: pesos(sold * centavos(effectivePrice)),
     settled: row.leftover !== null,
     notes: row.notes,
   };
@@ -268,7 +269,8 @@ function computeTotals(rows: ReturnType<typeof computeRow>[]) {
   const settled = rows.filter((r) => r.settled);
   return {
     totalSold: rows.reduce((s, r) => s + r.sold, 0),
-    totalSales: parseFloat(rows.reduce((s, r) => s + r.sales, 0).toFixed(2)),
+    // Whole centavos: exact, whatever order the rows are added in.
+    totalSales: pesos(rows.reduce((s, r) => s + centavos(r.sales), 0)),
     totalDelivery: rows.reduce((s, r) => s + r.delivery, 0),
     totalReject: rows.reduce((s, r) => s + r.reject, 0),
     settledDays: settled.length,

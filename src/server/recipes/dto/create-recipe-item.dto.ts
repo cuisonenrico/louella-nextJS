@@ -12,7 +12,7 @@ export class CreateRecipeItemDto {
     example: 2.5,
     description: 'Amount of material required per batch',
   })
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 4 })
   @Min(0)
   quantity: number;
 
