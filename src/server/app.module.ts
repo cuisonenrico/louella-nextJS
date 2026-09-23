@@ -7,6 +7,7 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { FeatureGuard } from './common/guards/feature.guard';
 import { AutofillInterceptor } from './common/interceptors/autofill.interceptor';
+import { IdempotencyInterceptor } from './common/interceptors/idempotency.interceptor';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
@@ -81,6 +82,8 @@ import { CacheNamespaceModule } from './common/cache/cache-namespace.module';
     // alone, without importing JobsModule (which would create a cycle through
     // MaterialInventoryModule). Inert on handlers that lack the decorator.
     { provide: APP_INTERCEPTOR, useClass: AutofillInterceptor },
+    // Inert unless a handler carries @Idempotent(); see the interceptor.
+    { provide: APP_INTERCEPTOR, useClass: IdempotencyInterceptor },
   ],
 })
 export class AppModule {}

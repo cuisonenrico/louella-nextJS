@@ -1,4 +1,5 @@
 import api from './api';
+import { idempotencyHeader } from './useIdempotencyKey';
 import type {
   AuthResponse,
   Branch,
@@ -234,18 +235,24 @@ export const importLogsApi = {
 export const inventoryAdjustmentsApi = {
   listByInventory: (inventoryId: number) =>
     api.get<InventoryAdjustment[]>(`/inventory-adjustments/inventory/${inventoryId}`),
-  create: (data: { inventoryId: number; type: InventoryAdjustment['type']; value: number; notes?: string }) =>
-    api.post<InventoryAdjustment>('/inventory-adjustments', data),
-  transfer: (data: { fromInventoryId: number; toInventoryId: number; value: number; notes?: string }) =>
-    api.post<TransferResult>('/inventory-adjustments/transfer', data),
+  create: (
+    data: { inventoryId: number; type: InventoryAdjustment['type']; value: number; notes?: string },
+    idempotencyKey?: string,
+  ) => api.post<InventoryAdjustment>('/inventory-adjustments', data, idempotencyHeader(idempotencyKey)),
+  transfer: (
+    data: { fromInventoryId: number; toInventoryId: number; value: number; notes?: string },
+    idempotencyKey?: string,
+  ) => api.post<TransferResult>('/inventory-adjustments/transfer', data, idempotencyHeader(idempotencyKey)),
   pendingTransfers: (branchId?: number) =>
     api.get<PendingTransfer[]>('/inventory-adjustments/transfers/pending', {
       params: branchId != null ? { branchId } : undefined,
     }),
+  // One answer per transfer, so its id makes a stable key: a double click on
+  // Accept replays instead of racing.
   acceptTransfer: (id: number) =>
-    api.post<TransferResult>(`/inventory-adjustments/${id}/accept`),
+    api.post<TransferResult>(`/inventory-adjustments/${id}/accept`, undefined, idempotencyHeader(`transfer-${id}-accept`)),
   rejectTransfer: (id: number) =>
-    api.post<{ status: 'REJECTED' }>(`/inventory-adjustments/${id}/reject`),
+    api.post<{ status: 'REJECTED' }>(`/inventory-adjustments/${id}/reject`, undefined, idempotencyHeader(`transfer-${id}-reject`)),
   update: (id: number, data: { type?: InventoryAdjustment['type']; value?: number; notes?: string }) =>
     api.patch<InventoryAdjustment>(`/inventory-adjustments/${id}`, data),
   delete: (id: number) => api.delete(`/inventory-adjustments/${id}`),
@@ -354,8 +361,10 @@ export const materialAdjustmentsApi = {
     api.get<MaterialAdjustment[]>('/material-adjustments', {
       params: { materialInventoryId },
     }),
-  create: (data: { materialInventoryId: number; type: string; value: number; notes?: string }) =>
-    api.post<MaterialAdjustment>('/material-adjustments', data),
+  create: (
+    data: { materialInventoryId: number; type: string; value: number; notes?: string },
+    idempotencyKey?: string,
+  ) => api.post<MaterialAdjustment>('/material-adjustments', data, idempotencyHeader(idempotencyKey)),
   delete: (id: number) => api.delete(`/material-adjustments/${id}`),
 };
 
@@ -418,8 +427,10 @@ export const productionOrdersApi = {
     }),
   get: (id: number) =>
     api.get<ProductionOrder>(`/production-orders/${id}`),
-  create: (data: { branchId: number; date: string; notes?: string; items: { productId: number; yield?: number }[] }) =>
-    api.post<ProductionOrder>('/production-orders', data),
+  create: (
+    data: { branchId: number; date: string; notes?: string; items: { productId: number; yield?: number }[] },
+    idempotencyKey?: string,
+  ) => api.post<ProductionOrder>('/production-orders', data, idempotencyHeader(idempotencyKey)),
   update: (id: number, data: { branchId?: number; status?: string; notes?: string; items?: { productId: number; yield?: number }[] }) =>
     api.patch<ProductionOrder>(`/production-orders/${id}`, data),
   delete: (id: number) =>

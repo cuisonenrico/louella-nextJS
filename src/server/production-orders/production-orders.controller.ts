@@ -14,6 +14,7 @@ import {
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { CurrentUser } from '../common/decorators/user.decorator';
+import { Idempotent } from '../common/decorators/idempotent.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { BranchGuard } from '../common/guards/branch.guard';
 import { ProductionOrdersService } from './production-orders.service';
@@ -47,6 +48,7 @@ export class ProductionOrdersController {
   }
 
   @Post()
+  @Idempotent()
   @RequireFeature('production-orders:create')
   @Roles(UserRole.MANAGER)
   create(

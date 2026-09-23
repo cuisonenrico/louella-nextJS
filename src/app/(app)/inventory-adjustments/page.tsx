@@ -28,6 +28,7 @@ import {
 import QueryError from '@/components/QueryError';
 import { TableRowsSkeleton } from '@/components/loading/Skeletons';
 import PendingTransfersPanel from '../inventory/components/PendingTransfersPanel';
+import { useIdempotencyKey } from '@/lib/useIdempotencyKey';
 
 const ADJ_TYPES: AdjustmentType[] = ['PULL_IN', 'PULL_OUT', 'ANOMALY'];
 
@@ -76,10 +77,13 @@ export default function InventoryAdjustmentsPage() {
     qc.invalidateQueries({ queryKey: ['inv-adj-list'] });
   };
 
+  // One key per submission, so a double click books the adjustment once.
+  const [adjKey, renewAdjKey] = useIdempotencyKey();
   const createAdjMut = useMutation({
     mutationFn: (data: { inventoryId: number; type: AdjustmentType; value: number; notes?: string }) =>
-      inventoryAdjustmentsApi.create(data),
+      inventoryAdjustmentsApi.create(data, adjKey),
     onSuccess: () => {
+      renewAdjKey();
       invalidateAdjustments();
       setDialogOpen(false);
       toast.success('Adjustment saved');

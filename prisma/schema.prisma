@@ -718,3 +718,26 @@ model JobRun {
 
   @@index([jobName, startedAt])
 }
+
+// ---------------------------------------------------------------------------
+// Idempotency keys
+// ---------------------------------------------------------------------------
+
+/// One row per (user, Idempotency-Key) on endpoints marked @Idempotent().
+/// Reserved before the handler runs, so a resend of the same submission (a
+/// double click, a retried request) replays the first response instead of
+/// booking a second pull-out. `statusCode` is null while the first request is
+/// still running. Rows older than a day are purged as new keys arrive.
+model IdempotencyKey {
+  id           Int      @id @default(autoincrement())
+  userId       Int
+  key          String
+  route        String   // method + route pattern, e.g. "POST /inventory-adjustments/transfer"
+  requestHash  String   // SHA-256 of route params + body
+  statusCode   Int?
+  responseBody Json?
+  createdAt    DateTime @default(now())
+
+  @@unique([userId, key])
+  @@index([createdAt])
+}

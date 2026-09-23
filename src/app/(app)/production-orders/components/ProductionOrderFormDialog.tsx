@@ -26,6 +26,7 @@ import { useSheetNavigation } from '@/components/sheet/useSheetNavigation';
 import { SHEET_BANNER, SHEET_CELL, SHEET_HEAD, SHEET_TABLE } from '@/components/sheet/styles';
 import { cn } from '@/lib/utils';
 import { extractError } from '@/lib/errors';
+import { useIdempotencyKey } from '@/lib/useIdempotencyKey';
 
 const PRODUCT_TYPE_ORDER: ProductType[] = ['BREAD', 'CAKE', 'SPECIAL', 'MISCELLANEOUS'];
 const TYPE_LABELS: Record<ProductType, string> = { BREAD: 'Bread', CAKE: 'Cake', SPECIAL: 'Special', MISCELLANEOUS: 'Miscellaneous' };
@@ -113,10 +114,12 @@ export function ProductionOrderFormDialog({
     qc.invalidateQueries({ queryKey: ['production'] });
   }, [qc]);
 
+  // One key per new order, so a double click on Save creates one order.
+  const [createKey, renewCreateKey] = useIdempotencyKey();
   const createMutation = useMutation({
     mutationFn: (data: { branchId: number; date: string; notes?: string; items: { productId: number; yield: number }[] }) =>
-      productionOrdersApi.create(data),
-    onSuccess: () => { invalidate(); onSaved(); onClose(); toast.success('Order saved'); },
+      productionOrdersApi.create(data, createKey),
+    onSuccess: () => { renewCreateKey(); invalidate(); onSaved(); onClose(); toast.success('Order saved'); },
     onError: (err) => { const text = extractError(err); setFormError(text); toast.error(text); },
   });
 

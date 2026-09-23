@@ -21,6 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import { extractError } from '@/lib/errors';
+import { useIdempotencyKey } from '@/lib/useIdempotencyKey';
 
 const ADJ_COLORS: Record<string, string> = {
   PULL_IN: 'bg-green-100 text-green-800 border-green-300',
@@ -34,12 +35,14 @@ export function AdjustmentsDialog({ record, onClose }: { record: MaterialInvento
   const [value, setValue] = useState('');
   const [notes, setNotes] = useState('');
   const [formErr, setFormErr] = useState('');
+  // One key per submission, so a double click books the adjustment once.
+  const [submitKey, renewSubmitKey] = useIdempotencyKey();
 
   const adjustments: MaterialAdjustment[] = record?.adjustments ?? [];
 
   const createAdj = useMutation({
-    mutationFn: () => materialAdjustmentsApi.create({ materialInventoryId: record!.id, type, value: parseFloat(value), notes: notes || undefined }),
-    onSuccess: () => { setValue(''); setNotes(''); setFormErr(''); qc.invalidateQueries({ queryKey: ['material-inventory'] }); toast.success('Adjustment saved'); },
+    mutationFn: () => materialAdjustmentsApi.create({ materialInventoryId: record!.id, type, value: parseFloat(value), notes: notes || undefined }, submitKey),
+    onSuccess: () => { renewSubmitKey(); setValue(''); setNotes(''); setFormErr(''); qc.invalidateQueries({ queryKey: ['material-inventory'] }); toast.success('Adjustment saved'); },
     onError: (e) => { const text = extractError(e); setFormErr(text); toast.error(text); },
   });
 

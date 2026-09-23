@@ -14,6 +14,7 @@ import { CreateMaterialAdjustmentDto } from './dto/create-material-adjustment.dt
 import { Roles } from '../common/decorators/roles.decorator';
 import { RequireFeature } from '../common/decorators/require-feature.decorator';
 import { CurrentUser } from '../common/decorators/user.decorator';
+import { Idempotent } from '../common/decorators/idempotent.decorator';
 
 @Controller('material-adjustments')
 @RequireFeature('material-stock')
@@ -21,6 +22,7 @@ export class MaterialAdjustmentsController {
   constructor(private readonly service: MaterialAdjustmentsService) {}
 
   @Post()
+  @Idempotent()
   @RequireFeature('material-stock:adjust')
   @Roles(UserRole.INVENTORY)
   create(

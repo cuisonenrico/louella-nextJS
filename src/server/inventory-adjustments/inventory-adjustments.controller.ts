@@ -21,6 +21,7 @@ import { CreateTransferDto } from './dto/create-transfer.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RequireFeature } from '../common/decorators/require-feature.decorator';
 import { CurrentUser } from '../common/decorators/user.decorator';
+import { Idempotent } from '../common/decorators/idempotent.decorator';
 
 @Controller('inventory-adjustments')
 @RequireFeature('inventory-adjustments')
@@ -32,6 +33,7 @@ export class InventoryAdjustmentsController {
   ) {}
 
   @Post()
+  @Idempotent()
   @RequireFeature('inventory-adjustments:create')
   @Roles(UserRole.INVENTORY)
   create(
@@ -42,6 +44,7 @@ export class InventoryAdjustmentsController {
   }
 
   @Post('transfer')
+  @Idempotent()
   @RequireFeature('inventory-adjustments:transfer')
   @Roles(UserRole.INVENTORY)
   @ApiOperation({
@@ -71,6 +74,7 @@ export class InventoryAdjustmentsController {
 
   /** The receiving branch confirms a transfer arrived. */
   @Post(':id/accept')
+  @Idempotent()
   @RequireFeature('inventory-adjustments:transfer')
   @Roles(UserRole.INVENTORY)
   acceptTransfer(
@@ -82,6 +86,7 @@ export class InventoryAdjustmentsController {
 
   /** The receiving branch says a transfer did not arrive; the sender is credited back. */
   @Post(':id/reject')
+  @Idempotent()
   @RequireFeature('inventory-adjustments:transfer')
   @Roles(UserRole.INVENTORY)
   rejectTransfer(

@@ -7,6 +7,7 @@ import { inventoryAdjustmentsApi, inventoryApi } from '@/lib/apiServices';
 import { getAdjSum } from '../hooks/useInventoryColumns';
 import type { AdjustmentType, Branch, Inventory } from '@/types';
 import { extractError } from '@/lib/errors';
+import { useIdempotencyKey } from '@/lib/useIdempotencyKey';
 import { toast } from 'sonner';
 import { PENDING_TRANSFERS_KEY } from './PendingTransfersPanel';
 import { Button } from '@/components/ui/button';
@@ -56,6 +57,9 @@ interface InventoryAdjustmentsDialogProps {
 
 export default function InventoryAdjustmentsDialog({ inventory, productName, branches, onClose }: InventoryAdjustmentsDialogProps) {
   const qc = useQueryClient();
+  // One key per submission: resending the same adjustment or transfer (a
+  // double click, a retry after a lost response) books it once.
+  const [submitKey, renewSubmitKey] = useIdempotencyKey();
   const [form, setForm] = useState<{ type: AdjustmentType; value: string; notes: string; toBranchId: string }>({
     type: 'PULL_IN',
     value: '',
@@ -83,8 +87,9 @@ export default function InventoryAdjustmentsDialog({ inventory, productName, bra
 
   const createMutation = useMutation({
     mutationFn: (data: { inventoryId: number; type: AdjustmentType; value: number; notes?: string }) =>
-      inventoryAdjustmentsApi.create(data),
+      inventoryAdjustmentsApi.create(data, submitKey),
     onSuccess: () => {
+      renewSubmitKey();
       qc.invalidateQueries({ queryKey: ['inventory'] });
       setForm((f) => ({ ...f, value: '', notes: '', toBranchId: '' }));
       setFormError('');
@@ -94,8 +99,9 @@ export default function InventoryAdjustmentsDialog({ inventory, productName, bra
 
   const transferMutation = useMutation({
     mutationFn: (data: { fromInventoryId: number; toInventoryId: number; value: number; notes?: string }) =>
-      inventoryAdjustmentsApi.transfer(data),
+      inventoryAdjustmentsApi.transfer(data, submitKey),
     onSuccess: () => {
+      renewSubmitKey();
       const toName = branches.find((b) => b.id === parseInt(form.toBranchId))?.name ?? 'the receiving branch';
       qc.invalidateQueries({ queryKey: ['inventory'] });
       qc.invalidateQueries({ queryKey: PENDING_TRANSFERS_KEY });
