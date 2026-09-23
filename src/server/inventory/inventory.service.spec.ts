@@ -113,18 +113,8 @@ describe('InventoryService', () => {
 
   afterEach(() => jest.clearAllMocks());
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // create / createBulk — soft-delete resurrection
-  //
-  // `@@unique([branchId, productId, date])` does not include `deletedAt`, so an
-  // upsert re-entering a previously deleted day matches the tombstone and
-  // updates it. Without clearing `deletedAt` the write succeeds and the row
-  // stays invisible to every read, all of which filter `deletedAt: null`.
-  // ─────────────────────────────────────────────────────────────────────────
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // recascadeLeftovers
-  // ─────────────────────────────────────────────────────────────────────────
+  // Carry-forward, create/update/remove and the leftover check are covered on
+  // real data in inventory.chain.spec.ts.
 
   // ─────────────────────────────────────────────────────────────────────────
   // getSummary
@@ -278,10 +268,6 @@ describe('InventoryService', () => {
   });
 
   // ─────────────────────────────────────────────────────────────────────────
-  // update — cascade warning count
-  // ─────────────────────────────────────────────────────────────────────────
-
-  // ─────────────────────────────────────────────────────────────────────────
   // Branch scoping (#2) — managers must not read/modify other branches
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -363,10 +349,6 @@ describe('InventoryService', () => {
   });
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Aggregation caching (Task 4)
-  // ─────────────────────────────────────────────────────────────────────────
-
-  // ─────────────────────────────────────────────────────────────────────────
   // Date-range bounds
   //
   // Every other aggregate bounds its range. getSummary did not, so one request
@@ -375,6 +357,22 @@ describe('InventoryService', () => {
   // ─────────────────────────────────────────────────────────────────────────
 
   describe('date-range bounds', () => {
+    // With no start date this read returned the whole table, adjustments and
+    // all. It now means today.
+    it('reads only today when the date range is omitted', async () => {
+      jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+      jest.setSystemTime(new Date('2026-09-18T22:30:00Z')); // 06:30 Manila, the 19th
+      prisma.inventory.findMany.mockResolvedValue([]);
+      prisma.productPriceHistory.findMany.mockResolvedValue([]);
+
+      await service.findByDateAllBranches();
+
+      jest.useRealTimers();
+      expect(prisma.inventory.findMany.mock.calls[0][0].where.date).toEqual(
+        new Date('2026-09-19T00:00:00.000Z'),
+      );
+    });
+
     it('refuses a summary range wider than the shared limit', async () => {
       await expect(
         service.getSummary(null, '2020-01-01', '2030-01-01'),
@@ -398,27 +396,7 @@ describe('InventoryService', () => {
   });
 
   // ─────────────────────────────────────────────────────────────────────────
-  // updateBulk
-  //
-  // The sheet used to PATCH one row per edit through Promise.all. Against the
-  // global 20-request/minute throttle, editing a 165-product sheet 429s after
-  // the twentieth row — and Promise.all rejects on the first failure, so the
-  // user gets "save failed" on a partial write. One request, one transaction.
-  // ─────────────────────────────────────────────────────────────────────────
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Impossible rows
-  //
-  // Nothing stopped leftover + reject exceeding the stock that existed, so a
-  // typo produced negative `sold` and negative revenue. `zeroSales` filters
-  // `sold <= 0`, which quietly absorbed it instead of surfacing it.
-  // ─────────────────────────────────────────────────────────────────────────
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Audit trail
-  //
-  // createdById answered "who entered this"; nothing answered "who changed it".
-  // Edits move revenue, so they are exactly the writes worth attributing.
+  // Aggregation caching
   // ─────────────────────────────────────────────────────────────────────────
 
   describe('aggregation caching', () => {

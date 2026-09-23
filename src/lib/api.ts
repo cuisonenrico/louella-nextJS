@@ -112,6 +112,9 @@ api.interceptors.response.use(
         // was really a blip. Let the caller surface it as an ordinary error.
         const status = (refreshError as AxiosError)?.response?.status;
         if (typeof window !== 'undefined' && status === 401) {
+          // A full reload, on purpose: this runs outside React (no router), and
+          // the reload also drops every in-memory token and query cache.
+          // eslint-disable-next-line @next/next/no-location-assign-relative-destination
           window.location.href = '/login';
         }
         return Promise.reject(refreshError);

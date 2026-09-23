@@ -24,28 +24,46 @@ Next.js frontend for the Louella Bakery management system. Covers daily inventor
 
 ```bash
 npm install
-cp .env.example .env.local   # set NEXT_PUBLIC_API_URL
-npm run dev                  # http://localhost:4000
+cp .env.example .env         # set DATABASE_URL, DIRECT_URL and both JWT secrets
+npm run prisma:deploy        # apply migrations to that database
+npm run dev                  # app + API on http://localhost:4000, API at /api/v1
 ```
+
+The frontend and the NestJS API (`src/server/`) are one app: the API is served
+same-origin at `/api/v1`, so there is no separate backend to start.
 
 ---
 
 ## Environment Variables
 
-| Variable | Default | Description |
-|---|---|---|
-| `NEXT_PUBLIC_API_URL` | `http://localhost:3000/api/v1` | Backend API base URL |
+See `.env.example` for every variable with notes. The ones the server refuses
+to boot without:
+
+| Variable | Description |
+|---|---|
+| `DATABASE_URL` | Postgres via Supabase's **transaction pooler** (port 6543, `pgbouncer=true&connection_limit=1`) |
+| `DIRECT_URL` | Postgres **direct / session** connection (port 5432), used by migrations |
+| `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` | Random strings, at least 16 characters |
+
+Leave **`NEXT_PUBLIC_API_URL` unset**. The API is same-origin; setting it
+reintroduces a frontend/backend split that no longer exists, and it is inlined
+at build time.
 
 ---
 
 ## Commands
 
 ```bash
-npm run dev       # Next.js dev server with Turbopack
-npm run build     # Production build
-npm run start     # Serve production build
-npm run lint      # ESLint
+npm run dev             # dev server (app + API)
+npm run build           # prisma generate, then production build
+npm run start           # serve the production build
+npm run lint            # ESLint
+npm run test            # vitest (frontend) + jest (server)
+npm run prisma:deploy   # apply pending migrations to DATABASE_URL's database
 ```
+
+CI (`.github/workflows/ci.yml`) runs lint, both typechecks, both test suites
+and the build on every push to `master` and every pull request.
 
 ---
 
@@ -270,18 +288,13 @@ The UI adjusts based on the authenticated user's role:
 
 ## Deployment
 
-The app is a standard Next.js build. Serve it anywhere Node.js runs or export it statically.
+One Vercel project serves both the app and the API; Vercel deploys every push
+to `master`. See `docs/DEPLOYMENT.md`.
+
+When a release includes migrations, apply them to the deployed database first,
+then check the stock chains (a dry run by default; `--apply` writes):
 
 ```bash
-npm run build
-npm run start           # serves on $PORT (default 3000)
-```
-
-Set `NEXT_PUBLIC_API_URL` to the production backend URL before building — this value is inlined at build time.
-
-For the frontend dev port used in this monorepo:
-
-```bash
-# louella-workspace/start-dev.ps1 launches the frontend on port 4000
-.\start-dev.ps1
+npm run prisma:deploy
+npx tsx scripts/repair-stock-chains.ts
 ```

@@ -1,4 +1,4 @@
-import { test, Page } from '@playwright/test';
+import { test } from '@playwright/test';
 import { ADMIN } from './routes';
 
 test('how long until the error state actually appears', async ({ browser }) => {

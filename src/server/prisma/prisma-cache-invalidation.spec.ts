@@ -6,6 +6,29 @@ function runHook(hook: any, operation: string) {
 }
 
 describe('buildInvalidationExtension', () => {
+  // Revenue is sold × the price in force, and the gap reports list active
+  // catalogue rows: a price or catalogue write used to wait out the TTL.
+  it.each([
+    ['product', CACHE_NS.INVENTORY_AGG],
+    ['productPriceHistory', CACHE_NS.INVENTORY_AGG],
+    ['branch', CACHE_NS.INVENTORY_AGG],
+    ['material', CACHE_NS.MATERIAL_AGG],
+    ['materialPriceHistory', CACHE_NS.MATERIAL_AGG],
+    ['recipe', CACHE_NS.DASHBOARD_AGG],
+  ] as const)('bumps %s writes into %s', async (model, ns) => {
+    const bump = jest.fn();
+    const ext = buildInvalidationExtension({ bump });
+    await runHook((ext.query as Record<string, unknown>)[model], 'update');
+    expect(bump).toHaveBeenCalledWith(ns);
+  });
+
+  it('does not bump on a read', async () => {
+    const bump = jest.fn();
+    const ext = buildInvalidationExtension({ bump });
+    await runHook(ext.query.productPriceHistory, 'findMany');
+    expect(bump).not.toHaveBeenCalled();
+  });
+
   it('bumps inventory-agg on a write to Inventory', async () => {
     const bump = jest.fn();
     const ext = buildInvalidationExtension({ bump });

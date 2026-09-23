@@ -19,7 +19,7 @@ const WRITE_TX_OPTIONS = { timeout: 30_000, maxWait: 10_000 };
 
 type YieldKey = { branchId: number; productId: number; date: Date };
 const yieldKey = (k: YieldKey) => `${k.branchId}:${k.productId}:${dateKey(k.date)}`;
-import { toUtcDay } from '../common/utils/date-range.util';
+import { assertDateRange, toUtcDay } from '../common/utils/date-range.util';
 import {
   loadRecipeVersions,
   recipeOn,
@@ -325,7 +325,7 @@ export class ProductionService {
     return this.prisma.production.findMany({
       where: {
         branchId,
-        date: new Date(date),
+        date: toUtcDay(date),
       },
       orderBy: [
         { product: { type: 'asc' } },
@@ -341,24 +341,14 @@ export class ProductionService {
     endDate?: string,
     branchId?: number,
   ) {
-    const start = startDate ? new Date(startDate) : undefined;
-    const end = endDate ? new Date(endDate) : start;
-    if (start && end) {
-      const diffDays = Math.floor(
-        (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24),
-      );
-      if (diffDays < 0) {
-        throw new BadRequestException('endDate must be on or after startDate');
-      }
-      if (diffDays > 30) {
-        throw new BadRequestException('Date range cannot exceed 31 days');
-      }
-    }
-    const dateFilter = start
-      ? start.getTime() === end?.getTime()
+    // No start date means today (Manila), not the whole table.
+    const start = startDate ? toUtcDay(startDate) : toUtcDay(new Date());
+    const end = endDate ? toUtcDay(endDate) : start;
+    assertDateRange(start, end);
+    const dateFilter =
+      start.getTime() === end.getTime()
         ? { date: start }
-        : { date: { gte: start, lte: end } }
-      : {};
+        : { date: { gte: start, lte: end } };
     return this.prisma.production.findMany({
       where: { ...dateFilter, ...(branchId != null ? { branchId } : {}) },
       orderBy: [
@@ -381,8 +371,16 @@ export class ProductionService {
     return record;
   }
 
-  async getMaterialConsumption(id: number, plannedYield?: number) {
-    return this.productionAnalytics.getMaterialConsumption(id, plannedYield);
+  async getMaterialConsumption(
+    id: number,
+    plannedYield?: number,
+    branchId?: number,
+  ) {
+    return this.productionAnalytics.getMaterialConsumption(
+      id,
+      plannedYield,
+      branchId,
+    );
   }
 
   async getMaterialConsumptionSummary(date: string, branchId?: number) {

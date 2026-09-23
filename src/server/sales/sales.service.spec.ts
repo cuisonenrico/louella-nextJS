@@ -53,3 +53,33 @@ describe('SalesService — soft-deleted inventory must be excluded', () => {
     expectsDeletedAtNull();
   });
 });
+
+describe('SalesService — bounded ranges', () => {
+  let service: SalesService;
+  let prisma: ReturnType<typeof makePrisma>;
+
+  beforeEach(() => {
+    prisma = makePrisma();
+    service = new SalesService(prisma as never);
+  });
+
+  // These used to accept any span: one request could scan every row.
+  it.each([
+    ['getByBranch', (s: SalesService) => s.getByBranch(1, '2025-01-01', '2026-09-01')],
+    ['getByBranchAndProduct', (s: SalesService) => s.getByBranchAndProduct(1, 2, '2025-01-01', '2026-09-01')],
+    ['getByProduct', (s: SalesService) => s.getByProduct(2, '2025-01-01', '2026-09-01')],
+    ['getDailySummary', (s: SalesService) => s.getDailySummary(1, '2025-01-01', '2026-09-01')],
+  ])('%s refuses a range over 90 days', async (_name, call) => {
+    await expect(call(service)).rejects.toThrow('Date range cannot exceed 90 days');
+    expect(prisma.inventory.findMany).not.toHaveBeenCalled();
+  });
+
+  it('reads dates as Manila calendar days', async () => {
+    await service.getByBranch(1, '2026-09-01', '2026-09-30');
+
+    expect(prisma.inventory.findMany.mock.calls[0][0].where.date).toEqual({
+      gte: new Date('2026-09-01T00:00:00.000Z'),
+      lte: new Date('2026-09-30T00:00:00.000Z'),
+    });
+  });
+});

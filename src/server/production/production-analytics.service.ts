@@ -30,9 +30,13 @@ export class ProductionAnalyticsService {
    * 2026-09-19). Both used to be today's, so editing a recipe or repricing
    * flour rewrote every past day's cost.
    */
-  async getMaterialConsumption(id: number, plannedYield?: number) {
-    const production = await this.prisma.production.findUnique({
-      where: { id },
+  async getMaterialConsumption(
+    id: number,
+    plannedYield?: number,
+    branchId?: number,
+  ) {
+    const production = await this.prisma.production.findFirst({
+      where: { id, ...(branchId != null ? { branchId } : {}) },
       include: { product: true },
     });
     if (!production) throw new NotFoundException('Production record not found');

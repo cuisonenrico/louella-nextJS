@@ -13,6 +13,10 @@ export default defineConfig({
     // Component tests (Sidebar, RouteGuard) need a DOM; the pure-helper suites
     // are unaffected by running under jsdom.
     environment: 'jsdom',
+    // Full-screen renders under jsdom (the permissions matrix renders one row
+    // per feature) took just over the 5 s default when the whole suite ran in
+    // parallel, and failed at random. CI runners are slower still.
+    testTimeout: 15_000,
     // Radix shims + jest-dom matchers; see vitest.setup.ts.
     setupFiles: ['./vitest.setup.ts'],
     include: ['src/**/*.{spec,test}.{ts,tsx}'],

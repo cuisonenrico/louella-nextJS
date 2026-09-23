@@ -1,0 +1,58 @@
+name: CI
+
+# Vercel deploys every push to master, so this is the only thing standing
+# between a broken change and the bakery's sheets. It needs no secrets: the
+# server suites use mocks and an in-memory stock database, and the build never
+# connects to Postgres (Nest boots on the first request, not at build time).
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Placeholders so config validation and the build have something to
+      # read. Nothing here is a real credential or reaches a real database.
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+      DIRECT_URL: postgresql://ci:ci@localhost:5432/ci
+      JWT_ACCESS_SECRET: ci-access-secret-not-for-production
+      JWT_REFRESH_SECRET: ci-refresh-secret-not-for-production
+      NEXT_TELEMETRY_DISABLED: 1
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run prisma:generate
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck (app)
+        run: npx tsc --noEmit -p tsconfig.json
+
+      - name: Typecheck (server)
+        run: npx tsc --noEmit -p tsconfig.server.json
+
+      - name: Test (web)
+        run: npm run test:web
+
+      - name: Test (server)
+        run: npm run test:server
+
+      - name: Build
+        run: npm run build

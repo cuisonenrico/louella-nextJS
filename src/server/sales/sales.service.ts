@@ -2,6 +2,23 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { getEffectivePrice } from '../common/utils/price-history.util';
 import { computeSold } from '../common/utils/inventory-metrics.util';
+import {
+  MAX_REPORT_RANGE_DAYS,
+  assertDateRange,
+  toUtcDay,
+} from '../common/utils/date-range.util';
+
+/**
+ * A bounded date range on Manila days. These endpoints used to hand the
+ * strings to `new Date` and accept any span, so one request could scan every
+ * inventory row the business has, adjustments included.
+ */
+function dayRange(startDate: string, endDate: string) {
+  const gte = toUtcDay(startDate);
+  const lte = toUtcDay(endDate);
+  assertDateRange(gte, lte, MAX_REPORT_RANGE_DAYS);
+  return { gte, lte };
+}
 
 type InventoryRow = {
   id: number;
@@ -93,7 +110,7 @@ export class SalesService {
   // Sales for a specific branch on a specific date
   async getByBranchAndDate(branchId: number, date: string) {
     const rows = await this.prisma.inventory.findMany({
-      where: { branchId, date: new Date(date), deletedAt: null },
+      where: { branchId, date: toUtcDay(date), deletedAt: null },
       select: this.salesSelect,
       orderBy: [
         { product: { type: 'asc' } },
@@ -119,7 +136,7 @@ export class SalesService {
     const rows = await this.prisma.inventory.findMany({
       where: {
         branchId,
-        date: { gte: new Date(startDate), lte: new Date(endDate) },
+        date: dayRange(startDate, endDate),
         deletedAt: null,
       },
       select: this.salesSelect,
@@ -155,7 +172,7 @@ export class SalesService {
       where: {
         branchId,
         productId,
-        date: { gte: new Date(startDate), lte: new Date(endDate) },
+        date: dayRange(startDate, endDate),
         deletedAt: null,
       },
       select: this.salesSelect,
@@ -187,7 +204,7 @@ export class SalesService {
       where: {
         productId,
         ...(branchId != null ? { branchId } : {}),
-        date: { gte: new Date(startDate), lte: new Date(endDate) },
+        date: dayRange(startDate, endDate),
         deletedAt: null,
       },
       select: this.salesSelect,
@@ -212,7 +229,7 @@ export class SalesService {
     const rows = await this.prisma.inventory.findMany({
       where: {
         branchId,
-        date: { gte: new Date(startDate), lte: new Date(endDate) },
+        date: dayRange(startDate, endDate),
         deletedAt: null,
       },
       select: this.salesSelect,

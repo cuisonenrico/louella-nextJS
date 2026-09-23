@@ -59,7 +59,7 @@ describe('ProductionAnalyticsService.getMaterialConsumption — cost as of the d
     const flour = { id: 3, name: 'Flour', unit: 'KG', pricePerUnit: { toNumber: () => 60 } };
     const prisma = {
       production: {
-        findUnique: jest.fn().mockResolvedValue({
+        findFirst: jest.fn().mockResolvedValue({
           id: 1, productId: 2, yield: 10, date: day('2026-09-05'),
           product: { name: 'Pandesal' },
         }),
@@ -90,5 +90,21 @@ describe('ProductionAnalyticsService.getMaterialConsumption — cost as of the d
       expect.objectContaining({ consumed: 20, pricePerUnit: 40, totalCost: 800 }),
     );
     expect(result.totalMaterialCost).toBe(800);
+  });
+
+  // It ignored branch scope, so a branch-limited user could read any
+  // branch's production cost by guessing ids.
+  it('scopes the lookup to the caller’s branch', async () => {
+    const prisma = {
+      production: { findFirst: jest.fn().mockResolvedValue(null) },
+    };
+    const service = new ProductionAnalyticsService(prisma as never);
+
+    await expect(service.getMaterialConsumption(1, undefined, 4)).rejects.toThrow(
+      'Production record not found',
+    );
+    expect(prisma.production.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 1, branchId: 4 } }),
+    );
   });
 });

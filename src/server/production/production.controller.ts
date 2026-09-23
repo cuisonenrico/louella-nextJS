@@ -172,11 +172,18 @@ export class ProductionController {
   getMaterialConsumption(
     @Param('id', ParseIntPipe) id: number,
     @Query('plannedYield') plannedYieldStr?: string,
+    @Query('branchId') branchIdStr?: string,
   ) {
     const plannedYield = plannedYieldStr
       ? parseInt(plannedYieldStr, 10)
       : undefined;
-    return this.productionService.getMaterialConsumption(id, plannedYield);
+    // Scoped like every other :id route: BranchGuard pins branchId for a
+    // branch-limited user, who could otherwise read any branch's costs by id.
+    return this.productionService.getMaterialConsumption(
+      id,
+      plannedYield,
+      parseBranchScope(branchIdStr),
+    );
   }
 
   @Patch(':id')

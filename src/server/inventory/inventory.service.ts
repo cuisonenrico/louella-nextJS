@@ -500,14 +500,15 @@ export class InventoryService {
     endDate?: string,
     branchId?: number,
   ) {
-    const start = startDate ? toUtcDay(startDate) : undefined;
+    // No start date means today, not "every row ever": this read includes
+    // each row's adjustments and was the heaviest unbounded query in the API.
+    const start = startDate ? toUtcDay(startDate) : this.localToday();
     const end = endDate ? toUtcDay(endDate) : start;
-    if (start && end) assertDateRange(start, end);
-    const dateFilter = start
-      ? start.getTime() === end?.getTime()
+    assertDateRange(start, end);
+    const dateFilter =
+      start.getTime() === end.getTime()
         ? { date: start }
-        : { date: { gte: start, lte: end } }
-      : {};
+        : { date: { gte: start, lte: end } };
     const rows = await this.prisma.inventory.findMany({
       where: {
         ...dateFilter,

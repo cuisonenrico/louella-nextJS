@@ -14,6 +14,7 @@ import RejectionByProductCard from '@/components/analytics/RejectionByProductCar
 import KpiRow from './components/KpiRow';
 import RevenueTrendCard, { type TrendDay } from './components/RevenueTrendCard';
 import LowStockCard from './components/LowStockCard';
+import PendingTransfersPanel from '../inventory/components/PendingTransfersPanel';
 import { PRODUCT_TYPE_COLORS, PRODUCT_TYPE_LABELS } from '@/lib/productTypeColors';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -90,6 +91,10 @@ export default function DashboardPage() {
           <h2 className="font-display text-2xl font-semibold tracking-tight">Welcome back</h2>
           <p className="text-muted-foreground">{dayjs().format('dddd, MMMM D, YYYY')}</p>
         </div>
+
+        {/* Transfers waiting for a branch to accept (decision 2026-09-19).
+            Branch-scoped users see their own branch; the server pins it. */}
+        <PendingTransfersPanel />
 
         {isLoading ? (
           <DashboardSkeleton />

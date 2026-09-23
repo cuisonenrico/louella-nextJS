@@ -46,11 +46,11 @@ function makePrisma() {
       ? (arg as (tx: unknown) => unknown)(prisma)
       : Promise.resolve([]),
   );
-  return prisma as ReturnType<typeof makePrismaShape>;
+  return prisma as ReturnType<typeof _makePrismaShape>;
 }
 
 // Only for typing makePrisma's return; never called.
-declare function makePrismaShape(): {
+declare function _makePrismaShape(): {
   branch: { findFirst: jest.Mock };
   product: { findMany: jest.Mock; create: jest.Mock; aggregate: jest.Mock };
   productAlias: { findMany: jest.Mock };

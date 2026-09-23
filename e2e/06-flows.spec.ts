@@ -1,4 +1,4 @@
-import { test, expect, Page } from '@playwright/test';
+import { test, Page } from '@playwright/test';
 import { ADMIN } from './routes';
 
 const TAG = `QA-AUDIT-${Date.now()}`;   // marker so any leftover row is identifiable

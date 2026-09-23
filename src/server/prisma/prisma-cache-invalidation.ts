@@ -23,10 +23,8 @@ interface AllOpsArgs {
 
 /**
  * A Prisma client extension that bumps the relevant cache namespace after any
- * successful write to Inventory / InventoryAdjustment / MaterialInventory /
- * MaterialAdjustment. Centralising here means no writer service can bypass
- * invalidation — MaterialAdjustment was the one model that could, and material
- * stock figures fold its rows in.
+ * successful write to a model a cached aggregate reads. Centralising here
+ * means no writer service can bypass invalidation.
  */
 export function buildInvalidationExtension(registry: Registry) {
   const hook = (...namespaces: string[]) => ({
@@ -43,18 +41,26 @@ export function buildInvalidationExtension(registry: Registry) {
     },
   });
 
-  // The dashboard summary folds in inventory, adjustments and production, so
-  // it is invalidated by the same writes. Its remaining inputs — product,
-  // branch, material and recipe counts — change rarely, and go stale only for
-  // the TTL, which is the same bound this cache already accepts everywhere.
+  // Every model a cached aggregate reads, so no write can leave one stale on
+  // this instance. Revenue is sold × the price in force, so a price change is
+  // as much an inventory-aggregate input as a count; the gap reports list
+  // active products, branches and materials; the dashboard counts products,
+  // branches, materials and recipes. Price and catalogue writes used to wait
+  // out the TTL instead.
   return {
     name: 'cache-invalidation',
     query: {
       inventory: hook(CACHE_NS.INVENTORY_AGG, CACHE_NS.DASHBOARD_AGG),
       inventoryAdjustment: hook(CACHE_NS.INVENTORY_AGG, CACHE_NS.DASHBOARD_AGG),
+      product: hook(CACHE_NS.INVENTORY_AGG, CACHE_NS.DASHBOARD_AGG),
+      productPriceHistory: hook(CACHE_NS.INVENTORY_AGG, CACHE_NS.DASHBOARD_AGG),
+      branch: hook(CACHE_NS.INVENTORY_AGG, CACHE_NS.DASHBOARD_AGG),
       materialInventory: hook(CACHE_NS.MATERIAL_AGG, CACHE_NS.DASHBOARD_AGG),
       materialAdjustment: hook(CACHE_NS.MATERIAL_AGG, CACHE_NS.DASHBOARD_AGG),
+      material: hook(CACHE_NS.MATERIAL_AGG, CACHE_NS.DASHBOARD_AGG),
+      materialPriceHistory: hook(CACHE_NS.MATERIAL_AGG, CACHE_NS.DASHBOARD_AGG),
       production: hook(CACHE_NS.DASHBOARD_AGG),
+      recipe: hook(CACHE_NS.DASHBOARD_AGG),
     },
   };
 }
