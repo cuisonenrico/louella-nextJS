@@ -46,3 +46,6 @@ next-env.d.ts
 /e2e-results/
 /e2e/.auth/
 /playwright-report/
+
+# Playwright MCP session output
+.playwright-mcp/
