@@ -32,6 +32,10 @@ import { SalesController } from '../../sales/sales.controller';
 import { SuppliersController } from '../../suppliers/suppliers.controller';
 import { UnitConversionsController } from '../../unit-conversions/unit-conversions.controller';
 import { UsersController } from '../../users/users.controller';
+import { AbsencesController } from '../../employees/absences.controller';
+import { EmployeesController } from '../../employees/employees.controller';
+import { JobRolesController } from '../../employees/job-roles.controller';
+import { PayrollController } from '../../payroll/payroll.controller';
 
 const reflector = new Reflector();
 const rolesGuard = new RolesGuard(reflector);
@@ -45,7 +49,11 @@ type Target = { controller: new (...args: never[]) => object; method: string };
  * RolesGuard runs first globally, then FeatureGuard, so this mirrors the order
  * a request actually takes.
  */
-function evaluate(role: RoleName, { controller, method }: Target): 'allow' | 'deny' {
+function evaluate(
+  role: RoleName,
+  { controller, method }: Target,
+  permissions: readonly string[] = ROLE_DEFAULTS[role],
+): 'allow' | 'deny' {
   const handler = (controller.prototype as Record<string, unknown>)[method];
   if (typeof handler !== 'function') {
     throw new Error(`${controller.name}.${method} does not exist`);
@@ -54,7 +62,7 @@ function evaluate(role: RoleName, { controller, method }: Target): 'allow' | 'de
   const context = {
     switchToHttp: () => ({
       getRequest: () => ({
-        user: { id: 1, role, permissions: [...ROLE_DEFAULTS[role]] },
+        user: { id: 1, role, permissions: [...permissions] },
       }),
     }),
     getHandler: () => handler,
@@ -163,6 +171,17 @@ const MATRIX: [string, Target, [string, string, string, string]][] = [
 
   // ── Always open to any authenticated user ────────────────────────────────
   ['own permissions',      { controller: UsersController, method: 'myPermissions' },    [A, A, A, A]],
+  // Payroll is closed for reads too — the one exception to open reads.
+  ['employee list',        { controller: EmployeesController, method: 'findAll' },       [D, D, D, A]],
+  ['create employee',      { controller: EmployeesController, method: 'create' },        [D, D, D, A]],
+  ['add daily rate',       { controller: EmployeesController, method: 'addRate' },       [D, D, D, A]],
+  ['create employee login',{ controller: EmployeesController, method: 'createAccount' }, [D, D, D, A]],
+  ['job roles',            { controller: JobRolesController, method: 'findAll' },        [D, D, D, A]],
+  ['absences',             { controller: AbsencesController, method: 'findAll' },        [D, D, D, A]],
+  ['payroll cutoff',       { controller: PayrollController, method: 'getCutoff' },       [D, D, D, A]],
+  ['finalize payroll',     { controller: PayrollController, method: 'finalize' },        [D, D, D, A]],
+  ['void payroll run',     { controller: PayrollController, method: 'voidRun' },         [D, D, D, A]],
+  ['read payslip',         { controller: PayrollController, method: 'getPayslip' },      [D, D, D, A]],
 ];
 
 const ROLE_COLUMNS: RoleName[] = ['VIEWER', 'INVENTORY', 'MANAGER', 'ADMIN'];
@@ -241,6 +260,7 @@ describe('RBAC role x endpoint matrix', () => {
  */
 describe('action minRole mirrors the decorators', () => {
   const CONTROLLERS = [
+    EmployeesController, JobRolesController, AbsencesController, PayrollController,
     BranchesController, DashboardController, InventoryController,
     InventoryAdjustmentsController, InventoryImportController, JobsController,
     MaterialAdjustmentsController, MaterialInventoryController, MaterialsController,
@@ -290,5 +310,48 @@ describe('action minRole mirrors the decorators', () => {
     const wiredKeys = new Set(wired.map((w) => w.key));
     const declared = PERMISSION_LIST.filter((p) => p.kind === 'action').map((p) => p.key);
     expect(declared.filter((k) => !wiredKeys.has(k))).toEqual([]);
+  });
+});
+
+describe('payroll stays admin-only', () => {
+  const PAYROLL_CONTROLLERS = [
+    [EmployeesController, 'employees'],
+    [JobRolesController, 'employees'],
+    [AbsencesController, 'employees'],
+    [PayrollController, 'payroll'],
+  ] as const;
+
+  it.each(PAYROLL_CONTROLLERS.map(([c, key]) => [c.name, c, key] as const))(
+    '%s carries @Roles(ADMIN) and its feature key on the class',
+    (_name, controller, key) => {
+      expect(reflector.get(ROLES_KEY, controller)).toEqual([UserRole.ADMIN]);
+      expect(reflector.get(FEATURE_KEY, controller)).toEqual([key]);
+    },
+  );
+
+  it('leaves no handler without the admin floor', () => {
+    for (const [controller] of PAYROLL_CONTROLLERS) {
+      const proto = controller.prototype as unknown as Record<string, unknown>;
+      for (const name of Object.getOwnPropertyNames(proto)) {
+        if (name === 'constructor' || typeof proto[name] !== 'function') continue;
+        const handler = proto[name] as (...args: never[]) => unknown;
+        expect([controller.name, name, reflector.getAllAndOverride(ROLES_KEY, [handler, controller])]).toEqual([
+          controller.name,
+          name,
+          [UserRole.ADMIN],
+        ]);
+      }
+    }
+  });
+
+  it('denies a MANAGER even when the matrix grants the payroll keys', () => {
+    const granted = [...ROLE_DEFAULTS.MANAGER, 'employees', 'payroll'];
+    expect(evaluate('MANAGER', { controller: PayrollController, method: 'getCutoff' }, granted)).toBe('deny');
+    expect(evaluate('MANAGER', { controller: EmployeesController, method: 'findAll' }, granted)).toBe('deny');
+  });
+
+  it('denies an ADMIN whose payroll key was revoked', () => {
+    const revoked = ROLE_DEFAULTS.ADMIN.filter((k) => k !== 'payroll');
+    expect(evaluate('ADMIN', { controller: PayrollController, method: 'getCutoff' }, revoked)).toBe('deny');
   });
 });
