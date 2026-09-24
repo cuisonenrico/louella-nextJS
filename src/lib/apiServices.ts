@@ -1,6 +1,7 @@
 import api from './api';
 import { idempotencyHeader } from './useIdempotencyKey';
 import type {
+  CashDayView, CashSummary, ExpenseCategory, ValeEmployeeOption,
   Absence, CutoffSummary, CutoffView, Employee, EmployeeAccount, EmployeeInput, EmployeeRate, JobRole, PayrollAdjustment, PayrollAdjustmentCategory, PayrollAdjustmentKind, PayrollRun, PayslipWithRun, RecurringDeduction,
   AuthResponse,
   Branch,
@@ -563,4 +564,42 @@ export const payrollApi = {
   voidRun: (runId: number, reason: string) => api.post<PayrollRun>(`/payroll/runs/${runId}/void`, { reason }),
   run: (runId: number) => api.get<PayrollRun>(`/payroll/runs/${runId}`),
   payslip: (id: number) => api.get<PayslipWithRun>(`/payroll/payslips/${id}`),
+};
+export const branchCashApi = {
+  day: (branchId: number, date: string) =>
+    api.get<CashDayView>('/branch-cash/day', { params: { branchId, date } }),
+  summary: (p: { from: string; to: string; branchId?: number; unverified?: boolean }) =>
+    api.get<CashSummary>('/branch-cash/summary', {
+      params: { from: p.from, to: p.to, branchId: p.branchId, unverified: p.unverified ? 'true' : undefined },
+    }),
+  employees: (branchId: number, date: string) =>
+    api.get<ValeEmployeeOption[]>('/branch-cash/employees', { params: { branchId, date } }),
+  categories: (includeInactive = false) =>
+    api.get<ExpenseCategory[]>('/branch-cash/categories', {
+      params: includeInactive ? { includeInactive: 'true' } : undefined,
+    }),
+  createCategory: (data: { name: string; requiresNote?: boolean; sortOrder?: number }) =>
+    api.post<ExpenseCategory>('/branch-cash/categories', data),
+  updateCategory: (
+    id: number,
+    data: { name?: string; requiresNote?: boolean; sortOrder?: number; isActive?: boolean },
+  ) => api.patch<ExpenseCategory>(`/branch-cash/categories/${id}`, data),
+  createExpense: (
+    data: { branchId: number; date: string; categoryId: number; amount: number; note?: string },
+    idempotencyKey?: string,
+  ) => api.post('/branch-cash/expenses', data, idempotencyHeader(idempotencyKey)),
+  updateExpense: (id: number, data: { categoryId?: number; amount?: number; note?: string | null }) =>
+    api.patch(`/branch-cash/expenses/${id}`, data),
+  voidExpense: (id: number) => api.delete(`/branch-cash/expenses/${id}`),
+  createVale: (
+    data: { branchId: number; date: string; employeeId: number; amount: number; note?: string },
+    idempotencyKey?: string,
+  ) => api.post('/branch-cash/vale', data, idempotencyHeader(idempotencyKey)),
+  updateVale: (id: number, data: { employeeId?: number; amount?: number; note?: string | null }) =>
+    api.patch(`/branch-cash/vale/${id}`, data),
+  voidVale: (id: number) => api.delete(`/branch-cash/vale/${id}`),
+  setActualCash: (data: { branchId: number; date: string; actualCash: number | null }) =>
+    api.put('/branch-cash/day/actual-cash', data),
+  verify: (branchId: number, date: string) => api.post('/branch-cash/day/verify', { branchId, date }),
+  reopen: (branchId: number, date: string) => api.post('/branch-cash/day/reopen', { branchId, date }),
 };

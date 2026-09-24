@@ -1001,3 +1001,80 @@ export interface CutoffSummary {
 export interface PayslipWithRun extends PayslipRecord {
   run: { id: number; periodStart: string; periodEnd: string; status: PayrollRunStatus };
 }
+// ─── Branch cash ─────────────────────────────────────────────────────────────
+
+export type CashDayState = 'NOT_COUNTED' | 'BALANCED' | 'OVER' | 'SHORT';
+
+export interface CashDayTotals {
+  sales: number;
+  expenses: number;
+  vale: number;
+  expected: number;
+  actualCash: number | null;
+  overShort: number | null;
+  state: CashDayState;
+  drift: { field: 'sales' | 'expenses' | 'vale'; atVerify: number; now: number }[];
+}
+
+export interface CashExpenseLine {
+  id: number;
+  category: { id: number; name: string };
+  amount: number;
+  note: string | null;
+}
+
+export interface CashValeLine {
+  id: number;
+  employee: { id: number; name: string };
+  amount: number;
+  note: string | null;
+}
+
+export interface CashDayView {
+  branchId: number;
+  date: string;
+  status: 'OPEN' | 'VERIFIED';
+  verifiedAt: string | null;
+  verifiedBy: string | null;
+  note: string | null;
+  expenses: CashExpenseLine[];
+  vale: CashValeLine[];
+  totals: CashDayTotals;
+}
+
+export interface CashSummaryRow {
+  branchId: number;
+  branchName: string;
+  date: string;
+  status: 'OPEN' | 'VERIFIED';
+  totals: CashDayTotals;
+}
+
+export interface CashSummary {
+  rows: CashSummaryRow[];
+  totals: {
+    sales: number;
+    expenses: number;
+    vale: number;
+    expected: number;
+    actualCash: number;
+    overShort: number;
+    days: number;
+    unverifiedDays: number;
+    notCountedDays: number;
+  };
+}
+
+export interface ExpenseCategory {
+  id: number;
+  name: string;
+  sortOrder: number;
+  isActive: boolean;
+  requiresNote: boolean;
+}
+
+export interface ValeEmployeeOption {
+  id: number;
+  name: string;
+  branchId: number | null;
+}

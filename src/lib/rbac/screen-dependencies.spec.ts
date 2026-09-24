@@ -40,6 +40,7 @@ const API_FEATURE: Record<string, string | string[] | null> = {
   jobRolesApi: 'employees',
   absencesApi: 'employees',
   payrollApi: 'payroll',
+  branchCashApi: 'branch-cash',
 };
 
 /**
