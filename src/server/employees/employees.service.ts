@@ -100,6 +100,9 @@ export class EmployeesService {
       if (dto.jobRoleId !== undefined && dto.jobRoleId !== before.jobRoleId) {
         await this.assertActiveJobRole(tx, dto.jobRoleId);
       }
+      if (dto.hiredOn !== undefined && before.separatedOn && dto.hiredOn > day(before.separatedOn)) {
+        throw new BadRequestException('The hire date cannot be after the separation date');
+      }
       if (dto.hiredOn !== undefined && dto.hiredOn !== day(before.hiredOn)) {
         await assertValeWithinEmployment(
           tx,

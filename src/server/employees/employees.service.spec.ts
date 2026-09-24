@@ -107,6 +107,12 @@ describe('EmployeesService', () => {
     expect(prisma.employee.update).not.toHaveBeenCalled();
   });
 
+  it('refuses a hire date after the separation date', async () => {
+    prisma.employee.findFirst.mockResolvedValue(employeeRow({ separatedOn: at('2026-06-30') }));
+    await expect(service.update(1, { hiredOn: '2026-07-01' }, 7)).rejects.toThrow(BadRequestException);
+    expect(prisma.employee.update).not.toHaveBeenCalled();
+  });
+
   it('refuses a separation date before the hire date', async () => {
     await expect(service.setSeparation(1, '2025-12-31', 7)).rejects.toThrow(BadRequestException);
   });

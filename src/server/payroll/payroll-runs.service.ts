@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { cutoffOf, cutoffsOfYear } from '@/lib/payroll/cutoff';
+import { manilaToday } from '@/lib/manilaDate';
 import { PrismaService } from '../prisma/prisma.service';
 import { num } from '../common/utils/decimal.util';
 import { toUtcDay } from '../common/utils/date-range.util';
@@ -70,9 +71,16 @@ export class PayrollRunsService {
     });
   }
 
-  finalize(periodStart: string, userId: number) {
+  finalize(periodStart: string, userId: number, now: Date = new Date()) {
     return this.prisma.$transaction(
       async (tx) => {
+        // Not before the cutoff's last day (Manila): finalizing locks the
+        // cutoff, so an early run would count the remaining days as worked and
+        // refuse the absences and branch vale still to come.
+        const { periodEnd } = cutoffOf(periodStart);
+        if (periodEnd > manilaToday(now)) {
+          throw new BadRequestException(`This cutoff runs until ${periodEnd}. Finalize it on or after that day.`);
+        }
         // Lock first: absences/adjustments/skips take the same lock, so none
         // can land between the recompute below and the insert.
         await lockCutoff(tx, periodStart);
@@ -141,26 +149,47 @@ export class PayrollRunsService {
     );
   }
 
-  async markPaid(runId: number, userId: number) {
-    const before = await this.requireRun(runId);
-    if (before.status !== 'FINALIZED') throw new ConflictException(`A ${before.status.toLowerCase()} run cannot be marked paid`);
-    const after = await this.prisma.payrollRun.update({
-      where: { id: runId },
-      data: { status: 'PAID', paidAt: new Date(), paidById: userId },
-    });
-    await recordChanges(this.prisma, [{ entity: 'PayrollRun', entityId: runId, before, after }], userId);
-    return this.getRun(runId);
+  markPaid(runId: number, userId: number) {
+    return this.prisma
+      .$transaction(async (tx) => {
+        const before = await this.lockedRun(tx, runId);
+        if (before.status !== 'FINALIZED') {
+          throw new ConflictException(`A ${before.status.toLowerCase()} run cannot be marked paid`);
+        }
+        const after = await tx.payrollRun.update({
+          where: { id: runId },
+          data: { status: 'PAID', paidAt: new Date(), paidById: userId },
+        });
+        await recordChanges(tx, [{ entity: 'PayrollRun', entityId: runId, before, after }], userId);
+      })
+      .then(() => this.getRun(runId));
   }
 
-  async voidRun(runId: number, reason: string, userId: number) {
-    const before = await this.requireRun(runId);
-    if (before.status === 'VOIDED') throw new ConflictException('This run is already voided');
-    const after = await this.prisma.payrollRun.update({
-      where: { id: runId },
-      data: { status: 'VOIDED', voidedAt: new Date(), voidedById: userId, voidReason: reason.trim() },
-    });
-    await recordChanges(this.prisma, [{ entity: 'PayrollRun', entityId: runId, before, after }], userId);
-    return this.getRun(runId);
+  voidRun(runId: number, reason: string, userId: number) {
+    return this.prisma
+      .$transaction(async (tx) => {
+        const before = await this.lockedRun(tx, runId);
+        if (before.status === 'VOIDED') throw new ConflictException('This run is already voided');
+        const after = await tx.payrollRun.update({
+          where: { id: runId },
+          data: { status: 'VOIDED', voidedAt: new Date(), voidedById: userId, voidReason: reason.trim() },
+        });
+        await recordChanges(tx, [{ entity: 'PayrollRun', entityId: runId, before, after }], userId);
+      })
+      .then(() => this.getRun(runId));
+  }
+
+  /**
+   * The run, re-read under its cutoff's lock. Finalize takes the same lock, so
+   * a void and a paid (or a re-finalize) on one cutoff cannot interleave.
+   */
+  private async lockedRun(tx: Prisma.TransactionClient, runId: number) {
+    const found = await tx.payrollRun.findUnique({ where: { id: runId }, select: { periodStart: true } });
+    if (!found) throw new NotFoundException('Payroll run not found');
+    await lockCutoff(tx, day(found.periodStart));
+    const run = await tx.payrollRun.findUnique({ where: { id: runId } });
+    if (!run) throw new NotFoundException('Payroll run not found');
+    return run;
   }
 
   async getRun(runId: number) {
@@ -178,11 +207,5 @@ export class PayrollRunsService {
     });
     if (!slip) throw new NotFoundException('Payslip not found');
     return { ...slip, run: { ...slip.run, periodStart: day(slip.run.periodStart), periodEnd: day(slip.run.periodEnd) } };
-  }
-
-  private async requireRun(runId: number) {
-    const run = await this.prisma.payrollRun.findUnique({ where: { id: runId } });
-    if (!run) throw new NotFoundException('Payroll run not found');
-    return run;
   }
 }

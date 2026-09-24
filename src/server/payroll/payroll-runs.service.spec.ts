@@ -81,6 +81,15 @@ describe('PayrollRunsService', () => {
       );
     });
 
+    it('refuses a cutoff whose last day has not come yet (Manila)', async () => {
+      // 2026-09-29 16:30 UTC is already Sep 30 in Manila — the cutoff's last day.
+      await expect(service.finalize('2026-09-16', 7, new Date('2026-09-20T02:00:00Z'))).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prisma.payrollRun.create).not.toHaveBeenCalled();
+      await expect(service.finalize('2026-09-16', 7, new Date('2026-09-29T16:30:00Z'))).resolves.toBeDefined();
+    });
+
     it('refuses a cutoff that already has a run', async () => {
       prisma.payrollRun.findFirst.mockResolvedValue({ id: 2 });
       await expect(service.finalize('2026-09-01', 7)).rejects.toThrow(ConflictException);
@@ -140,6 +149,25 @@ describe('PayrollRunsService', () => {
         voidReason: 'Wrong absences',
         voidedById: 7,
       });
+    });
+
+    it('marks paid under the cutoff lock, reading the run inside the transaction', async () => {
+      await service.markPaid(3, 7);
+      expect(prisma.$transaction).toHaveBeenCalled();
+      expect(prisma.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(
+        prisma.payrollRun.update.mock.invocationCallOrder[0],
+      );
+      expect(prisma.payrollRun.findUnique.mock.invocationCallOrder[1]).toBeGreaterThan(
+        prisma.$executeRaw.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('voids under the cutoff lock, re-reading the status after it', async () => {
+      prisma.payrollRun.findUnique
+        .mockResolvedValueOnce(runRow())
+        .mockResolvedValueOnce(runRow({ status: 'VOIDED' }));
+      await expect(service.voidRun(3, 'race', 7)).rejects.toThrow(ConflictException);
+      expect(prisma.payrollRun.update).not.toHaveBeenCalled();
     });
 
     it('does not void twice', async () => {

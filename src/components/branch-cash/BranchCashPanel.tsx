@@ -131,6 +131,12 @@ export default function BranchCashPanel({ branchId, date }: { branchId: number; 
     label: c.name,
     requiresNote: c.requiresNote,
   }));
+  // An old line may sit in a category retired since; keep it pickable for
+  // that line so its amount or note can still be corrected (the API allows it).
+  const categoryOptionsFor = (category: { id: number; name: string }): CashLineOption[] =>
+    categoryOptions.some((o) => o.value === String(category.id))
+      ? categoryOptions
+      : [...categoryOptions, { value: String(category.id), label: `${category.name} (retired)` }];
   const employeeOptions: CashLineOption[] = employees.map((e) => ({ value: String(e.id), label: e.name }));
   const busy = saveCash.isPending || verify.isPending || reopen.isPending;
 
@@ -172,7 +178,7 @@ export default function BranchCashPanel({ branchId, date }: { branchId: number; 
               <CashLineForm
                 key={e.id}
                 pickLabel="Category"
-                options={categoryOptions}
+                options={categoryOptionsFor(e.category)}
                 initial={{ optionId: e.category.id, amount: e.amount, note: e.note }}
                 submitLabel="Save"
                 pending={editLine.isPending}

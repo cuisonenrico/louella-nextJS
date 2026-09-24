@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import { parseAmount } from './parseAmount';
+import { parseAmount, parseCashCount } from './parseAmount';
 import CashLineForm from './CashLineForm';
 
 describe('parseAmount', () => {
@@ -16,6 +16,21 @@ describe('parseAmount', () => {
 
   it.each(['', 'abc', '12.345', '-5', '0'])('rejects %p', (text) => {
     expect(parseAmount(text)).toBeNull();
+  });
+});
+
+describe('parseCashCount', () => {
+  it.each([
+    ['0', 0],
+    ['0.00', 0],
+    ['₱0', 0],
+    ['1,250.50', 1250.5],
+  ])('reads %p as %p', (text, value) => {
+    expect(parseCashCount(text)).toBe(value);
+  });
+
+  it.each(['', 'abc', '-1', '0.001'])('rejects %p', (text) => {
+    expect(parseCashCount(text)).toBeNull();
   });
 });
 

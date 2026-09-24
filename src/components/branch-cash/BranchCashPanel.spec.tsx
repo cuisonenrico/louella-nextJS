@@ -16,6 +16,7 @@ const api = {
   createExpense: vi.fn().mockResolvedValue({ data: {} }),
   createVale: vi.fn().mockResolvedValue({ data: {} }),
   voidExpense: vi.fn().mockResolvedValue({ data: {} }),
+  updateExpense: vi.fn().mockResolvedValue({ data: {} }),
   setActualCash: vi.fn().mockResolvedValue({ data: {} }),
   verify: vi.fn().mockResolvedValue({ data: {} }),
   reopen: vi.fn().mockResolvedValue({ data: {} }),
@@ -78,6 +79,32 @@ describe('BranchCashPanel', () => {
         { branchId: 3, date: '2026-10-01', categoryId: 2, amount: 60, note: undefined },
         expect.any(String),
       ),
+    );
+  });
+
+  it('lets a line in a retired category be edited', async () => {
+    api.day.mockResolvedValue({
+      data: view({ expenses: [{ id: 12, category: { id: 9, name: 'Transport' }, amount: 40, note: null }] }),
+    });
+    renderWithQuery(<BranchCashPanel branchId={3} date="2026-10-01" />);
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Edit' }))[0]); // the expense line
+    const amount = screen.getAllByLabelText('Amount')[0];
+    await userEvent.clear(amount);
+    await userEvent.type(amount, '45');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(api.updateExpense).toHaveBeenCalledWith(12, { categoryId: 9, amount: 45, note: null }),
+    );
+  });
+
+  it('saves a counted cash of zero however it is typed', async () => {
+    api.day.mockResolvedValue({ data: view({ totals: { ...view().totals, actualCash: null, overShort: null, state: 'NOT_COUNTED' } }) });
+    renderWithQuery(<BranchCashPanel branchId={3} date="2026-10-01" />);
+    const input = await screen.findByLabelText('Counted cash');
+    await userEvent.type(input, '0.00');
+    await userEvent.tab();
+    await waitFor(() =>
+      expect(api.setActualCash).toHaveBeenCalledWith({ branchId: 3, date: '2026-10-01', actualCash: 0 }),
     );
   });
 

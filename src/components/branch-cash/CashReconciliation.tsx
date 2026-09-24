@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { peso } from '@/lib/payroll/format';
 import type { CashDayView } from '@/types';
-import { parseAmount } from './parseAmount';
+import { parseCashCount } from './parseAmount';
 
 const BADGE: Record<CashDayView['totals']['state'], { text: (n: number) => string; className: string }> = {
   NOT_COUNTED: { text: () => 'Not counted', className: 'bg-muted text-muted-foreground' },
@@ -53,7 +53,7 @@ export default function CashReconciliation({
 
   const commitCash = () => {
     const trimmed = cashText.trim();
-    const value = trimmed === '' ? null : trimmed === '0' ? 0 : parseAmount(trimmed);
+    const value = trimmed === '' ? null : parseCashCount(trimmed);
     if (trimmed !== '' && value == null) return; // leave the bad text visible; aria-invalid marks it
     if (value === totals.actualCash) return;
     onSaveCash(value);
@@ -87,7 +87,7 @@ export default function CashReconciliation({
             onKeyDown={(e) => {
               if (e.key === 'Enter') commitCash();
             }}
-            aria-invalid={cashText.trim() !== '' && cashText.trim() !== '0' && parseAmount(cashText) == null}
+            aria-invalid={cashText.trim() !== '' && parseCashCount(cashText) == null}
           />
         </div>
         <Badge className={badge.className}>{badge.text(totals.overShort ?? 0)}</Badge>
