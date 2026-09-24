@@ -825,3 +825,179 @@ export interface JobRunsResponse {
   runs: JobRun[];
   latest: JobRun[];
 }
+// ─── Employees & payroll ─────────────────────────────────────────
+export interface JobRole {
+  id: number;
+  name: string;
+  isActive: boolean;
+}
+
+export interface EmployeeAccount {
+  userId: number;
+  email: string;
+  role: UserRole;
+  isActive: boolean;
+}
+
+export interface Employee {
+  id: number;
+  firstName: string;
+  lastName: string;
+  fullName: string;
+  jobRole: { id: number; name: string };
+  branch: { id: number; name: string } | null;
+  restDays: number[];
+  hiredOn: string;
+  separatedOn: string | null;
+  isActive: boolean;
+  phone: string | null;
+  address: string | null;
+  currentDailyRate: number | null;
+  account: EmployeeAccount | null;
+}
+
+export interface EmployeeInput {
+  firstName: string;
+  lastName: string;
+  jobRoleId: number;
+  branchId: number | null;
+  hiredOn: string;
+  restDays: number[];
+  phone: string | null;
+  address: string | null;
+  dailyRate: number;
+}
+
+export interface EmployeeRate {
+  id: number;
+  dailyRate: number;
+  effectiveOn: string;
+  createdAt: string;
+}
+
+export interface RecurringDeduction {
+  id: number;
+  name: string;
+  employeeShare: number;
+  employerShare: number;
+  isActive: boolean;
+}
+
+export interface Absence {
+  id: number;
+  employeeId: number;
+  date: string;
+  note: string | null;
+}
+
+export type PayrollAdjustmentKind = 'ADDITION' | 'DEDUCTION';
+export type PayrollAdjustmentCategory = 'OVERTIME' | 'BONUS' | 'HOLIDAY' | 'ALLOWANCE' | 'OFFENSE' | 'OTHER';
+
+export interface PayrollAdjustment {
+  id: number;
+  employeeId: number;
+  periodStart: string;
+  kind: PayrollAdjustmentKind;
+  category: PayrollAdjustmentCategory;
+  description: string;
+  amount: number;
+}
+
+export interface PayslipLineView {
+  type: 'BASIC' | 'ADDITION' | 'DEDUCTION' | 'EMPLOYER_SHARE';
+  label: string;
+  quantity: number | null;
+  rate: number | null;
+  amount: number;
+  sourceType: string | null;
+  sourceId: number | null;
+}
+
+export type PayslipWarning =
+  | { code: 'MISSING_RATE'; blocking: true; dates: string[] }
+  | { code: 'NEGATIVE_NET'; blocking: false }
+  | { code: 'NO_DAYS_WORKED'; blocking: false };
+
+export interface DraftPayslip {
+  employeeId: number;
+  employeeName: string;
+  jobRoleName: string;
+  branchName: string | null;
+  workingDays: number;
+  absenceDays: number;
+  daysWorked: number;
+  basicPay: number;
+  totalAdditions: number;
+  totalDeductions: number;
+  netPay: number;
+  totalEmployerShare: number;
+  lines: PayslipLineView[];
+  warnings: PayslipWarning[];
+  recurring: { id: number; name: string; employeeShare: number; skipId: number | null }[];
+}
+
+export interface CutoffDraft {
+  periodStart: string;
+  periodEnd: string;
+  payslips: DraftPayslip[];
+  totals: { employeeCount: number; netPay: number; employerShare: number };
+  hasBlocking: boolean;
+}
+
+export type PayrollRunStatus = 'FINALIZED' | 'PAID' | 'VOIDED';
+
+export interface PayslipRecord {
+  id: number;
+  runId: number;
+  employeeId: number;
+  employeeName: string;
+  jobRoleName: string;
+  branchName: string | null;
+  workingDays: number;
+  absenceDays: number;
+  daysWorked: number;
+  basicPay: number;
+  totalAdditions: number;
+  totalDeductions: number;
+  netPay: number;
+  totalEmployerShare: number;
+  lines: PayslipLineView[];
+}
+
+export interface PayrollRun {
+  id: number;
+  periodStart: string;
+  periodEnd: string;
+  status: PayrollRunStatus;
+  employeeCount: number;
+  totalNetPay: number;
+  totalEmployerShare: number;
+  finalizedAt: string;
+  paidAt: string | null;
+  voidedAt: string | null;
+  voidReason: string | null;
+  payslips: PayslipRecord[];
+}
+
+export interface CutoffView {
+  periodStart: string;
+  periodEnd: string;
+  status: 'OPEN' | 'FINALIZED' | 'PAID';
+  run: PayrollRun | null;
+  draft: CutoffDraft | null;
+}
+
+export interface CutoffSummary {
+  periodStart: string;
+  periodEnd: string;
+  status: 'OPEN' | 'FINALIZED' | 'PAID';
+  runId: number | null;
+  employeeCount: number | null;
+  totalNetPay: number | null;
+  totalEmployerShare: number | null;
+  voidedRuns: number;
+}
+
+export interface PayslipWithRun extends PayslipRecord {
+  run: { id: number; periodStart: string; periodEnd: string; status: PayrollRunStatus };
+}

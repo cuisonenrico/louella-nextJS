@@ -36,6 +36,10 @@ const API_FEATURE: Record<string, string | string[] | null> = {
   unitConversionsApi: 'unit-conversions',
   permissionsApi: 'permissions',
   jobsApi: 'jobs',
+  employeesApi: 'employees',
+  jobRolesApi: 'employees',
+  absencesApi: 'employees',
+  payrollApi: 'payroll',
 };
 
 /**

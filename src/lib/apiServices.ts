@@ -1,6 +1,7 @@
 import api from './api';
 import { idempotencyHeader } from './useIdempotencyKey';
 import type {
+  Absence, CutoffSummary, CutoffView, Employee, EmployeeAccount, EmployeeInput, EmployeeRate, JobRole, PayrollAdjustment, PayrollAdjustmentCategory, PayrollAdjustmentKind, PayrollRun, PayslipWithRun, RecurringDeduction,
   AuthResponse,
   Branch,
   PermissionsMatrixResponse,
@@ -493,4 +494,73 @@ export const notificationsApi = {
     api.post<{ message: string }>('/notifications/register', { token, platform }),
   removeToken: (token: string) =>
     api.delete(`/notifications/token/${encodeURIComponent(token)}`),
+};
+// ─── Employees & payroll (admin only) ─────────────────────────────
+export const jobRolesApi = {
+  list: (includeInactive = false) =>
+    api.get<JobRole[]>('/job-roles', { params: { includeInactive } }),
+  create: (name: string) => api.post<JobRole>('/job-roles', { name }),
+  update: (id: number, data: { name?: string; isActive?: boolean }) =>
+    api.patch<JobRole>(`/job-roles/${id}`, data),
+};
+
+export const employeesApi = {
+  list: (params?: { branchId?: number; jobRoleId?: number; status?: 'active' | 'separated' | 'all' }) =>
+    api.get<Employee[]>('/employees', { params }),
+  get: (id: number) => api.get<Employee>(`/employees/${id}`),
+  create: (data: EmployeeInput) => api.post<Employee>('/employees', data),
+  update: (id: number, data: Partial<Omit<EmployeeInput, 'dailyRate'>>) =>
+    api.patch<Employee>(`/employees/${id}`, data),
+  setSeparation: (id: number, separatedOn: string | null) =>
+    api.patch<Employee>(`/employees/${id}/status`, { separatedOn }),
+  rates: (id: number) => api.get<EmployeeRate[]>(`/employees/${id}/rates`),
+  addRate: (id: number, data: { dailyRate: number; effectiveOn: string }) =>
+    api.post<EmployeeRate>(`/employees/${id}/rates`, data),
+  removeRate: (id: number, rateId: number) => api.delete(`/employees/${id}/rates/${rateId}`),
+  deductions: (id: number) => api.get<RecurringDeduction[]>(`/employees/${id}/recurring-deductions`),
+  addDeduction: (id: number, data: { name: string; employeeShare: number; employerShare: number }) =>
+    api.post<RecurringDeduction>(`/employees/${id}/recurring-deductions`, data),
+  updateDeduction: (
+    id: number,
+    dedId: number,
+    data: Partial<{ name: string; employeeShare: number; employerShare: number; isActive: boolean }>,
+  ) => api.patch<RecurringDeduction>(`/employees/${id}/recurring-deductions/${dedId}`, data),
+  createAccount: (id: number, data: { email: string; password: string; role: UserRole; branchId?: number }) =>
+    api.post<EmployeeAccount>(`/employees/${id}/account`, data),
+  linkAccount: (id: number, userId: number) =>
+    api.post<EmployeeAccount>(`/employees/${id}/account/link`, { userId }),
+  deactivateAccount: (id: number) => api.delete<EmployeeAccount>(`/employees/${id}/account`),
+};
+
+export const absencesApi = {
+  list: (params: { from: string; to: string; employeeId?: number }) =>
+    api.get<Absence[]>('/absences', { params }),
+  create: (data: { employeeId: number; date: string; note?: string }) => api.post<Absence>('/absences', data),
+  remove: (id: number) => api.delete(`/absences/${id}`),
+};
+
+export const payrollApi = {
+  cutoffs: (year: number) => api.get<CutoffSummary[]>('/payroll/cutoffs', { params: { year } }),
+  cutoff: (periodStart: string) => api.get<CutoffView>(`/payroll/cutoffs/${periodStart}`),
+  addAdjustment: (
+    data: {
+      employeeId: number;
+      periodStart: string;
+      kind: PayrollAdjustmentKind;
+      category: PayrollAdjustmentCategory;
+      description: string;
+      amount: number;
+    },
+    idempotencyKey?: string,
+  ) => api.post<PayrollAdjustment>('/payroll/adjustments', data, idempotencyHeader(idempotencyKey)),
+  removeAdjustment: (id: number) => api.delete(`/payroll/adjustments/${id}`),
+  skip: (periodStart: string, data: { employeeId: number; recurringDeductionId: number }) =>
+    api.post<{ id: number }>(`/payroll/cutoffs/${periodStart}/skips`, data),
+  unskip: (id: number) => api.delete(`/payroll/skips/${id}`),
+  finalize: (periodStart: string, idempotencyKey?: string) =>
+    api.post<PayrollRun>(`/payroll/cutoffs/${periodStart}/finalize`, {}, idempotencyHeader(idempotencyKey)),
+  markPaid: (runId: number) => api.post<PayrollRun>(`/payroll/runs/${runId}/paid`),
+  voidRun: (runId: number, reason: string) => api.post<PayrollRun>(`/payroll/runs/${runId}/void`, { reason }),
+  run: (runId: number) => api.get<PayrollRun>(`/payroll/runs/${runId}`),
+  payslip: (id: number) => api.get<PayslipWithRun>(`/payroll/payslips/${id}`),
 };
