@@ -33,6 +33,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { PermissionsModule } from './permissions/permissions.module';
 import { EmployeesModule } from './employees/employees.module';
+import { PayrollModule } from './payroll/payroll.module';
 import { validateEnv } from './common/config/env.validation';
 import { CacheNamespaceModule } from './common/cache/cache-namespace.module';
 
@@ -71,6 +72,7 @@ import { CacheNamespaceModule } from './common/cache/cache-namespace.module';
     NotificationsModule,
     PermissionsModule,
     EmployeesModule,
+    PayrollModule,
   ],
   controllers: [AppController],
   providers: [
