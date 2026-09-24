@@ -4,6 +4,8 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { RequireFeature } from '../common/decorators/require-feature.decorator';
 import { CurrentUser } from '../common/decorators/user.decorator';
 import { EmployeesService } from './employees.service';
+import { RecurringDeductionsService } from './recurring-deductions.service';
+import { CreateRecurringDeductionDto, UpdateRecurringDeductionDto } from './dto/recurring-deduction.dto';
 import {
   CreateEmployeeDto,
   CreateRateDto,
@@ -22,7 +24,10 @@ type Actor = { id: number };
 @Roles(UserRole.ADMIN)
 @RequireFeature('employees')
 export class EmployeesController {
-  constructor(private readonly employees: EmployeesService) {}
+  constructor(
+    private readonly employees: EmployeesService,
+    private readonly deductions: RecurringDeductionsService,
+  ) {}
 
   @Get()
   findAll(@Query() q: ListEmployeesQuery) {
@@ -66,5 +71,29 @@ export class EmployeesController {
     @CurrentUser() user: Actor,
   ) {
     return this.employees.removeRate(id, rateId, user.id);
+  }
+
+  @Get(':id/recurring-deductions')
+  listDeductions(@Param('id', ParseIntPipe) id: number) {
+    return this.deductions.list(id);
+  }
+
+  @Post(':id/recurring-deductions')
+  addDeduction(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CreateRecurringDeductionDto,
+    @CurrentUser() user: Actor,
+  ) {
+    return this.deductions.create(id, dto, user.id);
+  }
+
+  @Patch(':id/recurring-deductions/:dedId')
+  updateDeduction(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('dedId', ParseIntPipe) dedId: number,
+    @Body() dto: UpdateRecurringDeductionDto,
+    @CurrentUser() user: Actor,
+  ) {
+    return this.deductions.update(id, dedId, dto, user.id);
   }
 }
