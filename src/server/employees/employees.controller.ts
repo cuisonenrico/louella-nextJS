@@ -4,6 +4,8 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { RequireFeature } from '../common/decorators/require-feature.decorator';
 import { CurrentUser } from '../common/decorators/user.decorator';
 import { EmployeesService } from './employees.service';
+import { EmployeeAccountsService } from './employee-accounts.service';
+import { CreateEmployeeAccountDto, LinkEmployeeAccountDto } from './dto/account.dto';
 import { RecurringDeductionsService } from './recurring-deductions.service';
 import { CreateRecurringDeductionDto, UpdateRecurringDeductionDto } from './dto/recurring-deduction.dto';
 import {
@@ -27,6 +29,7 @@ export class EmployeesController {
   constructor(
     private readonly employees: EmployeesService,
     private readonly deductions: RecurringDeductionsService,
+    private readonly accounts: EmployeeAccountsService,
   ) {}
 
   @Get()
@@ -95,5 +98,28 @@ export class EmployeesController {
     @CurrentUser() user: Actor,
   ) {
     return this.deductions.update(id, dedId, dto, user.id);
+  }
+
+  @Post(':id/account')
+  createAccount(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CreateEmployeeAccountDto,
+    @CurrentUser() user: Actor,
+  ) {
+    return this.accounts.create(id, dto, user.id);
+  }
+
+  @Post(':id/account/link')
+  linkAccount(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: LinkEmployeeAccountDto,
+    @CurrentUser() user: Actor,
+  ) {
+    return this.accounts.link(id, dto.userId, user.id);
+  }
+
+  @Delete(':id/account')
+  deactivateAccount(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: Actor) {
+    return this.accounts.deactivate(id, user.id);
   }
 }

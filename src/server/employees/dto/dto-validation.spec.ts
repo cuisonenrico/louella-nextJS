@@ -1,6 +1,7 @@
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
 import { CreateEmployeeDto, CreateRateDto, SetSeparationDto } from './employee.dto';
+import { CreateEmployeeAccountDto } from './account.dto';
 
 function errorsOf<T extends object>(cls: new () => T, plain: object): string[] {
   return validateSync(plainToInstance(cls, plain)).map((e) => e.property);
@@ -42,5 +43,16 @@ describe('employee DTO validation', () => {
     expect(errorsOf(SetSeparationDto, { separatedOn: null })).toEqual([]);
     expect(errorsOf(SetSeparationDto, { separatedOn: '2026-09-30' })).toEqual([]);
     expect(errorsOf(SetSeparationDto, {})).toEqual(['separatedOn']);
+  });
+});
+describe('employee login DTO', () => {
+  const login = { email: 'ana@louella.ph', password: 'temporary1', role: 'MANAGER' };
+
+  it('accepts roles up to MANAGER', () => {
+    expect(errorsOf(CreateEmployeeAccountDto, login)).toEqual([]);
+  });
+
+  it('never grants ADMIN from the employee screen', () => {
+    expect(errorsOf(CreateEmployeeAccountDto, { ...login, role: 'ADMIN' })).toEqual(['role']);
   });
 });

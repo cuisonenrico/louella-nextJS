@@ -7,11 +7,12 @@ import { JobRolesService } from './job-roles.service';
 import { AbsencesController } from './absences.controller';
 import { RecurringDeductionsService } from './recurring-deductions.service';
 import { AbsencesService } from './absences.service';
+import { EmployeeAccountsService } from './employee-accounts.service';
 
 @Module({
   imports: [UsersModule],
   controllers: [EmployeesController, JobRolesController, AbsencesController],
-  providers: [EmployeesService, JobRolesService, RecurringDeductionsService, AbsencesService],
+  providers: [EmployeesService, JobRolesService, RecurringDeductionsService, AbsencesService, EmployeeAccountsService],
   exports: [EmployeesService],
 })
 export class EmployeesModule {}
