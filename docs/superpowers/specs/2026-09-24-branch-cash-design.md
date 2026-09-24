@@ -88,7 +88,8 @@ days stored as `@db.Date`. Nothing is hard-deleted. Every write records an
 **`BranchExpense`**
 - `id`, `branchId` → `Branch`, `date @db.Date`, `categoryId` →
   `ExpenseCategory`, `amount Decimal(12,2)`, `note String?`
-- `createdById`, `updatedById?`, `deletedById?` → `User`
+- `createdById`, `updatedById?`, `deletedById?` — plain ids without a foreign
+  key, as in payroll, so `User` does not grow a back-relation each
 - `createdAt`, `updatedAt`, `deletedAt`
 - Index (`branchId`, `date`)
 
@@ -103,7 +104,7 @@ actual cash or on verify.
 - `id`, `branchId`, `date @db.Date`, unique (`branchId`, `date`)
 - `actualCash Decimal(12,2)?`, `note String?`
 - `status` enum `BranchCashDayStatus { OPEN, VERIFIED }`, default `OPEN`
-- `verifiedById?`, `verifiedAt?`
+- `verifiedById?` (plain id), `verifiedAt?`
 - Snapshot written at verify, cleared at reopen: `salesAtVerify`,
   `expensesAtVerify`, `valeAtVerify` (all `Decimal(12,2)?`)
 - `createdAt`, `updatedAt`
@@ -151,10 +152,13 @@ A new feature in `src/lib/rbac/features.ts`, key **`branch-cash`**, label
 Branch scope comes from `all-branches` through `BranchGuard`, like every other
 branch-scoped endpoint: a MANAGER sees and writes only their own branch.
 `VIEWER` and `INVENTORY` get nothing by default, because cash figures are more
-sensitive than the catalog. An admin can grant them.
+sensitive than the catalog. An admin can grant them the read key. Writes also
+carry a role floor, as every write in the app does: `@Roles(MANAGER)` on
+create/edit/delete and `@Roles(ADMIN)` on verify and categories. Each action's
+`minRole` in the manifest mirrors that floor (`rbac-matrix.spec` checks it).
 
-A migration inserts the keys into `Feature` and `RoleFeaturePermission`, the
-same way payroll's Task 2 does.
+A migration registers the keys in `Feature`, the same way payroll's Task 2
+does; role defaults live in `ROLE_DEFAULTS` in code.
 
 ### Endpoints (`/api/v1/branch-cash`)
 
@@ -171,7 +175,7 @@ same way payroll's Task 2 does.
 | PUT | `/day/actual-cash` | :create | Body `{ branchId, date, actualCash: number \| null, note? }` |
 | POST | `/day/verify` | :verify | Body `{ branchId, date }`. Writes the snapshot, locks the day |
 | POST | `/day/reopen` | :verify | Body `{ branchId, date }`. Clears the snapshot, unlocks |
-| GET | `/employees` | branch-cash | Active employees as `{ id, name, branchId }`, the requested branch's first |
+| GET | `/employees?branchId&date` | branch-cash | Employees employed on `date` as `{ id, name, branchId }`, the requested branch's first |
 | GET | `/categories` | branch-cash | Active categories in `sortOrder` |
 | POST, PATCH | `/categories[/:id]` | :categories | Create, rename, reorder, activate or deactivate |
 
@@ -185,7 +189,10 @@ void plus a new entry, so each branch-day's lock covers exactly its own rows.
    are allowed; managers often catch up the next morning.
 2. **Day lock.** The branch-day must not be `VERIFIED` → 409 "This day is
    verified. Ask an admin to reopen it." Applies to expenses, vale and actual
-   cash. The row is read `FOR UPDATE` so verify and a write cannot interleave.
+   cash. Every write and verify/reopen first takes a transaction-scoped
+   advisory lock on the branch-day (namespace 5; stock chains use 1–3,
+   payroll 4), so verify and a write cannot interleave even before a
+   `BranchCashDay` row exists.
 3. **Payroll lock (vale only).** `assertCutoffOpen(tx, cutoffOf(date).periodStart)`
    → 409 "Payroll for this period is already finalized." Applies to create,
    edit and void.
