@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 
 /**
- * Change history for stock figures (the AuditEvent table).
+ * Change history for stock figures and payroll records (the AuditEvent table).
  *
  * Every writer records what it changed, inside its own transaction, so the
  * history can never disagree with the data: "who changed this count, and from
@@ -14,7 +14,14 @@ export type AuditEntity =
   | 'Inventory'
   | 'MaterialInventory'
   | 'Production'
-  | 'InventoryAdjustment';
+  | 'InventoryAdjustment'
+  | 'Employee'
+  | 'EmployeeRate'
+  | 'RecurringDeduction'
+  | 'Absence'
+  | 'PayrollAdjustment'
+  | 'RecurringDeductionSkip'
+  | 'PayrollRun';
 
 export type AuditAction =
   | 'create'
@@ -29,6 +36,13 @@ export const AUDITED_FIELDS: Record<AuditEntity, readonly string[]> = {
   MaterialInventory: ['quantity', 'delivery', 'used', 'notes', 'supplierId', 'batchNumber'],
   Production: ['yield', 'notes', 'branchId', 'productId', 'date'],
   InventoryAdjustment: ['type', 'value', 'notes'],
+  Employee: ['firstName', 'lastName', 'jobRoleId', 'branchId', 'restDays', 'hiredOn', 'separatedOn', 'userId', 'phone', 'address'],
+  EmployeeRate: ['dailyRate', 'effectiveOn', 'deletedAt'],
+  RecurringDeduction: ['name', 'employeeShare', 'employerShare', 'isActive'],
+  Absence: ['employeeId', 'date', 'note', 'deletedAt'],
+  PayrollAdjustment: ['employeeId', 'periodStart', 'kind', 'category', 'description', 'amount', 'deletedAt'],
+  RecurringDeductionSkip: ['recurringDeductionId', 'periodStart', 'deletedAt'],
+  PayrollRun: ['status', 'voidReason'],
 };
 
 type Row = Record<string, unknown> | null | undefined;
@@ -63,7 +77,7 @@ export function diffFields(
   for (const field of AUDITED_FIELDS[entity]) {
     const b = plain(before?.[field]);
     const a = plain(after?.[field]);
-    if (b !== a) changes[field] = [b, a];
+    if (JSON.stringify(b) !== JSON.stringify(a)) changes[field] = [b, a];
   }
   return changes;
 }

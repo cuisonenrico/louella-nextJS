@@ -115,3 +115,11 @@ describe('change history on stock writes', () => {
     ]);
   });
 });
+describe('payroll entities', () => {
+  it('compares array fields by value, not by reference', () => {
+    expect(diffFields('Employee', { restDays: [0] }, { restDays: [0] })).toEqual({});
+    expect(diffFields('Employee', { restDays: [0] }, { restDays: [0, 3] })).toEqual({
+      restDays: [[0], [0, 3]],
+    });
+  });
+});
