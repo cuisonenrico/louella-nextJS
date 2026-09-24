@@ -25,6 +25,8 @@ import { useInventoryDisplayRows } from '../hooks/useInventoryDisplayRows';
 // import RejectionByProductCard from '@/components/analytics/RejectionByProductCard';
 import QueryError from '@/components/QueryError';
 import { TableSkeleton } from '@/components/loading/Skeletons';
+import BranchCashPanel, { BRANCH_CASH_KEY } from '@/components/branch-cash/BranchCashPanel';
+import Link from 'next/link';
 
 const PRODUCT_TYPE_ORDER: ProductType[] = ['BREAD', 'CAKE', 'SPECIAL', 'MISCELLANEOUS'];
 
@@ -46,6 +48,7 @@ export default function InventoryDetailsPage() {
   const canEditInventory = useCan('inventory-history:edit');
   const canCreateInventory = useCan('inventory-history:create');
   const canImport = useCan('inventory-import:import');
+  const canSeeCash = useCan('branch-cash');
   const today = dayjs().format('YYYY-MM-DD');
 
   // Filter state
@@ -182,6 +185,8 @@ export default function InventoryDetailsPage() {
       setPendingUpdates(new Map());
       qc.invalidateQueries({ queryKey: ['inventory'] });
       qc.invalidateQueries({ queryKey: ['inventory-summary'] });
+      // Sales moved, so the cash panel's expected figure did too.
+      qc.invalidateQueries({ queryKey: BRANCH_CASH_KEY });
       toast.success(
         result.cascadeUpdated > 0
           ? `Changes saved — ${result.cascadeUpdated} later ${result.cascadeUpdated === 1 ? 'row' : 'rows'} carried forward`
@@ -313,6 +318,17 @@ export default function InventoryDetailsPage() {
               onCellChange={handleCellChange}
             />
           )}
+
+          {canSeeCash ? (
+            !isRange && selectedBranchId != null ? (
+              <BranchCashPanel branchId={selectedBranchId} date={filterDateFrom} />
+            ) : (
+              <p className="my-4 text-sm text-muted-foreground">
+                Select one branch and one day to record expenses, vale and cash, or open{' '}
+                <Link href="/branch-cash" className="underline">Cash Reports</Link>.
+              </p>
+            )
+          ) : null}
 
           {/* Adjustments dialog.
               `adjRow` is the row as it was when the gear was clicked. Re-reading
