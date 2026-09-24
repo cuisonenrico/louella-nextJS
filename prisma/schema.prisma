@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider  = "postgresql"
   // Serverless functions fan out into many short-lived instances, so runtime
   // queries go through Supabase's transaction pooler (port 6543) with
   // pgbouncer=true&connection_limit=1. Pointing this at the session pooler
@@ -73,39 +73,39 @@ enum TransferStatus {
 }
 
 model User {
-  id                 Int            @id @default(autoincrement())
-  email              String         @unique
-  passwordHash       String
-  role               UserRole       @default(USER)
-  isActive           Boolean        @default(true)
-  mustChangePassword Boolean        @default(false)
-  failedLoginAttempts Int           @default(0)
-  lockedUntil        DateTime?
-  createdById        Int?
-  branchId           Int?           @unique
-  refreshTokens      RefreshToken[]
-  files              File[]
-  createdAt          DateTime       @default(now())
-  updatedAt          DateTime       @updatedAt
+  id                  Int            @id @default(autoincrement())
+  email               String         @unique
+  passwordHash        String
+  role                UserRole       @default(USER)
+  isActive            Boolean        @default(true)
+  mustChangePassword  Boolean        @default(false)
+  failedLoginAttempts Int            @default(0)
+  lockedUntil         DateTime?
+  createdById         Int?
+  branchId            Int?           @unique
+  refreshTokens       RefreshToken[]
+  files               File[]
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
 
-  inventoryEntries         Inventory[]         @relation("InventoryCreatedBy")
-  inventoryEdits           Inventory[]         @relation("InventoryUpdatedBy")
-  materialInventoryEntries MaterialInventory[] @relation("MaterialInventoryCreatedBy")
-  materialInventoryEdits   MaterialInventory[] @relation("MaterialInventoryUpdatedBy")
-  productionEntries        Production[]        @relation("ProductionCreatedBy")
-  productionEdits          Production[]        @relation("ProductionUpdatedBy")
+  inventoryEntries         Inventory[]           @relation("InventoryCreatedBy")
+  inventoryEdits           Inventory[]           @relation("InventoryUpdatedBy")
+  materialInventoryEntries MaterialInventory[]   @relation("MaterialInventoryCreatedBy")
+  materialInventoryEdits   MaterialInventory[]   @relation("MaterialInventoryUpdatedBy")
+  productionEntries        Production[]          @relation("ProductionCreatedBy")
+  productionEdits          Production[]          @relation("ProductionUpdatedBy")
   auditEvents              AuditEvent[]
-  productionOrders         ProductionOrder[]   @relation("ProductionOrderCreatedBy")
+  productionOrders         ProductionOrder[]     @relation("ProductionOrderCreatedBy")
   inventoryAdjustments     InventoryAdjustment[] @relation("InventoryAdjustmentCreatedBy")
   inventoryAdjustmentEdits InventoryAdjustment[] @relation("InventoryAdjustmentUpdatedBy")
   transferResponses        InventoryAdjustment[] @relation("TransferRespondedBy")
   materialAdjustments      MaterialAdjustment[]  @relation("MaterialAdjustmentCreatedBy")
   deviceTokens             DeviceToken[]
-  importLogs               ImportLog[]         @relation("ImportLogCreatedBy")
+  importLogs               ImportLog[]           @relation("ImportLogCreatedBy")
 
-  createdBy      User?   @relation("UserCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  createdUsers   User[]  @relation("UserCreatedBy")
-  managedBranch  Branch? @relation("BranchManager", fields: [branchId], references: [id], onDelete: SetNull)
+  createdBy     User?   @relation("UserCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdUsers  User[]  @relation("UserCreatedBy")
+  managedBranch Branch? @relation("BranchManager", fields: [branchId], references: [id], onDelete: SetNull)
 
   rolePermissionsUpdated RoleFeaturePermission[] @relation("RolePermissionUpdater")
   userPermissions        UserFeaturePermission[] @relation("UserPermissions")
@@ -129,12 +129,12 @@ model RefreshToken {
 }
 
 model File {
-  id        Int         @id @default(autoincrement())
+  id        Int        @id @default(autoincrement())
   userId    Int
   s3Key     String
   filename  String
-  status    FileStatus  @default(PENDING)
-  createdAt DateTime    @default(now())
+  status    FileStatus @default(PENDING)
+  createdAt DateTime   @default(now())
 
   user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
   jobs Job[]
@@ -160,18 +160,18 @@ model Product {
   name      String
   type      ProductType @default(BREAD)
   sortOrder Int         @default(0)
-  price     Decimal     @db.Decimal(10, 2) @default(0.00)
+  price     Decimal     @default(0.00) @db.Decimal(10, 2)
   isActive  Boolean     @default(true)
   date      DateTime    @default(now()) // product introduction / launch date
   createdAt DateTime    @default(now())
-  deletedAt DateTime?                   // soft delete – null means active
+  deletedAt DateTime? // soft delete – null means active
 
-  inventories  Inventory[]
-  productions  Production[]
-  recipe       Recipe?
-  priceHistory ProductPriceHistory[]
+  inventories          Inventory[]
+  productions          Production[]
+  recipe               Recipe?
+  priceHistory         ProductPriceHistory[]
   productionOrderItems ProductionOrderItem[]
-  aliases      ProductAlias[]
+  aliases              ProductAlias[]
 
   @@index([type, sortOrder])
 }
@@ -200,11 +200,11 @@ model Product {
 model ProductAlias {
   id         Int      @id @default(autoincrement())
   productId  Int
-  sheetLabel String   // store lowercased+trimmed, exactly as it appears in col A;
-                      // LabelResolver normalizes on load, so a mis-cased row
-                      // still matches, and ProductAlias_lookup_key keys on
-                      // lower(trim(...)) so it cannot duplicate
-  section    String?  // 'bote' for the deposit block; null = main body
+  sheetLabel String // store lowercased+trimmed, exactly as it appears in col A;
+  // LabelResolver normalizes on load, so a mis-cased row
+  // still matches, and ProductAlias_lookup_key keys on
+  // lower(trim(...)) so it cannot duplicate
+  section    String? // 'bote' for the deposit block; null = main body
   priceHint  Decimal? @db.Decimal(10, 2) // last-resort tie-break within one file
   notes      String?
   createdAt  DateTime @default(now())
@@ -283,29 +283,29 @@ model UserFeaturePermission {
 }
 
 model Inventory {
-  id          Int      @id @default(autoincrement())
-  branchId    Int
-  productId   Int
-  createdById Int?     // user who submitted this record
-  updatedById Int?     // user who last amended it — an edit is not an entry
+  id              Int       @id @default(autoincrement())
+  branchId        Int
+  productId       Int
+  createdById     Int? // user who submitted this record
+  updatedById     Int? // user who last amended it — an edit is not an entry
   // quantity/delivery/leftover/reject are Int (whole pieces). If partial-unit
   // products are ever introduced, all four columns must migrate to Decimal.
-  quantity    Int      @default(0) // total pieces produced / available for the day
-  delivery    Int      @default(0) // pieces delivered from production to this branch
-  leftover    Int      @default(0) // unsold pieces at end of day
-  reject      Int      @default(0) // damaged / rejected pieces
-  date        DateTime @db.Date
-  notes       String?
-  isAutoGenerated Boolean @default(false) // true = created by the daily CRON job (placeholder)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  deletedAt   DateTime?             // soft delete – null means active
+  quantity        Int       @default(0) // total pieces produced / available for the day
+  delivery        Int       @default(0) // pieces delivered from production to this branch
+  leftover        Int       @default(0) // unsold pieces at end of day
+  reject          Int       @default(0) // damaged / rejected pieces
+  date            DateTime  @db.Date
+  notes           String?
+  isAutoGenerated Boolean   @default(false) // true = created by the daily CRON job (placeholder)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime? // soft delete – null means active
 
-  branch      Branch                @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  product     Product               @relation(fields: [productId], references: [id], onDelete: Cascade)
-  createdBy   User?                 @relation("InventoryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  updatedBy   User?                 @relation("InventoryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
-  adjustments InventoryAdjustment[]
+  branch            Branch                @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  product           Product               @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdBy         User?                 @relation("InventoryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy         User?                 @relation("InventoryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  adjustments       InventoryAdjustment[]
   incomingTransfers InventoryAdjustment[] @relation("TransferDestination")
 
   @@unique([branchId, productId, date])
@@ -323,31 +323,31 @@ model Inventory {
 // ---------------------------------------------------------------------------
 
 model InventoryAdjustment {
-  id                  Int            @id @default(autoincrement())
-  inventoryId         Int
-  type                AdjustmentType
-  value               Int            // magnitude, always positive; direction comes from `type` (see computeAdjSum)
-  notes               String?
-  linkedAdjustmentId  Int?           // paired transfer counterpart (PULL_OUT ↔ PULL_IN)
-  createdById         Int?           // user who entered this adjustment
-  updatedById         Int?           // user who last revised it
+  id                    Int             @id @default(autoincrement())
+  inventoryId           Int
+  type                  AdjustmentType
+  value                 Int // magnitude, always positive; direction comes from `type` (see computeAdjSum)
+  notes                 String?
+  linkedAdjustmentId    Int? // paired transfer counterpart (PULL_OUT ↔ PULL_IN)
+  createdById           Int? // user who entered this adjustment
+  updatedById           Int? // user who last revised it
   // Transfers only. On the sender's PULL_OUT: where the stock is going, and
   // whether the receiving branch has accepted it (see TransferStatus).
   transferStatus        TransferStatus?
   transferToInventoryId Int?
-  respondedById         Int?      // receiver who accepted or rejected
+  respondedById         Int? // receiver who accepted or rejected
   respondedAt           DateTime?
-  createdAt           DateTime       @default(now())
-  updatedAt           DateTime       @updatedAt
-  deletedAt           DateTime?
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  deletedAt             DateTime?
 
-  inventory        Inventory            @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
-  transferTo       Inventory?           @relation("TransferDestination", fields: [transferToInventoryId], references: [id], onDelete: SetNull)
-  respondedBy      User?                @relation("TransferRespondedBy", fields: [respondedById], references: [id], onDelete: SetNull)
-  linkedAdjustment InventoryAdjustment? @relation("TransferLink", fields: [linkedAdjustmentId], references: [id], onDelete: SetNull)
+  inventory        Inventory             @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  transferTo       Inventory?            @relation("TransferDestination", fields: [transferToInventoryId], references: [id], onDelete: SetNull)
+  respondedBy      User?                 @relation("TransferRespondedBy", fields: [respondedById], references: [id], onDelete: SetNull)
+  linkedAdjustment InventoryAdjustment?  @relation("TransferLink", fields: [linkedAdjustmentId], references: [id], onDelete: SetNull)
   linkedBy         InventoryAdjustment[] @relation("TransferLink")
-  createdBy        User?                @relation("InventoryAdjustmentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  updatedBy        User?                @relation("InventoryAdjustmentUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  createdBy        User?                 @relation("InventoryAdjustmentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy        User?                 @relation("InventoryAdjustmentUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
 
   @@index([inventoryId])
   @@index([linkedAdjustmentId])
@@ -363,20 +363,20 @@ model InventoryAdjustment {
 // ---------------------------------------------------------------------------
 
 model Production {
-  id          Int      @id @default(autoincrement())
-  branchId    Int
-  productId   Int
-  createdById Int?     // user who submitted this record
-  updatedById Int?     // user who last changed it
-  yield       Int      @default(0) // actual pieces produced that day (independent of recipe yield)
-  date        DateTime @db.Date
-  notes       String?
-  isAutoGenerated Boolean @default(false) // true = an autofill placeholder
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              Int       @id @default(autoincrement())
+  branchId        Int
+  productId       Int
+  createdById     Int? // user who submitted this record
+  updatedById     Int? // user who last changed it
+  yield           Int       @default(0) // actual pieces produced that day (independent of recipe yield)
+  date            DateTime  @db.Date
+  notes           String?
+  isAutoGenerated Boolean   @default(false) // true = an autofill placeholder
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
   // Soft delete, like every operational table. The unique key below ignores
   // it, so re-entering a deleted day restores the row (see ProductionService).
-  deletedAt   DateTime?
+  deletedAt       DateTime?
 
   branch    Branch  @relation(fields: [branchId], references: [id], onDelete: Cascade)
   product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
@@ -414,8 +414,8 @@ model ProductionOrder {
   updatedAt   DateTime              @updatedAt
   deletedAt   DateTime?
 
-  branch    Branch?              @relation(fields: [branchId], references: [id], onDelete: SetNull)
-  createdBy User?                @relation("ProductionOrderCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  branch    Branch?               @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  createdBy User?                 @relation("ProductionOrderCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   items     ProductionOrderItem[]
 
   @@index([branchId])
@@ -447,11 +447,11 @@ model Material {
   id           Int             @id @default(autoincrement())
   name         String
   unit         MeasurementUnit // base unit for stock tracking and pricing
-  pricePerUnit Decimal         @db.Decimal(10, 4) @default(0.0000)
-  reorderLevel Decimal         @db.Decimal(10, 4) @default(0.0000) // alert threshold – restock when stock drops below this
+  pricePerUnit Decimal         @default(0.0000) @db.Decimal(10, 4)
+  reorderLevel Decimal         @default(0.0000) @db.Decimal(10, 4) // alert threshold – restock when stock drops below this
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
-  deletedAt    DateTime?       // soft delete – null means active
+  deletedAt    DateTime? // soft delete – null means active
 
   recipeItems         RecipeItem[]
   recipeVersionItems  RecipeVersionItem[]
@@ -460,15 +460,15 @@ model Material {
 }
 
 model Recipe {
-  id          Int      @id @default(autoincrement())
-  productId   Int      @unique // enforces 1:1 with Product
-  recipeYield Decimal   @db.Decimal(14, 4) @default(1) // number of product units produced per batch of this recipe
+  id          Int       @id @default(autoincrement())
+  productId   Int       @unique // enforces 1:1 with Product
+  recipeYield Decimal   @default(1) @db.Decimal(14, 4) // number of product units produced per batch of this recipe
   notes       String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
-  deletedAt   DateTime?             // soft delete – null means active
+  deletedAt   DateTime? // soft delete – null means active
 
-  product     Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product     Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
   recipeItems RecipeItem[]
   versions    RecipeVersion[]
 }
@@ -482,7 +482,7 @@ model Recipe {
 model RecipeVersion {
   id            Int      @id @default(autoincrement())
   recipeId      Int
-  version       Int      // 1, 2, 3… per recipe
+  version       Int // 1, 2, 3… per recipe
   effectiveFrom DateTime @db.Date
   recipeYield   Decimal  @db.Decimal(14, 4)
   retired       Boolean  @default(false) // recipe deleted from this day on
@@ -549,18 +549,18 @@ model MaterialInventory {
   updatedById Int?
   batchNumber String?
   expiresAt   DateTime?
-  quantity    Decimal   @db.Decimal(14, 4) @default(0) // opening stock (carried over from previous day)
-  delivery    Decimal   @db.Decimal(14, 4) @default(0) // received on this day
-  used        Decimal   @db.Decimal(14, 4) @default(0) // consumed by production (auto-updated)
+  quantity    Decimal   @default(0) @db.Decimal(14, 4) // opening stock (carried over from previous day)
+  delivery    Decimal   @default(0) @db.Decimal(14, 4) // received on this day
+  used        Decimal   @default(0) @db.Decimal(14, 4) // consumed by production (auto-updated)
   notes       String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime? // soft delete – null means active
 
-  material    Material            @relation(fields: [materialId], references: [id], onDelete: Cascade)
-  supplier    Supplier?           @relation(fields: [supplierId], references: [id], onDelete: SetNull)
-  createdBy   User?               @relation("MaterialInventoryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  updatedBy   User?               @relation("MaterialInventoryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  material    Material             @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  supplier    Supplier?            @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  createdBy   User?                @relation("MaterialInventoryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy   User?                @relation("MaterialInventoryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
   adjustments MaterialAdjustment[]
 
   // The unique key deliberately excludes deletedAt, matching Inventory: a
@@ -592,9 +592,9 @@ model MaterialAdjustment {
   id                  Int            @id @default(autoincrement())
   materialInventoryId Int
   type                AdjustmentType // PULL_IN = restock, PULL_OUT = transfer out, ANOMALY = loss/spoilage
-  value               Decimal        @db.Decimal(14, 4)// magnitude (always positive; direction conveyed by type)
+  value               Decimal        @db.Decimal(14, 4) // magnitude (always positive; direction conveyed by type)
   notes               String?
-  createdById         Int?           // user who entered this adjustment
+  createdById         Int? // user who entered this adjustment
   createdAt           DateTime       @default(now())
   updatedAt           DateTime       @updatedAt
   deletedAt           DateTime?
@@ -613,7 +613,7 @@ model MaterialAdjustment {
 model Supplier {
   id        Int       @id @default(autoincrement())
   name      String
-  contact   String?   // contact person name
+  contact   String? // contact person name
   phone     String?
   email     String?
   address   String?
@@ -627,9 +627,9 @@ model Supplier {
 }
 
 model MaterialPriceHistory {
-  id           Int       @id @default(autoincrement())
+  id           Int      @id @default(autoincrement())
   materialId   Int
-  supplierId   Int?      // supplier this price was quoted / paid from
+  supplierId   Int? // supplier this price was quoted / paid from
   pricePerUnit Decimal  @db.Decimal(10, 4)
   effectiveAt  DateTime // date from which this price applies
   createdAt    DateTime @default(now())
@@ -661,18 +661,18 @@ model ProductPriceHistory {
 // ---------------------------------------------------------------------------
 
 model UnitConversion {
-  id       Int             @id @default(autoincrement())
-  fromUnit MeasurementUnit
-  toUnit   MeasurementUnit
+  id        Int             @id @default(autoincrement())
+  fromUnit  MeasurementUnit
+  toUnit    MeasurementUnit
   // Multiply a quantity in fromUnit by this factor to get the quantity in toUnit.
   // e.g. fromUnit=KG, toUnit=G, factor=1000  →  1 kg * 1000 = 1000 g
   // The inverse pair (G→KG, factor=0.001) is always stored alongside this record.
-  factor   Decimal         @db.Decimal(18, 9)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  factor    Decimal         @db.Decimal(18, 9)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
 
   @@unique([fromUnit, toUnit])
-  @@index([fromUnit]) 
+  @@index([fromUnit])
   @@index([toUnit])
 }
 
@@ -698,16 +698,16 @@ model DeviceToken {
 // ---------------------------------------------------------------------------
 
 model ImportLog {
-  id           Int      @id @default(autoincrement())
+  id           Int       @id @default(autoincrement())
   branchId     Int
   fileName     String
-  fileHash     String   // SHA-256 hex of the raw file buffer
+  fileHash     String // SHA-256 hex of the raw file buffer
   importedBy   Int?
-  importedAt   DateTime @default(now())
-  sheetCount   Int      @default(0)
-  rowCount     Int      @default(0)
-  skippedCount Int      @default(0)
-  status       String   @default("SUCCESS") // SUCCESS | PARTIAL
+  importedAt   DateTime  @default(now())
+  sheetCount   Int       @default(0)
+  rowCount     Int       @default(0)
+  skippedCount Int       @default(0)
+  status       String    @default("SUCCESS") // SUCCESS | PARTIAL
   notes        String?
   // Soft delete: "deleting" a log releases its file hash for a corrected
   // re-import, but the record of the earlier import stays.
@@ -737,7 +737,7 @@ model ImportLog {
 /// correction, with the causing user where known).
 model AuditEvent {
   id       Int      @id @default(autoincrement())
-  entity   String   // Inventory | MaterialInventory | Production
+  entity   String // Inventory | MaterialInventory | Production
   entityId Int
   action   String
   changes  Json
@@ -765,7 +765,7 @@ model JobRun {
   status     JobStatus @default(RUNNING)
   startedAt  DateTime  @default(now())
   finishedAt DateTime?
-  result     Json?     // raw job return, e.g. {"inventoryCreated":42,"productionCreated":42}
+  result     Json? // raw job return, e.g. {"inventoryCreated":42,"productionCreated":42}
   error      String?
 
   @@index([jobName, startedAt])
@@ -784,8 +784,8 @@ model IdempotencyKey {
   id           Int      @id @default(autoincrement())
   userId       Int
   key          String
-  route        String   // method + route pattern, e.g. "POST /inventory-adjustments/transfer"
-  requestHash  String   // SHA-256 of route params + body
+  route        String // method + route pattern, e.g. "POST /inventory-adjustments/transfer"
+  requestHash  String // SHA-256 of route params + body
   statusCode   Int?
   responseBody Json?
   createdAt    DateTime @default(now())
@@ -845,7 +845,7 @@ model Employee {
   firstName   String
   lastName    String
   jobRoleId   Int
-  branchId    Int?      // null = central kitchen / unassigned; not an access control
+  branchId    Int? // null = central kitchen / unassigned; not an access control
   restDays    Int[]     @default([0]) // weekdays off, 0 = Sunday … 6 = Saturday
   hiredOn     DateTime  @db.Date
   separatedOn DateTime? @db.Date
@@ -1010,7 +1010,7 @@ model PayslipLine {
   quantity   Decimal?        @db.Decimal(12, 2)
   rate       Decimal?        @db.Decimal(12, 2)
   amount     Decimal         @db.Decimal(12, 2)
-  sourceType String?         // EmployeeRate | PayrollAdjustment | RecurringDeduction | BranchVale
+  sourceType String? // EmployeeRate | PayrollAdjustment | RecurringDeduction | BranchVale
   sourceId   Int?
 
   payslip Payslip @relation(fields: [payslipId], references: [id])
@@ -1104,4 +1104,34 @@ model BranchCashDay {
   branch Branch @relation(fields: [branchId], references: [id])
 
   @@unique([branchId, date])
+}
+
+// ─────────────────────────────────────────────
+// Landing page (public marketing site)
+// ─────────────────────────────────────────────
+
+/// Singleton (id = 1). `draft` is what the admin editor saves; `published` is
+/// what the public page renders. Both are validated by
+/// src/lib/landing/schema.ts. Product/branch data is referenced by id only.
+model LandingPage {
+  id               Int       @id @default(1)
+  draft            Json
+  published        Json?
+  draftUpdatedAt   DateTime  @default(now())
+  draftUpdatedById Int?
+  publishedAt      DateTime?
+  publishedById    Int?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+/// Append-only history of published landing content. Never deleted; restoring
+/// one copies it into the draft.
+model LandingRevision {
+  id            Int      @id @default(autoincrement())
+  content       Json
+  publishedAt   DateTime @default(now())
+  publishedById Int?
+
+  @@index([publishedAt])
 }

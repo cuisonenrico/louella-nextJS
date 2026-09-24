@@ -109,3 +109,23 @@ h3 {
 @utility pb-safe {
   padding-bottom: max(1rem, env(safe-area-inset-bottom));
 }
+
+/* ── Public landing page palette ───────────────────────────────────────────
+ * Scoped to the marketing site (src/components/landing/site) — the dashboard
+ * keeps the shadcn tokens above. Light only: the landing page is a printed-
+ * menu look and does not follow the app's theme.
+ */
+@theme inline {
+  --color-lp-cream: #fdf0e8;
+  --color-lp-paper: #fff7f2;
+  --color-lp-card: #ffffff;
+  --color-lp-ink: #3a1c0c;
+  --color-lp-muted: #6e4d3b;
+  --color-lp-brand: #7b3510;
+  --color-lp-brand-deep: #5c2608;
+  --color-lp-gold: #f4b54a;
+  --color-lp-blush: #fbe3d4;
+  --color-lp-line: #f0d6c6;
+  --font-lp-serif: var(--font-lp-serif-face), Georgia, "Times New Roman", serif;
+  --font-lp-sans: var(--font-lp-sans-face), ui-sans-serif, system-ui, sans-serif;
+}

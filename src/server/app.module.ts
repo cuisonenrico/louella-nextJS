@@ -35,6 +35,7 @@ import { PermissionsModule } from './permissions/permissions.module';
 import { EmployeesModule } from './employees/employees.module';
 import { PayrollModule } from './payroll/payroll.module';
 import { BranchCashModule } from './branch-cash/branch-cash.module';
+import { LandingModule } from './landing/landing.module';
 import { validateEnv } from './common/config/env.validation';
 import { CacheNamespaceModule } from './common/cache/cache-namespace.module';
 
@@ -75,6 +76,7 @@ import { CacheNamespaceModule } from './common/cache/cache-namespace.module';
     EmployeesModule,
     PayrollModule,
     BranchCashModule,
+    LandingModule,
   ],
   controllers: [AppController],
   providers: [

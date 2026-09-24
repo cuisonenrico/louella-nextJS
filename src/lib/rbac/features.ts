@@ -761,6 +761,16 @@ export const FEATURES = [
     ],
   },
   {
+    // The public marketing page. Reading it is public; this key gates the
+    // editor and every write, which are also @Roles(ADMIN) on the server.
+    key: 'landing',
+    label: 'Landing Page',
+    description: 'Edit and publish the public landing page',
+    routes: ['/settings/landing'],
+    nav: { group: 'Settings', href: '/settings/landing', label: 'Landing Page', order: 63 },
+    platform: 'web',
+  },
+  {
     key: 'jobs',
     label: 'Jobs',
     description: 'Scheduled job runs and on-demand autofill',

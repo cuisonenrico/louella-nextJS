@@ -37,6 +37,7 @@ import { EmployeesController } from '../../employees/employees.controller';
 import { JobRolesController } from '../../employees/job-roles.controller';
 import { PayrollController } from '../../payroll/payroll.controller';
 import { BranchCashController } from '../../branch-cash/branch-cash.controller';
+import { LandingAdminController, LandingPublicController } from '../../landing/landing.controller';
 
 const reflector = new Reflector();
 const rolesGuard = new RolesGuard(reflector);
@@ -191,6 +192,12 @@ const MATRIX: [string, Target, [string, string, string, string]][] = [
   ['set counted cash',     { controller: BranchCashController, method: 'setActualCash' }, [D, D, A, A]],
   ['verify cash day',      { controller: BranchCashController, method: 'verify' },        [D, D, D, A]],
   ['add expense category', { controller: BranchCashController, method: 'createCategory' },[D, D, D, A]],
+  // ── Landing page: anyone reads the published page, only admins edit ───────
+  ['landing (public)',     { controller: LandingPublicController, method: 'getPublished' }, [A, A, A, A]],
+  ['landing draft',        { controller: LandingAdminController, method: 'getDraft' },     [D, D, D, A]],
+  ['save landing draft',   { controller: LandingAdminController, method: 'saveDraft' },    [D, D, D, A]],
+  ['publish landing',      { controller: LandingAdminController, method: 'publish' },      [D, D, D, A]],
+  ['landing image upload', { controller: LandingAdminController, method: 'uploadUrl' },    [D, D, D, A]],
 ];
 
 const ROLE_COLUMNS: RoleName[] = ['VIEWER', 'INVENTORY', 'MANAGER', 'ADMIN'];
@@ -220,6 +227,7 @@ describe('RBAC role x endpoint matrix', () => {
       'product list (open)',
       'material list (open)',
       'supplier list (open)',
+      'landing (public)',
     ]);
 
     it.each(MATRIX)('%s', (label, target) => {

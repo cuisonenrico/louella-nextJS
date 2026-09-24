@@ -9,6 +9,7 @@ import {
   Factory,
   FlaskConical,
   Gauge,
+  Globe,
   Layers,
   LayoutDashboard,
   Package,
@@ -56,6 +57,7 @@ export const NAV_ICONS: Record<string, LucideIcon> = {
   'user-management': Users,
   permissions: ShieldCheck,
   jobs: Activity,
+  landing: Globe,
 };
 
 /** Fallback so a newly added feature never renders a blank slot. */

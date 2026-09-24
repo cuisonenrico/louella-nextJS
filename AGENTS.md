@@ -58,7 +58,7 @@ Standard NestJS module structure — each domain has a `*.module.ts`,
 `inventory-adjustments`, `inventory-import`, `production`, `production-orders`,
 `materials`, `material-inventory`, `material-adjustments`, `recipes`, `sales`,
 `suppliers`, `unit-conversions`, `dashboard`, `jobs`, `notifications`, `files`,
-`employees`, `payroll`, `branch-cash`
+`employees`, `payroll`, `branch-cash`, `landing`
 
 Plus infrastructure-only: `prisma`, `json_body`.
 
@@ -156,6 +156,29 @@ Spec: `docs/superpowers/specs/2026-09-24-branch-cash-design.md`.
   would leave a vale outside employment are refused.
 - Managers get `branch-cash` + `:create/:edit/:delete`; only admins get
   `:verify` and `:categories`.
+
+### Landing page
+
+Spec: `docs/superpowers/specs/2026-09-24-landing-page-cms-design.md`.
+
+- **One JSON document, validated by Zod** (`src/lib/landing/schema.ts`), shared
+  by the API, the editor and the public page. `LandingPage` (singleton, id 1)
+  holds `draft` and `published`; every publish appends a `LandingRevision`
+  (never deleted — restoring copies one into the draft).
+- **Featured breads and branch cards store ids only.** Names, prices and
+  addresses come live from `Product` / `Branch` (`src/lib/landing/resolve.ts`);
+  inactive or deleted ones are skipped on the site and flagged in the editor.
+- **The public page does not boot Nest.** `src/app/page.tsx` reads through a
+  plain PrismaClient in `src/server/landing/published-landing.ts`, cached with
+  `unstable_cache` (tag `landing`, 5 min). Publish revalidates the tag. If the
+  database is unreachable it renders the built-in defaults, never an error.
+- **Images live in Supabase Storage**, public bucket `landing` (created on
+  first upload). The API signs an upload URL with `SUPABASE_SERVICE_ROLE_KEY`;
+  the browser PUTs the file directly. Saved content may only reference that
+  bucket or `/assets/`. `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` are needed
+  for uploads only — the rest of the API boots without them.
+- Editor: Settings → Landing Page (`/settings/landing`), feature key `landing`,
+  `@Roles(ADMIN)` on every write.
 
 ### Known serverless trade-offs
 

@@ -78,6 +78,17 @@ const nextConfig: NextConfig = {
   // helmet used to strip Express's `X-Powered-By`; without this Next would
   // reintroduce the same disclosure with its own value.
   poweredByHeader: false,
+  // Landing page images live in the public Supabase Storage bucket `landing`
+  // (see src/server/landing/landing-storage.ts). Nothing else is allowed.
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "*.supabase.co",
+        pathname: "/storage/v1/object/public/landing/**",
+      },
+    ],
+  },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

@@ -1,5 +1,6 @@
 import api from './api';
 import { idempotencyHeader } from './useIdempotencyKey';
+import type { LandingContent } from './landing/schema';
 import type {
   CashDayView, CashSummary, ExpenseCategory, ValeEmployeeOption,
   Absence, CutoffSummary, CutoffView, Employee, EmployeeAccount, EmployeeInput, EmployeeRate, JobRole, PayrollAdjustment, PayrollAdjustmentCategory, PayrollAdjustmentKind, PayrollRun, PayslipWithRun, RecurringDeduction,
@@ -602,4 +603,34 @@ export const branchCashApi = {
     api.put('/branch-cash/day/actual-cash', data),
   verify: (branchId: number, date: string) => api.post('/branch-cash/day/verify', { branchId, date }),
   reopen: (branchId: number, date: string) => api.post('/branch-cash/day/reopen', { branchId, date }),
+};
+
+export type LandingDraftResponse = {
+  draft: LandingContent;
+  draftUpdatedAt: string;
+  publishedAt: string | null;
+  publishedBy: string | null;
+  hasUnpublishedChanges: boolean;
+  options: {
+    products: { id: number; name: string; price: number; isActive: boolean; type: string }[];
+    branches: { id: number; name: string; address: string | null; phone: string | null; isActive: boolean }[];
+  };
+};
+
+export type LandingRevisionSummary = { id: number; publishedAt: string; publishedBy: string | null };
+
+export const landingApi = {
+  getDraft: () => api.get<LandingDraftResponse>('/landing/admin/draft'),
+  saveDraft: (content: LandingContent, baseUpdatedAt?: string) =>
+    api.put<{ draftUpdatedAt: string }>('/landing/admin/draft', { content, baseUpdatedAt }),
+  discardDraft: () => api.post<{ draftUpdatedAt: string }>('/landing/admin/draft/discard'),
+  publish: () => api.post<{ publishedAt: string }>('/landing/admin/publish'),
+  revisions: () => api.get<LandingRevisionSummary[]>('/landing/admin/revisions'),
+  restoreRevision: (id: number) =>
+    api.post<{ draftUpdatedAt: string }>(`/landing/admin/revisions/${id}/restore`),
+  uploadUrl: (contentType: string, size: number) =>
+    api.post<{ uploadUrl: string; publicUrl: string; path: string }>('/landing/admin/images/upload-url', {
+      contentType,
+      size,
+    }),
 };

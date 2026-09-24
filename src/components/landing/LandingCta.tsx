@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
-import { Button } from '@/components/ui/button';
 
 /** Top-right nav button: Login for guests, Dashboard when a session exists. */
 export default function LandingCta() {
@@ -10,10 +9,11 @@ export default function LandingCta() {
   const authed = !isLoading && isAuthenticated;
 
   return (
-    <Button asChild size="sm" className="rounded-full px-5">
-      <Link href={authed ? '/dashboard' : '/login'}>
-        {authed ? 'Dashboard' : 'Login'}
-      </Link>
-    </Button>
+    <Link
+      href={authed ? '/dashboard' : '/login'}
+      className="inline-flex h-9 items-center rounded-lg px-3 text-[13px] font-semibold text-lp-brand ring-1 ring-lp-line transition-colors hover:bg-lp-blush"
+    >
+      {authed ? 'Dashboard' : 'Login'}
+    </Link>
   );
 }

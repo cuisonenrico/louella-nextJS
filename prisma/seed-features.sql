@@ -128,6 +128,8 @@ INSERT INTO "Feature" (key, label, description, "createdAt") VALUES
   ('branch-cash:delete',              'Void entries',               'Void an expense or vale on an unverified day', NOW()),
   ('branch-cash:verify',              'Verify days',                'Verify or reopen a branch-day', NOW()),
   ('branch-cash:categories',          'Manage categories',          'Add, rename, reorder and deactivate expense categories', NOW()),
+  -- landing
+  ('landing',                         'Landing Page',               'Edit and publish the public landing page', NOW()),
   -- product-order-config
   ('product-order-config',            'Product Order Config',       'Display ordering of products across sheets', NOW()),
   ('product-order-config:edit',       'Reorder products',           'Change the display order products appear in', NOW()),
