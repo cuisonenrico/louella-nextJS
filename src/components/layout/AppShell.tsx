@@ -43,7 +43,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar collapsed={collapsed} onToggle={handleToggle} />
+      <div className="contents print:hidden">
+        <Sidebar collapsed={collapsed} onToggle={handleToggle} />
+      </div>
 
       {/* The same SidebarContent the aside renders — one navigationFor() call,
           two mounts, so the drawer can never offer a destination the sidebar
@@ -62,8 +64,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           below its content's intrinsic width, so one wide table pushes the
           whole page into horizontal scroll. */}
       <div data-testid="content-column" className="flex min-w-0 flex-1 flex-col">
-        <Header onOpenNav={() => setDrawerOpen(true)} />
-        <main className="flex-1 bg-background p-4 md:p-6">
+        <div className="contents print:hidden">
+          <Header onOpenNav={() => setDrawerOpen(true)} />
+        </div>
+        <main className="flex-1 bg-background p-4 md:p-6 print:bg-white print:p-0">
           <RouteGuard>{children}</RouteGuard>
         </main>
       </div>
