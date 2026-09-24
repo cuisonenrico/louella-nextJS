@@ -123,3 +123,15 @@ describe('payroll entities', () => {
     });
   });
 });
+describe('branch cash entities', () => {
+  it('records a voided expense and a verified day', () => {
+    const before = { amount: 850, note: null, deletedAt: null, categoryId: 2 };
+    const deletedAt = new Date('2026-10-02T01:00:00.000Z');
+    expect(diffFields('BranchExpense', before, { ...before, deletedAt })).toEqual({
+      deletedAt: [null, '2026-10-02T01:00:00.000Z'],
+    });
+    expect(
+      diffFields('BranchCashDay', { status: 'OPEN', salesAtVerify: null }, { status: 'VERIFIED', salesAtVerify: 12450 }),
+    ).toEqual({ status: ['OPEN', 'VERIFIED'], salesAtVerify: [null, 12450] });
+  });
+});

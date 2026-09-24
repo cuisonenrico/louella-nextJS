@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 
 /**
- * Change history for stock figures and payroll records (the AuditEvent table).
+ * Change history for stock figures, payroll and branch cash records (the AuditEvent table).
  *
  * Every writer records what it changed, inside its own transaction, so the
  * history can never disagree with the data: "who changed this count, and from
@@ -21,7 +21,11 @@ export type AuditEntity =
   | 'Absence'
   | 'PayrollAdjustment'
   | 'RecurringDeductionSkip'
-  | 'PayrollRun';
+  | 'PayrollRun'
+  | 'ExpenseCategory'
+  | 'BranchExpense'
+  | 'BranchVale'
+  | 'BranchCashDay';
 
 export type AuditAction =
   | 'create'
@@ -43,6 +47,10 @@ export const AUDITED_FIELDS: Record<AuditEntity, readonly string[]> = {
   PayrollAdjustment: ['employeeId', 'periodStart', 'kind', 'category', 'description', 'amount', 'deletedAt'],
   RecurringDeductionSkip: ['recurringDeductionId', 'periodStart', 'deletedAt'],
   PayrollRun: ['status', 'voidReason'],
+  ExpenseCategory: ['name', 'sortOrder', 'isActive', 'requiresNote'],
+  BranchExpense: ['branchId', 'date', 'categoryId', 'amount', 'note', 'deletedAt'],
+  BranchVale: ['branchId', 'date', 'employeeId', 'amount', 'note', 'deletedAt'],
+  BranchCashDay: ['actualCash', 'note', 'status', 'salesAtVerify', 'expensesAtVerify', 'valeAtVerify'],
 };
 
 type Row = Record<string, unknown> | null | undefined;
