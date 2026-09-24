@@ -231,6 +231,9 @@ model Branch {
   importLogs       ImportLog[]
   manager          User?             @relation("BranchManager")
   employees        Employee[]
+  branchExpenses   BranchExpense[]
+  branchVale       BranchVale[]
+  branchCashDays   BranchCashDay[]
 }
 
 // ---------------------------------------------------------------------------
@@ -862,6 +865,7 @@ model Employee {
   adjustments         PayrollAdjustment[]
   skips               RecurringDeductionSkip[]
   payslips            Payslip[]
+  vale                BranchVale[]
 
   @@index([jobRoleId])
   @@index([branchId])
@@ -1012,4 +1016,92 @@ model PayslipLine {
   payslip Payslip @relation(fields: [payslipId], references: [id])
 
   @@index([payslipId])
+}
+
+// ─── Branch cash ─────────────────────────────────────────────────────────────
+// Drawer expenses, vale (cash advances to staff) and the counted cash, per
+// branch per Manila day. See docs/superpowers/specs/2026-09-24-branch-cash-design.md.
+// Sales is never stored here: it is derived from inventory by SalesService.
+// Actor columns are plain ids without a foreign key, as in payroll.
+
+enum BranchCashDayStatus {
+  OPEN
+  VERIFIED
+}
+
+model ExpenseCategory {
+  id           Int       @id @default(autoincrement())
+  name         String    @unique
+  sortOrder    Int       @default(0)
+  isActive     Boolean   @default(true)
+  requiresNote Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  expenses BranchExpense[]
+}
+
+model BranchExpense {
+  id          Int       @id @default(autoincrement())
+  branchId    Int
+  date        DateTime  @db.Date
+  categoryId  Int
+  amount      Decimal   @db.Decimal(12, 2)
+  note        String?
+  createdById Int
+  updatedById Int?
+  deletedById Int?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  branch   Branch          @relation(fields: [branchId], references: [id])
+  category ExpenseCategory @relation(fields: [categoryId], references: [id])
+
+  @@index([branchId, date])
+  @@index([categoryId])
+}
+
+model BranchVale {
+  id          Int       @id @default(autoincrement())
+  branchId    Int
+  date        DateTime  @db.Date
+  employeeId  Int
+  amount      Decimal   @db.Decimal(12, 2)
+  note        String?
+  createdById Int
+  updatedById Int?
+  deletedById Int?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  branch   Branch   @relation(fields: [branchId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@index([branchId, date])
+  @@index([employeeId, date])
+}
+
+model BranchCashDay {
+  id               Int                 @id @default(autoincrement())
+  branchId         Int
+  date             DateTime            @db.Date
+  actualCash       Decimal?            @db.Decimal(12, 2)
+  note             String?
+  status           BranchCashDayStatus @default(OPEN)
+  verifiedById     Int?
+  verifiedAt       DateTime?
+  // Written at verify, cleared at reopen. Lets a verified day show that sales
+  // moved afterwards (a late inventory correction) instead of silently changing.
+  salesAtVerify    Decimal?            @db.Decimal(12, 2)
+  expensesAtVerify Decimal?            @db.Decimal(12, 2)
+  valeAtVerify     Decimal?            @db.Decimal(12, 2)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  branch Branch @relation(fields: [branchId], references: [id])
+
+  @@unique([branchId, date])
 }
