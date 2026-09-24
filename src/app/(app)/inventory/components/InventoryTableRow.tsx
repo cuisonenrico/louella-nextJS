@@ -103,7 +103,9 @@ export function InventoryTableRow({
             {!isRange && canAdjust && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onAdjustmentsOpen(inv)}>
+                  {/* size-*, not h-/w-: the icon size's md:size-10 would survive and
+                      stretch this 32px sheet row to ~51px. */}
+                  <Button variant="ghost" size="icon" className="size-7 md:size-6" onClick={() => onAdjustmentsOpen(inv)}>
                     <Settings2 className="h-3.5 w-3.5" />
                   </Button>
                 </TooltipTrigger>
