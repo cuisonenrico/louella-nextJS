@@ -120,6 +120,8 @@ INSERT INTO "Feature" (key, label, description, "createdAt") VALUES
   ('unit-conversions:create',         'Create conversions',         'Add a unit conversion rule', NOW()),
   ('unit-conversions:edit',           'Edit conversions',           'Amend a conversion rule', NOW()),
   ('unit-conversions:delete',         'Delete conversions',         'Remove a conversion rule', NOW()),
+  ('employees',                       'Employees',                  'Employee register, rates, deductions, absences and logins', NOW()),
+  ('payroll',                         'Payroll',                    'Semi-monthly payroll runs and payslips', NOW()),
   -- product-order-config
   ('product-order-config',            'Product Order Config',       'Display ordering of products across sheets', NOW()),
   ('product-order-config:edit',       'Reorder products',           'Change the display order products appear in', NOW()),

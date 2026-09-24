@@ -4,6 +4,7 @@ import {
   BookOpen,
   ClipboardList,
   Coins,
+  Contact,
   Factory,
   FlaskConical,
   Gauge,
@@ -19,6 +20,7 @@ import {
   Truck,
   Upload,
   Users,
+  Wallet,
   Warehouse,
 } from 'lucide-react';
 
@@ -39,6 +41,8 @@ export const NAV_ICONS: Record<string, LucideIcon> = {
   'production-cost': Coins,
   'production-efficiency': Gauge,
   'inventory-import': Upload,
+  employees: Contact,
+  payroll: Wallet,
   'material-stock': Warehouse,
   products: Layers,
   materials: FlaskConical,

@@ -35,7 +35,7 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 /** Section headings, in the order the sidebar renders them. */
-const GROUP_ORDER = ['Overview', 'Operations', 'Stock', 'Catalog', 'Config', 'Settings'];
+const GROUP_ORDER = ['Overview', 'Operations', 'Stock', 'Catalog', 'People', 'Config', 'Settings'];
 
 type Node<T> = { row: T; children: T[] };
 

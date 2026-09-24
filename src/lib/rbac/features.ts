@@ -54,6 +54,7 @@ export type NavGroup =
   | 'Operations'
   | 'Stock'
   | 'Catalog'
+  | 'People'
   | 'Config'
   | 'Settings';
 
@@ -618,6 +619,27 @@ export const FEATURES = [
     ],
   },
 
+  // -- People ---------------------------------------------------------------
+  // Salaries. Only ADMIN holds these by default (it takes every key), and the
+  // controllers also carry @Roles(ADMIN), so a matrix grant alone never opens
+  // payroll to a lower role.
+  {
+    key: 'employees',
+    label: 'Employees',
+    description: 'Employee register, rates, deductions, absences and logins',
+    routes: ['/employees'],
+    nav: { group: 'People', href: '/employees', label: 'Employees', order: 47 },
+    platform: 'web',
+  },
+  {
+    key: 'payroll',
+    label: 'Payroll',
+    description: 'Semi-monthly payroll runs and payslips',
+    routes: ['/payroll'],
+    nav: { group: 'People', href: '/payroll', label: 'Payroll', order: 48 },
+    platform: 'web',
+  },
+
   // -- Config ---------------------------------------------------------------
   {
     key: 'product-order-config',
@@ -1094,7 +1116,7 @@ export function firstPermittedRoute(permissions: readonly string[]): string {
 export function navigationFor(
   permissions: readonly string[],
 ): { group: NavGroup; items: { key: string; href: string; label: string }[] }[] {
-  const order: NavGroup[] = ['Overview', 'Operations', 'Stock', 'Catalog', 'Config', 'Settings'];
+  const order: NavGroup[] = ['Overview', 'Operations', 'Stock', 'Catalog', 'People', 'Config', 'Settings'];
   const byGroup = new Map<NavGroup, { key: string; href: string; label: string; order: number }[]>();
 
   for (const feature of FEATURE_LIST) {

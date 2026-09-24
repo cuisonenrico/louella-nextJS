@@ -36,6 +36,23 @@ function visibleItems(): string[] {
 }
 
 describe('Sidebar', () => {
+  it('shows the People destinations only to holders of their keys', () => {
+    renderWith(['dashboard']);
+    expect(screen.queryByText('Employees')).toBeNull();
+    expect(screen.queryByText('Payroll')).toBeNull();
+
+    renderWith(['employees', 'payroll']);
+    expect(visibleItems()).toEqual(expect.arrayContaining(['Employees', 'Payroll']));
+  });
+
+  it('never grants the People keys to a non-admin role by default', () => {
+    for (const role of ['USER', 'VIEWER', 'INVENTORY', 'MANAGER'] as const) {
+      expect(ROLE_DEFAULTS[role]).not.toContain('employees');
+      expect(ROLE_DEFAULTS[role]).not.toContain('payroll');
+    }
+    expect(ROLE_DEFAULTS.ADMIN).toEqual(expect.arrayContaining(['employees', 'payroll']));
+  });
+
   beforeEach(() => {
     auth.permissions = [];
     pathname.current = '/dashboard';
