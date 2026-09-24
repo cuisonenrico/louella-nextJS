@@ -58,7 +58,7 @@ Standard NestJS module structure — each domain has a `*.module.ts`,
 `inventory-adjustments`, `inventory-import`, `production`, `production-orders`,
 `materials`, `material-inventory`, `material-adjustments`, `recipes`, `sales`,
 `suppliers`, `unit-conversions`, `dashboard`, `jobs`, `notifications`, `files`,
-`employees`, `payroll`
+`employees`, `payroll`, `branch-cash`
 
 Plus infrastructure-only: `prisma`, `json_body`.
 
@@ -137,6 +137,26 @@ Admin-only. Spec: `docs/superpowers/specs/2026-09-24-payroll-design.md`.
 - Job role (`JobRole`) is not access level (`UserRole`). An employee's login is
   optional (`Employee.userId`) and can be at most `MANAGER` from that screen.
 
+### Branch cash
+
+Spec: `docs/superpowers/specs/2026-09-24-branch-cash-design.md`.
+
+- **The bottom of the paper sheet.** Managers record drawer expenses (by
+  admin-managed `ExpenseCategory`), vale (cash advances, per `Employee`) and the
+  counted cash on `/inventory/details`; admins review and verify on
+  `/branch-cash`.
+- **Sales comes from `SalesService`**, never recomputed here, so the figure
+  matches the sales page.
+- **A verified branch-day is locked** (expenses, vale, counted cash) until an
+  admin reopens it. Writers take advisory lock namespace **5**. Inventory is
+  never locked; a sales change after verification shows as drift.
+- **Vale is deducted by payroll automatically.** `computePayslip` reads
+  `BranchVale` rows in the cutoff; nothing is copied. A vale in a finalized
+  cutoff cannot change (`assertCutoffOpen`), and employee date changes that
+  would leave a vale outside employment are refused.
+- Managers get `branch-cash` + `:create/:edit/:delete`; only admins get
+  `:verify` and `:categories`.
+
 ### Known serverless trade-offs
 
 - **Rate limiting is per-instance.** `ThrottlerModule` keeps its bucket in
@@ -186,6 +206,10 @@ decisions recorded at the end of `audit-findings.md`, are the spec):
 
 - **Sold is derived, never recorded:** `quantity + delivery + Σadj − leftover
   − reject` (`src/lib/inventory/metrics.ts`). There is no POS or returns table.
+- **Expenses and vale are not sales.** They are recorded per branch per day in
+  `branch-cash` and only change the *expected cash*:
+  `sales − expenses − vale` (`src/server/branch-cash/compute-cash-day.ts`).
+  Sales, revenue and the dashboard are unaffected.
 - **Opening stock always equals the previous day's close**, for finished goods
   and material cards alike. Every stock writer keeps this true through
   `src/server/common/utils/stock-chain.ts`, inside its own transaction, after
