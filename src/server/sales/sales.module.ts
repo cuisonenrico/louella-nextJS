@@ -5,5 +5,8 @@ import { SalesService } from './sales.service';
 @Module({
   controllers: [SalesController],
   providers: [SalesService],
+  // Branch cash reads the day's sales from here, so the figure always matches
+  // the sales page.
+  exports: [SalesService],
 })
 export class SalesModule {}
