@@ -57,7 +57,8 @@ Standard NestJS module structure — each domain has a `*.module.ts`,
 `auth`, `users`, `permissions`, `branches`, `products`, `inventory`,
 `inventory-adjustments`, `inventory-import`, `production`, `production-orders`,
 `materials`, `material-inventory`, `material-adjustments`, `recipes`, `sales`,
-`suppliers`, `unit-conversions`, `dashboard`, `jobs`, `notifications`, `files`
+`suppliers`, `unit-conversions`, `dashboard`, `jobs`, `notifications`, `files`,
+`employees`, `payroll`
 
 Plus infrastructure-only: `prisma`, `json_body`.
 
@@ -79,6 +80,11 @@ to any authenticated user (`@Get()` with no `@Roles`), while writes carry
 `@Roles(UserRole.MANAGER)` and admin surfaces carry `@Roles(UserRole.ADMIN)`.
 Sidebar filtering is navigation UX, *not* a security boundary — a viewer can
 read the catalog and operational data directly from the API.
+
+**Exception: payroll.** `employees`, `job-roles`, `absences` and `payroll`
+controllers carry `@Roles(UserRole.ADMIN)` and their feature key at the class
+level, reads included. `rbac-matrix.spec.ts` and `payroll.authz.http.spec.ts`
+pin this.
 
 **Database:** PostgreSQL (Supabase) via Prisma. All soft-deletes use
 `deletedAt DateTime?`. No record in any operational table should ever be
@@ -109,6 +115,27 @@ capped at 7 days of catch-up, and never throws. Runs are recorded in `JobRun`
 with `trigger: 'auto'`. See `docs/DEPLOYMENT.md`.
 
 `POST /api/v1/jobs/autofill-range` (MANAGER) closes a gap wider than the cap.
+
+### Payroll
+
+Admin-only. Spec: `docs/superpowers/specs/2026-09-24-payroll-design.md`.
+
+- **Cutoffs** are the 1st–15th and 16th–last day, Manila calendar
+  (`src/lib/payroll/cutoff.ts`). `periodStart` identifies one.
+- **Pay = daily rate × days worked + additions − deductions.** Everyone is
+  present on every non-rest working day unless an `Absence` says otherwise.
+  Rates are dated history (`EmployeeRate`); a mid-cutoff raise splits basic pay.
+- **Recurring deductions** (SSS, PhilHealth, Pag-IBIG…) are monthly amounts,
+  taken on the 1–15 cutoff only. Employer shares are recorded, never deducted.
+- **One function computes pay:** `src/server/payroll/compute-payslip.ts`. The
+  live draft and finalize both call it.
+- **Drafts are never stored.** Finalize writes a frozen `PayrollRun` +
+  `Payslip` + `PayslipLine` snapshot. Fix a mistake by voiding the run (kept,
+  status `VOIDED`) and finalizing again — never by editing a run.
+- **Finalized cutoffs are locked.** Absence, adjustment and skip writers call
+  `assertCutoffOpen` (advisory lock namespace 4; stock chains use 1–3).
+- Job role (`JobRole`) is not access level (`UserRole`). An employee's login is
+  optional (`Employee.userId`) and can be at most `MANAGER` from that screen.
 
 ### Known serverless trade-offs
 
