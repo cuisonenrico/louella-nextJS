@@ -36,6 +36,7 @@ import { AbsencesController } from '../../employees/absences.controller';
 import { EmployeesController } from '../../employees/employees.controller';
 import { JobRolesController } from '../../employees/job-roles.controller';
 import { PayrollController } from '../../payroll/payroll.controller';
+import { BranchCashController } from '../../branch-cash/branch-cash.controller';
 
 const reflector = new Reflector();
 const rolesGuard = new RolesGuard(reflector);
@@ -182,6 +183,14 @@ const MATRIX: [string, Target, [string, string, string, string]][] = [
   ['finalize payroll',     { controller: PayrollController, method: 'finalize' },        [D, D, D, A]],
   ['void payroll run',     { controller: PayrollController, method: 'voidRun' },         [D, D, D, A]],
   ['read payslip',         { controller: PayrollController, method: 'getPayslip' },      [D, D, D, A]],
+  // ── Branch cash: managers record their drawer, admins verify ──────────────
+  ['cash day',             { controller: BranchCashController, method: 'getDay' },        [D, D, A, A]],
+  ['cash summary',         { controller: BranchCashController, method: 'summary' },       [D, D, A, A]],
+  ['add expense',          { controller: BranchCashController, method: 'createExpense' }, [D, D, A, A]],
+  ['void vale',            { controller: BranchCashController, method: 'voidVale' },      [D, D, A, A]],
+  ['set counted cash',     { controller: BranchCashController, method: 'setActualCash' }, [D, D, A, A]],
+  ['verify cash day',      { controller: BranchCashController, method: 'verify' },        [D, D, D, A]],
+  ['add expense category', { controller: BranchCashController, method: 'createCategory' },[D, D, D, A]],
 ];
 
 const ROLE_COLUMNS: RoleName[] = ['VIEWER', 'INVENTORY', 'MANAGER', 'ADMIN'];
@@ -261,6 +270,7 @@ describe('RBAC role x endpoint matrix', () => {
 describe('action minRole mirrors the decorators', () => {
   const CONTROLLERS = [
     EmployeesController, JobRolesController, AbsencesController, PayrollController,
+    BranchCashController,
     BranchesController, DashboardController, InventoryController,
     InventoryAdjustmentsController, InventoryImportController, JobsController,
     MaterialAdjustmentsController, MaterialInventoryController, MaterialsController,

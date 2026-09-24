@@ -34,6 +34,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { PermissionsModule } from './permissions/permissions.module';
 import { EmployeesModule } from './employees/employees.module';
 import { PayrollModule } from './payroll/payroll.module';
+import { BranchCashModule } from './branch-cash/branch-cash.module';
 import { validateEnv } from './common/config/env.validation';
 import { CacheNamespaceModule } from './common/cache/cache-namespace.module';
 
@@ -73,6 +74,7 @@ import { CacheNamespaceModule } from './common/cache/cache-namespace.module';
     PermissionsModule,
     EmployeesModule,
     PayrollModule,
+    BranchCashModule,
   ],
   controllers: [AppController],
   providers: [
