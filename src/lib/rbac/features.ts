@@ -382,6 +382,49 @@ export const FEATURES = [
       },
     ],
   },
+  {
+    // Drawer expenses, vale and the counted cash beside the inventory sheet.
+    // Reads are the feature key alone so an admin can grant a head-office role
+    // read access; writes also carry a @Roles floor (see minRole).
+    key: 'branch-cash',
+    label: 'Cash Reports',
+    description: 'Branch expenses, vale and the daily cash count',
+    routes: ['/branch-cash'],
+    nav: { group: 'Operations', href: '/branch-cash', label: 'Cash Reports', order: 28 },
+    platform: 'web',
+    actions: [
+      {
+        id: 'create',
+        label: 'Record entries',
+        description: 'Add expenses and vale, and enter the counted cash',
+        minRole: 'MANAGER',
+      },
+      {
+        id: 'edit',
+        label: 'Edit entries',
+        description: 'Amend an expense or vale on an unverified day',
+        minRole: 'MANAGER',
+      },
+      {
+        id: 'delete',
+        label: 'Void entries',
+        description: 'Void an expense or vale on an unverified day',
+        minRole: 'MANAGER',
+      },
+      {
+        id: 'verify',
+        label: 'Verify days',
+        description: 'Verify or reopen a branch-day',
+        minRole: 'ADMIN',
+      },
+      {
+        id: 'categories',
+        label: 'Manage categories',
+        description: 'Add, rename, reorder and deactivate expense categories',
+        minRole: 'ADMIN',
+      },
+    ],
+  },
 
   // -- Stock ----------------------------------------------------------------
   {
@@ -1003,6 +1046,11 @@ export const ROLE_DEFAULTS: Record<RoleName, readonly PermissionKey[]> = {
     'inventory-adjustments',
     'inventory-adjustments:create',
     'inventory-adjustments:transfer',
+    // Their own branch's drawer: they fill in this part of the sheet today.
+    'branch-cash',
+    'branch-cash:create',
+    'branch-cash:edit',
+    'branch-cash:delete',
     'production',
     'production:create',
     'production:edit',

@@ -36,6 +36,28 @@ function visibleItems(): string[] {
 }
 
 describe('Sidebar', () => {
+  it('shows Cash Reports only to holders of branch-cash', () => {
+    renderWith(['dashboard']);
+    expect(screen.queryByText('Cash Reports')).toBeNull();
+
+    renderWith(['branch-cash']);
+    expect(visibleItems()).toContain('Cash Reports');
+  });
+
+  it('lets managers record cash but only admins verify it', () => {
+    expect(ROLE_DEFAULTS.MANAGER).toEqual(
+      expect.arrayContaining(['branch-cash', 'branch-cash:create', 'branch-cash:edit', 'branch-cash:delete']),
+    );
+    expect(ROLE_DEFAULTS.MANAGER).not.toContain('branch-cash:verify');
+    expect(ROLE_DEFAULTS.MANAGER).not.toContain('branch-cash:categories');
+    for (const role of ['USER', 'VIEWER', 'INVENTORY'] as const) {
+      expect(ROLE_DEFAULTS[role]).not.toContain('branch-cash');
+    }
+    expect(ROLE_DEFAULTS.ADMIN).toEqual(
+      expect.arrayContaining(['branch-cash:verify', 'branch-cash:categories']),
+    );
+  });
+
   it('shows the People destinations only to holders of their keys', () => {
     renderWith(['dashboard']);
     expect(screen.queryByText('Employees')).toBeNull();

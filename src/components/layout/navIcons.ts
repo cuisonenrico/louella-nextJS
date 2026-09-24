@@ -1,6 +1,7 @@
 import type { LucideIcon } from 'lucide-react';
 import {
   Activity,
+  Banknote,
   BookOpen,
   ClipboardList,
   Coins,
@@ -43,6 +44,7 @@ export const NAV_ICONS: Record<string, LucideIcon> = {
   'inventory-import': Upload,
   employees: Contact,
   payroll: Wallet,
+  'branch-cash': Banknote,
   'material-stock': Warehouse,
   products: Layers,
   materials: FlaskConical,

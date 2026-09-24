@@ -122,6 +122,12 @@ INSERT INTO "Feature" (key, label, description, "createdAt") VALUES
   ('unit-conversions:delete',         'Delete conversions',         'Remove a conversion rule', NOW()),
   ('employees',                       'Employees',                  'Employee register, rates, deductions, absences and logins', NOW()),
   ('payroll',                         'Payroll',                    'Semi-monthly payroll runs and payslips', NOW()),
+  ('branch-cash',                     'Cash Reports',               'Branch expenses, vale and the daily cash count', NOW()),
+  ('branch-cash:create',              'Record entries',             'Add expenses and vale, and enter the counted cash', NOW()),
+  ('branch-cash:edit',                'Edit entries',               'Amend an expense or vale on an unverified day', NOW()),
+  ('branch-cash:delete',              'Void entries',               'Void an expense or vale on an unverified day', NOW()),
+  ('branch-cash:verify',              'Verify days',                'Verify or reopen a branch-day', NOW()),
+  ('branch-cash:categories',          'Manage categories',          'Add, rename, reorder and deactivate expense categories', NOW()),
   -- product-order-config
   ('product-order-config',            'Product Order Config',       'Display ordering of products across sheets', NOW()),
   ('product-order-config:edit',       'Reorder products',           'Change the display order products appear in', NOW()),

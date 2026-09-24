@@ -235,6 +235,7 @@ describe('RBAC manifest', () => {
       '20260819000000_seed_rbac_feature_registry',
       '20260902000000_rbac_action_and_panel_keys',
       '20260925110000_payroll_feature_keys',
+      '20261001110000_branch_cash_feature_keys',
     ]
       .map((dir) =>
         readFileSync(join(REPO_ROOT, 'prisma', 'migrations', dir, 'migration.sql'), 'utf-8'),
