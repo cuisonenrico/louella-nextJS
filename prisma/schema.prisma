@@ -110,6 +110,8 @@ model User {
   rolePermissionsUpdated RoleFeaturePermission[] @relation("RolePermissionUpdater")
   userPermissions        UserFeaturePermission[] @relation("UserPermissions")
   userPermissionsUpdated UserFeaturePermission[] @relation("UserPermissionUpdater")
+
+  employee Employee? @relation("EmployeeLogin")
 }
 
 model RefreshToken {
@@ -228,6 +230,7 @@ model Branch {
   productionOrders ProductionOrder[]
   importLogs       ImportLog[]
   manager          User?             @relation("BranchManager")
+  employees        Employee[]
 }
 
 // ---------------------------------------------------------------------------
@@ -786,4 +789,227 @@ model IdempotencyKey {
 
   @@unique([userId, key])
   @@index([createdAt])
+}
+
+// ─── Payroll ─────────────────────────────────────────────────────────────────
+// Admin-only. See docs/superpowers/specs/2026-09-24-payroll-design.md.
+// Actor columns (createdById, finalizedById, …) are plain ids without a foreign
+// key, like IdempotencyKey.userId, so User does not grow a back-relation each.
+// Partial unique indexes and the rest-day CHECK live in the migration SQL:
+// Prisma cannot express them (see the note on ImportLog).
+
+enum PayrollAdjustmentKind {
+  ADDITION
+  DEDUCTION
+}
+
+enum PayrollAdjustmentCategory {
+  OVERTIME
+  BONUS
+  HOLIDAY
+  ALLOWANCE
+  OFFENSE
+  OTHER
+}
+
+enum PayrollRunStatus {
+  FINALIZED
+  PAID
+  VOIDED
+}
+
+enum PayslipLineType {
+  BASIC
+  ADDITION
+  DEDUCTION
+  EMPLOYER_SHARE
+}
+
+/// A job title (Baker, Cashier…). Unrelated to UserRole, which is login access.
+model JobRole {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employees Employee[]
+}
+
+/// A person on payroll. The login, if any, is the optional `user`.
+model Employee {
+  id          Int       @id @default(autoincrement())
+  firstName   String
+  lastName    String
+  jobRoleId   Int
+  branchId    Int?      // null = central kitchen / unassigned; not an access control
+  restDays    Int[]     @default([0]) // weekdays off, 0 = Sunday … 6 = Saturday
+  hiredOn     DateTime  @db.Date
+  separatedOn DateTime? @db.Date
+  userId      Int?      @unique
+  phone       String?
+  address     String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  jobRole             JobRole                  @relation(fields: [jobRoleId], references: [id])
+  branch              Branch?                  @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  user                User?                    @relation("EmployeeLogin", fields: [userId], references: [id], onDelete: SetNull)
+  rates               EmployeeRate[]
+  recurringDeductions RecurringDeduction[]
+  absences            Absence[]
+  adjustments         PayrollAdjustment[]
+  skips               RecurringDeductionSkip[]
+  payslips            Payslip[]
+
+  @@index([jobRoleId])
+  @@index([branchId])
+}
+
+/// Daily-rate history. A raise is a new row, never an edit.
+model EmployeeRate {
+  id          Int       @id @default(autoincrement())
+  employeeId  Int
+  dailyRate   Decimal   @db.Decimal(12, 2)
+  effectiveOn DateTime  @db.Date
+  createdById Int?
+  createdAt   DateTime  @default(now())
+  deletedAt   DateTime?
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@index([employeeId, effectiveOn])
+}
+
+/// SSS, PhilHealth, Pag-IBIG or custom. Monthly amounts, taken on the 1–15 cutoff.
+model RecurringDeduction {
+  id            Int      @id @default(autoincrement())
+  employeeId    Int
+  name          String
+  employeeShare Decimal  @db.Decimal(12, 2)
+  employerShare Decimal  @default(0) @db.Decimal(12, 2)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  employee Employee                 @relation(fields: [employeeId], references: [id])
+  skips    RecurringDeductionSkip[]
+
+  @@index([employeeId])
+}
+
+/// A working day the employee did not work. Whole days only.
+model Absence {
+  id          Int       @id @default(autoincrement())
+  employeeId  Int
+  date        DateTime  @db.Date
+  note        String?
+  createdById Int?
+  createdAt   DateTime  @default(now())
+  deletedAt   DateTime?
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@index([date])
+  @@index([employeeId, date])
+}
+
+/// A one-off addition or deduction on one cutoff.
+model PayrollAdjustment {
+  id          Int                       @id @default(autoincrement())
+  employeeId  Int
+  periodStart DateTime                  @db.Date
+  kind        PayrollAdjustmentKind
+  category    PayrollAdjustmentCategory
+  description String
+  amount      Decimal                   @db.Decimal(12, 2) // always positive; sign comes from kind
+  createdById Int?
+  createdAt   DateTime                  @default(now())
+  deletedAt   DateTime?
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@index([periodStart])
+  @@index([employeeId])
+}
+
+/// "Do not take this recurring deduction on this cutoff."
+model RecurringDeductionSkip {
+  id                   Int       @id @default(autoincrement())
+  employeeId           Int
+  recurringDeductionId Int
+  periodStart          DateTime  @db.Date
+  createdById          Int?
+  createdAt            DateTime  @default(now())
+  deletedAt            DateTime?
+
+  employee           Employee           @relation(fields: [employeeId], references: [id])
+  recurringDeduction RecurringDeduction @relation(fields: [recurringDeductionId], references: [id])
+
+  @@index([periodStart])
+}
+
+/// A finalized cutoff. At most one non-VOIDED run per periodStart.
+model PayrollRun {
+  id                 Int              @id @default(autoincrement())
+  periodStart        DateTime         @db.Date
+  periodEnd          DateTime         @db.Date
+  status             PayrollRunStatus @default(FINALIZED)
+  employeeCount      Int
+  totalNetPay        Decimal          @db.Decimal(14, 2)
+  totalEmployerShare Decimal          @db.Decimal(14, 2)
+  finalizedAt        DateTime         @default(now())
+  finalizedById      Int?
+  paidAt             DateTime?
+  paidById           Int?
+  voidedAt           DateTime?
+  voidedById         Int?
+  voidReason         String?
+
+  payslips Payslip[]
+
+  @@index([periodStart])
+}
+
+/// One employee's frozen payslip. Prints from its own columns and lines only.
+model Payslip {
+  id                 Int     @id @default(autoincrement())
+  runId              Int
+  employeeId         Int
+  employeeName       String
+  jobRoleName        String
+  branchName         String?
+  workingDays        Int
+  absenceDays        Int
+  daysWorked         Int
+  basicPay           Decimal @db.Decimal(12, 2)
+  totalAdditions     Decimal @db.Decimal(12, 2)
+  totalDeductions    Decimal @db.Decimal(12, 2)
+  netPay             Decimal @db.Decimal(12, 2)
+  totalEmployerShare Decimal @db.Decimal(12, 2)
+
+  run      PayrollRun    @relation(fields: [runId], references: [id])
+  employee Employee      @relation(fields: [employeeId], references: [id])
+  lines    PayslipLine[]
+
+  @@unique([runId, employeeId])
+  @@index([employeeId])
+}
+
+model PayslipLine {
+  id         Int             @id @default(autoincrement())
+  payslipId  Int
+  sortOrder  Int
+  type       PayslipLineType
+  label      String
+  quantity   Decimal?        @db.Decimal(12, 2)
+  rate       Decimal?        @db.Decimal(12, 2)
+  amount     Decimal         @db.Decimal(12, 2)
+  sourceType String?         // EmployeeRate | PayrollAdjustment | RecurringDeduction
+  sourceId   Int?
+
+  payslip Payslip @relation(fields: [payslipId], references: [id])
+
+  @@index([payslipId])
 }
