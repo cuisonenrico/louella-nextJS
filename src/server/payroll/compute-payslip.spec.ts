@@ -11,6 +11,7 @@ function input(overrides: Partial<PayslipInput> = {}): PayslipInput {
     rates: [{ id: 10, dailyRate: 600, effectiveOn: '2026-01-01' }],
     absences: [],
     adjustments: [],
+    vale: [],
     recurring: [],
     skippedRecurringIds: [],
     ...overrides,
@@ -149,6 +150,22 @@ describe('computePayslip', () => {
     expect(slip.basicPay).toBe(6985.29);
     expect(slip.totalAdditions).toBe(0.3);
     expect(slip.netPay).toBe(6985.59);
+  });
+
+  it('deducts each vale in the cutoff as its own line', () => {
+    const slip = computePayslip(
+      input({
+        vale: [
+          { id: 21, date: '2026-09-03', branchName: 'Main', amount: 500 },
+          { id: 22, date: '2026-09-10', branchName: 'Cubao', amount: 250.5 },
+        ],
+      }),
+    );
+    expect(slip).toMatchObject({ totalDeductions: 750.5, netPay: 7049.5 });
+    expect(slip.lines.filter((l) => l.sourceType === 'BranchVale')).toEqual([
+      { type: 'DEDUCTION', label: 'Vale — Main, Sep 3', quantity: null, rate: null, amount: 500, sourceType: 'BranchVale', sourceId: 21 },
+      { type: 'DEDUCTION', label: 'Vale — Cubao, Sep 10', quantity: null, rate: null, amount: 250.5, sourceType: 'BranchVale', sourceId: 22 },
+    ]);
   });
 });
 

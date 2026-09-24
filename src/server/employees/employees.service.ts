@@ -7,6 +7,7 @@ import { toUtcDay } from '../common/utils/date-range.util';
 import { recordChanges } from '../common/utils/audit.util';
 import { day, employeeLockedThrough } from '../payroll/payroll-lock.util';
 import { CreateEmployeeDto, CreateRateDto, ListEmployeesQuery, UpdateEmployeeDto } from './dto/employee.dto';
+import { assertValeWithinEmployment } from './vale-window.util';
 
 export const EMPLOYEE_INCLUDE = {
   jobRole: { select: { id: true, name: true } },
@@ -99,6 +100,14 @@ export class EmployeesService {
       if (dto.jobRoleId !== undefined && dto.jobRoleId !== before.jobRoleId) {
         await this.assertActiveJobRole(tx, dto.jobRoleId);
       }
+      if (dto.hiredOn !== undefined && dto.hiredOn !== day(before.hiredOn)) {
+        await assertValeWithinEmployment(
+          tx,
+          id,
+          dto.hiredOn,
+          before.separatedOn ? day(before.separatedOn) : null,
+        );
+      }
       const after = await tx.employee.update({
         where: { id },
         data: {
@@ -124,6 +133,7 @@ export class EmployeesService {
       if (separatedOn !== null && separatedOn < day(before.hiredOn)) {
         throw new BadRequestException('The separation date cannot be before the hire date');
       }
+      await assertValeWithinEmployment(tx, id, day(before.hiredOn), separatedOn);
       const after = await tx.employee.update({
         where: { id },
         data: { separatedOn: separatedOn === null ? null : toUtcDay(separatedOn) },

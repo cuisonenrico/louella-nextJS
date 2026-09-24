@@ -1010,7 +1010,7 @@ model PayslipLine {
   quantity   Decimal?        @db.Decimal(12, 2)
   rate       Decimal?        @db.Decimal(12, 2)
   amount     Decimal         @db.Decimal(12, 2)
-  sourceType String?         // EmployeeRate | PayrollAdjustment | RecurringDeduction
+  sourceType String?         // EmployeeRate | PayrollAdjustment | RecurringDeduction | BranchVale
   sourceId   Int?
 
   payslip Payslip @relation(fields: [payslipId], references: [id])

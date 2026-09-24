@@ -51,6 +51,11 @@ export class PayrollDraftService {
         adjustments: { where: { deletedAt: null, periodStart: start }, orderBy: { id: 'asc' } },
         recurringDeductions: { where: { isActive: true }, orderBy: { id: 'asc' } },
         skips: { where: { deletedAt: null, periodStart: start } },
+        vale: {
+          where: { deletedAt: null, date: { gte: start, lte: end } },
+          include: { branch: { select: { name: true } } },
+          orderBy: [{ date: 'asc' }, { id: 'asc' }],
+        },
       },
       orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
     });
@@ -81,6 +86,7 @@ export class PayrollDraftService {
         })),
         recurring,
         skippedRecurringIds: e.skips.map((s) => s.recurringDeductionId),
+        vale: e.vale.map((v) => ({ id: v.id, date: day(v.date), branchName: v.branch.name, amount: num(v.amount) })),
       });
       const skipByDeduction = new Map(e.skips.map((s) => [s.recurringDeductionId, s.id]));
       return {

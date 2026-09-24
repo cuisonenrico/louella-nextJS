@@ -47,6 +47,7 @@ describe('EmployeesService', () => {
         update: jest.fn().mockResolvedValue({ id: 9 }),
       },
       payslip: { findFirst: jest.fn().mockResolvedValue(null) },
+      branchVale: { findFirst: jest.fn().mockResolvedValue(null) },
       auditEvent: { createMany: jest.fn() },
       $transaction: jest.fn((fn: (tx: unknown) => unknown) => fn(prisma)),
     };
@@ -92,6 +93,18 @@ describe('EmployeesService', () => {
     const row = employeeRow({ separatedOn: at('2026-09-24') });
     expect(toEmployeeView(row as never, '2026-09-24').isActive).toBe(true);
     expect(toEmployeeView(row as never, '2026-09-25').isActive).toBe(false);
+  });
+
+  it('refuses a separation date that would strand a vale', async () => {
+    prisma.branchVale.findFirst.mockResolvedValue({ date: at('2026-10-02') });
+    await expect(service.setSeparation(1, '2026-09-30', 7)).rejects.toThrow(ConflictException);
+    expect(prisma.employee.update).not.toHaveBeenCalled();
+  });
+
+  it('refuses a later hire date that would strand a vale', async () => {
+    prisma.branchVale.findFirst.mockResolvedValue({ date: at('2026-01-10') });
+    await expect(service.update(1, { hiredOn: '2026-02-01' }, 7)).rejects.toThrow(ConflictException);
+    expect(prisma.employee.update).not.toHaveBeenCalled();
   });
 
   it('refuses a separation date before the hire date', async () => {

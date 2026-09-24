@@ -11,7 +11,7 @@ import { centavos, pesos } from '../common/utils/decimal.util';
 
 export type AdjustmentKind = 'ADDITION' | 'DEDUCTION';
 export type LineType = 'BASIC' | 'ADDITION' | 'DEDUCTION' | 'EMPLOYER_SHARE';
-export type LineSource = 'EmployeeRate' | 'PayrollAdjustment' | 'RecurringDeduction';
+export type LineSource = 'EmployeeRate' | 'PayrollAdjustment' | 'RecurringDeduction' | 'BranchVale';
 
 export interface EmploymentInput {
   id: number;
@@ -34,6 +34,9 @@ export interface AdjustmentInput {
   amount: number;
 }
 
+/** A cash advance taken from a branch drawer (BranchVale), dated inside the cutoff. */
+export interface ValeInput { id: number; date: string; branchName: string; amount: number }
+
 export interface RecurringInput {
   id: number;
   name: string;
@@ -47,6 +50,7 @@ export interface PayslipInput {
   rates: RateInput[];
   absences: string[];
   adjustments: AdjustmentInput[];
+  vale: ValeInput[];
   /** Active recurring deductions only. */
   recurring: RecurringInput[];
   skippedRecurringIds: number[];
@@ -95,6 +99,14 @@ export function employmentWindow(
 }
 
 /** The latest rate effective on or before `date`; `rates` sorted ascending. */
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** `2026-09-03` → `Sep 3`. String arithmetic: no Date, no time zone. */
+function shortDate(date: string): string {
+  const [, month, dayOfMonth] = date.split('-');
+  return `${MONTHS[Number(month) - 1]} ${Number(dayOfMonth)}`;
+}
+
 function rateOn(rates: RateInput[], date: string): RateInput | null {
   let found: RateInput | null = null;
   for (const rate of rates) {
@@ -197,6 +209,21 @@ export function computePayslip(input: PayslipInput): ComputedPayslip {
     const cents = centavos(adj.amount);
     deductions += cents;
     lines.push(adjustmentLine('DEDUCTION', adj, cents));
+  }
+  // Vale taken from a branch drawer during the cutoff. Read from BranchVale,
+  // never copied into adjustments, so the payslip and the drawer agree.
+  for (const v of [...input.vale].sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id)) {
+    const cents = centavos(v.amount);
+    deductions += cents;
+    lines.push({
+      type: 'DEDUCTION',
+      label: `Vale — ${v.branchName}, ${shortDate(v.date)}`,
+      quantity: null,
+      rate: null,
+      amount: pesos(cents),
+      sourceType: 'BranchVale',
+      sourceId: v.id,
+    });
   }
   lines.push(...employerLines);
 
