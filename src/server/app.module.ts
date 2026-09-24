@@ -32,6 +32,7 @@ import { SuppliersModule } from './suppliers/suppliers.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { PermissionsModule } from './permissions/permissions.module';
+import { EmployeesModule } from './employees/employees.module';
 import { validateEnv } from './common/config/env.validation';
 import { CacheNamespaceModule } from './common/cache/cache-namespace.module';
 
@@ -69,6 +70,7 @@ import { CacheNamespaceModule } from './common/cache/cache-namespace.module';
     DashboardModule,
     NotificationsModule,
     PermissionsModule,
+    EmployeesModule,
   ],
   controllers: [AppController],
   providers: [
