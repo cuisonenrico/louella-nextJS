@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import LandingCta from '@/components/landing/LandingCta';
 import LandingRenderer from '@/components/landing/site/LandingRenderer';
+import SmoothAnchors from '@/components/landing/site/SmoothAnchors';
 import { getPublishedLanding } from '@/server/landing/published-landing';
 
 // Content is edited in Settings → Landing Page and cached under the `landing`
@@ -27,5 +28,10 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function Home() {
   const content = await getPublishedLanding();
-  return <LandingRenderer content={content} accountSlot={<LandingCta />} />;
+  return (
+    <>
+      <LandingRenderer content={content} accountSlot={<LandingCta />} />
+      <SmoothAnchors />
+    </>
+  );
 }

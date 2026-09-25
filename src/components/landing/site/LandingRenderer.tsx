@@ -13,12 +13,11 @@ import {
   ProductsSection,
 } from './sections';
 
-function LandingNav({ content, accountSlot }: { content: ResolvedLanding; accountSlot?: ReactNode }) {
-  const { brand } = content;
+function LandingNav({ brand, accountSlot }: { brand: ResolvedLanding['brand']; accountSlot?: ReactNode }) {
   return (
     <header className="sticky top-0 z-40 border-b border-lp-line/60 bg-lp-paper/90 backdrop-blur">
       <Container className="flex h-16 items-center justify-between gap-4">
-        <a href="#top" className="flex items-center gap-2">
+        <a href="#top" className="flex items-center gap-2" aria-label={`${brand.name}, back to top`}>
           {brand.logo && (
             <span className="relative size-8 overflow-hidden rounded-full">
               <LandingImg image={brand.logo} sizes="32px" />
@@ -99,6 +98,15 @@ export default function LandingRenderer({
   className?: string;
 }) {
   const sections = content.sections.filter((s) => s.visible);
+  // A nav link to a section that is hidden, removed or empty would do nothing
+  // when tapped, so it is left out of the menu instead.
+  const anchors = new Set(['top', ...sections.map((s) => s.anchor).filter(Boolean)]);
+  const reachable = (href: string) => !href.startsWith('#') || anchors.has(href.slice(1));
+  const brand = {
+    ...content.brand,
+    navLinks: content.brand.navLinks.filter((l) => reachable(l.href)),
+    cta: reachable(content.brand.cta.href) ? content.brand.cta : { ...content.brand.cta, label: '' },
+  };
   const footer = sections.find((s) => s.type === 'footer');
   const body = sections.filter((s) => s.type !== 'footer');
   return (
@@ -111,7 +119,7 @@ export default function LandingRenderer({
         className,
       )}
     >
-      <LandingNav content={content} accountSlot={accountSlot} />
+      <LandingNav brand={brand} accountSlot={accountSlot} />
       <main>
         {body.map((section) => (
           <Fragment key={section.id}>{renderSection(section, content.brand.name)}</Fragment>
