@@ -20,6 +20,7 @@ import { cn } from '@/lib/utils';
 import { SheetInput } from '@/components/sheet/SheetInput';
 import { useSheetNavigation } from '@/components/sheet/useSheetNavigation';
 import { useSaveShortcut } from '@/components/sheet/useSaveShortcut';
+import { useUnsavedChangesGuard } from '@/components/sheet/useUnsavedChangesGuard';
 import SheetPendingBar from '@/components/sheet/SheetPendingBar';
 import { SHEET_CELL, SHEET_CONTAINER, SHEET_HEAD, SHEET_TABLE } from '@/components/sheet/styles';
 import { toast } from 'sonner';
@@ -100,6 +101,14 @@ export default function MaterialInventoryPage() {
     setPendingDeliveries(new Map());
   }
 
+  // Leaving the sheet, or changing the day (which resets the edits above),
+  // asks before throwing away unsaved cells.
+  const { confirmDiscard, dialog: discardDialog } = useUnsavedChangesGuard(canEdit && pendingDeliveries.size > 0);
+  const changeDate = useCallback((next: string) => {
+    if (next === filterDate) return;
+    confirmDiscard(() => setFilterDate(next));
+  }, [filterDate, confirmDiscard]);
+
   const effectiveDelivery = useCallback(
     (r: MaterialInventory) => pendingDeliveries.get(r.id) ?? r.delivery,
     [pendingDeliveries],
@@ -162,15 +171,15 @@ export default function MaterialInventoryPage() {
           <SmallScreenNotice storageKey="material-inventory" />
           {/* Date navigation */}
           <div className="flex items-center gap-2 mb-3 flex-wrap">
-            <Button variant="ghost" size="icon" className="size-11 md:size-8" onClick={() => setFilterDate(addDays(filterDate, -1))}>
+            <Button variant="ghost" size="icon" className="size-11 md:size-8" onClick={() => changeDate(addDays(filterDate, -1))}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <Input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="w-[160px] h-11 md:h-8" />
-            <Button variant="ghost" size="icon" className="size-11 md:size-8" onClick={() => setFilterDate(addDays(filterDate, 1))} disabled={filterDate >= todayStr()}>
+            <Input type="date" value={filterDate} onChange={(e) => changeDate(e.target.value)} className="w-[160px] h-11 md:h-8" />
+            <Button variant="ghost" size="icon" className="size-11 md:size-8" onClick={() => changeDate(addDays(filterDate, 1))} disabled={filterDate >= todayStr()}>
               <ChevronRight className="h-4 w-4" />
             </Button>
             {filterDate !== todayStr() && (
-              <Button size="sm" variant="outline" onClick={() => setFilterDate(todayStr())}>Today</Button>
+              <Button size="sm" variant="outline" onClick={() => changeDate(todayStr())}>Today</Button>
             )}
             <div className="flex-grow" />
             {canCreate && (
@@ -363,6 +372,7 @@ export default function MaterialInventoryPage() {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+          {discardDialog}
         </TooltipProvider>
       </>
   );

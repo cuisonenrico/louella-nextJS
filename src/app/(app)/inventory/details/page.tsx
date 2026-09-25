@@ -15,6 +15,7 @@ import { extractError } from '@/lib/errors';
 import { Button } from '@/components/ui/button';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { useSaveShortcut } from '@/components/sheet/useSaveShortcut';
+import { useUnsavedChangesGuard } from '@/components/sheet/useUnsavedChangesGuard';
 import InventoryFilterBar from '../components/InventoryFilterBar';
 import InventorySummaryPanel from '../components/InventorySummaryPanel';
 import PendingTransfersPanel from '../components/PendingTransfersPanel';
@@ -68,6 +69,9 @@ export default function InventoryDetailsPage() {
   // Pending edits
   const [pendingUpdates, setPendingUpdates] = useState<Map<number, Partial<Inventory>>>(new Map());
   const [adjRow, setAdjRow] = useState<Inventory | null>(null);
+  // Leaving the sheet, or changing the day or branch (which resets the edits
+  // below), asks before throwing away unsaved cells.
+  const { confirmDiscard, dialog: discardDialog } = useUnsavedChangesGuard(pendingUpdates.size > 0);
 
   // Queries
   const { data: branches = [] } = useQuery<Branch[]>({ queryKey: ['branches'], queryFn: () => branchesApi.list().then((r) => r.data) });
@@ -125,9 +129,18 @@ export default function InventoryDetailsPage() {
 
   // Date helpers
   const commitDates = useCallback((from: string, to: string) => {
-    setFilterDateFrom(from);
-    setFilterDateTo(to);
-  }, []);
+    if (from === filterDateFrom && to === filterDateTo) return;
+    confirmDiscard(
+      () => { setFilterDateFrom(from); setFilterDateTo(to); },
+      // Kept editing: put the date inputs back on the day still shown.
+      () => { setDraftFrom(filterDateFrom); setDraftTo(filterDateTo); },
+    );
+  }, [filterDateFrom, filterDateTo, confirmDiscard]);
+
+  const changeBranch = useCallback((branchId: string) => {
+    if (branchId === filterBranch) return;
+    confirmDiscard(() => setFilterBranch(branchId));
+  }, [filterBranch, confirmDiscard]);
 
   const stepDate = useCallback((delta: number) => {
     if (dateMode === 'date') {
@@ -235,8 +248,8 @@ export default function InventoryDetailsPage() {
             onDraftToChange={setDraftTo}
             onCommitDates={commitDates}
             onStepDate={stepDate}
-            onBranchChange={setFilterBranch}
-            onImportOpen={canImport ? () => router.push('/inventory-import') : undefined}
+            onBranchChange={changeBranch}
+            onImportOpen={canImport ? () => confirmDiscard(() => router.push('/inventory-import')) : undefined}
           />
 
           <PendingTransfersPanel branchId={selectedBranchId} />
@@ -340,6 +353,8 @@ export default function InventoryDetailsPage() {
             branches={branches}
             onClose={() => setAdjRow(null)}
           />
+
+          {discardDialog}
         </TooltipProvider>
       </>
   );

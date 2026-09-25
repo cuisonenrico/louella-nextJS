@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePageHeaderStore } from '@/lib/pageHeaderStore';
+import { guardNavigation } from '@/lib/navigationGuard';
 import { LogOut, Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -21,9 +22,11 @@ export default function Header({ onOpenNav }: { onOpenNav?: () => void }) {
   const headerContent = usePageHeaderStore((s) => s.content);
   const headerActions = usePageHeaderStore((s) => s.actions);
 
-  const handleLogout = async () => {
-    await logout();
-    router.replace('/login');
+  const handleLogout = () => {
+    guardNavigation(async () => {
+      await logout();
+      router.replace('/login');
+    });
   };
 
   const initials = user?.email?.slice(0, 2).toUpperCase() ?? '??';

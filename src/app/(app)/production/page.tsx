@@ -23,6 +23,7 @@ import { useProductionMutations } from './hooks/useProductionMutations';
 import { useProductionSummary } from './hooks/useProductionSummary';
 import ProductionTabNav from './components/ProductionTabNav';
 import { useSaveShortcut } from '@/components/sheet/useSaveShortcut';
+import { useUnsavedChangesGuard } from '@/components/sheet/useUnsavedChangesGuard';
 import { buildFinalizedPlannedYields, useYieldAutoSync } from './hooks/useProductionPlannedYield';
 
 const PRODUCT_TYPE_ORDER: ProductType[] = ['BREAD', 'CAKE', 'SPECIAL', 'MISCELLANEOUS'];
@@ -76,6 +77,17 @@ export default function ProductionPage() {
   });
 
   useEffect(() => { resetPending(); }, [filterDate, resetPending]);
+
+  // Leaving the board, or changing the day (which resets the edits above),
+  // asks before throwing away unsaved cells — auto-synced yields included,
+  // since they are unsaved too until Save.
+  const { confirmDiscard, dialog: discardDialog } = useUnsavedChangesGuard(
+    pendingProduction.size + pendingInventory.size > 0,
+  );
+  const changeDate = useCallback((next: string) => {
+    if (next === filterDate) return;
+    confirmDiscard(() => setFilterDate(next));
+  }, [filterDate, confirmDiscard]);
 
   // Auto-init inventory for any branch that doesn't have records yet
   useEffect(() => {
@@ -179,7 +191,7 @@ export default function ProductionPage() {
             today={today}
             isInvLoading={invQuery.isLoading}
             isInitAllInvPending={initAllBranchesMutation.isPending}
-            onDateChange={setFilterDate}
+            onDateChange={changeDate}
           />
 
           {!prodQuery.isLoading && !invQuery.isLoading && rawOrders.length > 0 && plannedYields.length === 0 && allRows.length > 0 && (
@@ -244,6 +256,8 @@ export default function ProductionPage() {
               </Alert>
             </div>
           )}
+
+          {discardDialog}
 
           <MaterialConsumptionDrawer consumptionId={consumptionId} plannedYield={consumptionPlannedYield} onClose={() => { setConsumptionId(null); setConsumptionPlannedYield(undefined); }} />
         </TooltipProvider>

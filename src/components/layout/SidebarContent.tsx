@@ -4,6 +4,7 @@ import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { Settings, ShieldCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { guardNavigation } from '@/lib/navigationGuard';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/contexts/AuthContext';
@@ -65,7 +66,7 @@ export default function SidebarContent({
       <li key={item.href}>
         <button
           onClick={() => {
-            router.push(item.href);
+            guardNavigation(() => router.push(item.href));
             onNavigate?.();
           }}
           className={cn(
