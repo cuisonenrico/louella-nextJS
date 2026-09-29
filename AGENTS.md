@@ -1,7 +1,11 @@
 <!-- BEGIN:nextjs-agent-rules -->
+
 # This is NOT the Next.js you know
 
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
 <!-- END:nextjs-agent-rules -->
 
 # Louella — the application
@@ -122,9 +126,13 @@ Admin-only. Spec: `docs/superpowers/specs/2026-09-24-payroll-design.md`.
 
 - **Cutoffs** are the 1st–15th and 16th–last day, Manila calendar
   (`src/lib/payroll/cutoff.ts`). `periodStart` identifies one.
-- **Pay = daily rate × days worked + additions − deductions.** Everyone is
-  present on every non-rest working day unless an `Absence` says otherwise.
-  Rates are dated history (`EmployeeRate`); a mid-cutoff raise splits basic pay.
+- **Pay = daily rate × days worked + holiday pay + additions − deductions.** Everyone is present on every non-rest working day unless an `Absence` says otherwise. Rates are dated history (`EmployeeRate`); a mid-cutoff raise splits basic pay.
+- **Holidays** (spec: `docs/superpowers/specs/2026-09-29-payroll-holidays-design.md`)
+  are admin-set per date (`Holiday`, REGULAR or SPECIAL, open unless closed).
+  Worked → daily rate × the type's multiplier (`PayrollSettings`, Settings →
+  Payroll, drafts only); absent or closed on a scheduled day → nothing; rest
+  day → 100%, or the multiplier if marked worked (`HolidayRestDayWork`).
+  Holidays and marks lock with their cutoff.
 - **Recurring deductions** (SSS, PhilHealth, Pag-IBIG…) are monthly amounts,
   taken on the 1–15 cutoff only. Employer shares are recorded, never deducted.
 - **One function computes pay:** `src/server/payroll/compute-payslip.ts`. The
