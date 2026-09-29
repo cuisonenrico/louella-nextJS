@@ -30,9 +30,13 @@ test.describe('auth @smoke', () => {
     await login.login(ADMIN.email, ADMIN.password);
     await expect(page).not.toHaveURL(/\/login/);
     await page.goto('/dashboard');
+    // Let goto's own refresh finish, so the waiter below can only match the RELOAD's.
+    await page.waitForLoadState('networkidle');
     const refreshed = page.waitForResponse((r) => r.url().endsWith('/api/v1/auth/refresh'));
     await page.reload();
     expect((await refreshed).ok()).toBe(true);
+    // Signed in after the reload: the account menu renders, and we were not bounced to /login.
+    await expect(page.getByRole('button', { name: 'Account menu' })).toBeVisible();
     await expect(page).toHaveURL(/\/dashboard/);
   });
 });

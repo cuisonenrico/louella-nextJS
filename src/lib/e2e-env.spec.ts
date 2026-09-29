@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { assertEnvComplete, assertSafeDatabase, definesApiUrl } from '../../e2e/support/env';
+import {
+  assertEnvComplete,
+  assertNoApiUrlOverride,
+  assertSafeDatabase,
+  definesApiUrl,
+  envKeys,
+  unionKeys,
+} from '../../e2e/support/env';
 
 const url = (host: string, db = 'louella_e2e', q = '') => `postgresql://u:p@${host}:54329/${db}${q}`;
 const env = (d: string, direct = d) => ({ DATABASE_URL: d, DIRECT_URL: direct });
@@ -60,5 +67,31 @@ describe('definesApiUrl', () => {
     ['commented out', '# NEXT_PUBLIC_API_URL=https://api.example.com\n', false],
   ])('%s', (_label, text, expected) => {
     expect(definesApiUrl(text)).toBe(expected);
+  });
+});
+
+// dotenv (which Next uses) honours an `export ` prefix, so the guards must too.
+describe('env parsing', () => {
+  it('reads keys with an export prefix', () => {
+    expect(envKeys('export FOO=1\nBAR=2\n# BAZ=3\n')).toEqual(['FOO', 'BAR']);
+  });
+
+  it('unions the keys of several files', () => {
+    expect(unionKeys(['A=1\nB=2\n', 'B=9\nC=3\n', ''])).toEqual(['A', 'B', 'C']);
+  });
+
+  it('catches NEXT_PUBLIC_API_URL behind an export prefix', () => {
+    expect(definesApiUrl('export NEXT_PUBLIC_API_URL=https://api.example.com\n')).toBe(true);
+  });
+});
+
+describe('assertNoApiUrlOverride against the process environment', () => {
+  it('refuses a value exported in the shell, even blank', () => {
+    expect(() => assertNoApiUrlOverride([], { NEXT_PUBLIC_API_URL: '' })).toThrow(/NEXT_PUBLIC_API_URL/);
+    expect(() => assertNoApiUrlOverride([], { NEXT_PUBLIC_API_URL: 'https://x' })).toThrow(/NEXT_PUBLIC_API_URL/);
+  });
+
+  it('passes when it is not set anywhere', () => {
+    expect(() => assertNoApiUrlOverride([], {})).not.toThrow();
   });
 });

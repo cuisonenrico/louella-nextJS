@@ -28,8 +28,11 @@ test.describe('route sweep @smoke', () => {
         await expect(page.getByRole('heading', { name: 'Something went wrong' })).toHaveCount(0);
         // components/QueryError.tsx — a page's own data call failed
         await expect(page.getByRole('button', { name: 'Retry', exact: true })).toHaveCount(0);
-        // Something real rendered. /change-password has an <h1> but no <main>.
-        await expect(page.locator('main, [role="main"], h1').first()).toBeVisible();
+        // Something real rendered, with actual text — a page stuck on a skeleton or blank fails.
+        // (/change-password has an <h1> but no <main>.)
+        const content = page.locator('main, [role="main"], h1').first();
+        await expect(content).toBeVisible();
+        await expect(content).toContainText(/\S/);
         expect(failures.slice(failedBefore), `5xx while loading ${route}`).toEqual([]);
       });
     }

@@ -74,6 +74,8 @@ uses its own material; and **a payroll run covers everyone in the cutoff**, so `
 8. No `console.log` in specs.
 9. In a `locator.filter({ has })`, the inner locator is matched **relative to each candidate**. Build it from
    `page`, never from a parent locator (`dialog.getByRole(…)` inside `has:` matches nothing).
+10. Never `new PrismaClient()` without an explicit `datasources.db.url` (as `global-setup.ts` does). Prisma loads
+   `.env` on its own, and the test workers inherit the runner's environment — a bare client would talk to production.
 
 ## Gotchas (each one cost a failing run)
 

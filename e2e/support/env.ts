@@ -9,7 +9,8 @@ const SAFE_DB = '/louella_e2e';
 function parse(text: string): Record<string, string> {
   const out: Record<string, string> = {};
   for (const raw of text.split(/\r?\n/)) {
-    const line = raw.trim();
+    // dotenv (which Next uses) honours an `export ` prefix, so we do too.
+    const line = raw.trim().replace(/^export\s+/, '');
     if (!line || line.startsWith('#')) continue;
     const eq = line.indexOf('=');
     if (eq <= 0) continue;
@@ -22,8 +23,28 @@ export function loadE2eEnv(file = E2E_ENV_FILE): Record<string, string> {
   return parse(readFileSync(resolve(process.cwd(), file), 'utf8'));
 }
 
-export function envExampleKeys(file = '.env.example'): string[] {
-  return Object.keys(parse(readFileSync(resolve(process.cwd(), file), 'utf8')));
+export function envKeys(text: string): string[] {
+  return Object.keys(parse(text));
+}
+
+export function unionKeys(texts: string[]): string[] {
+  return [...new Set(texts.flatMap(envKeys))];
+}
+
+/**
+ * Every key that could reach the e2e server from an env file: the template plus every file Next
+ * loads. A key present in .env / .env.local but missing from .env.e2e would silently keep its
+ * production value, whether or not it is documented in .env.example.
+ */
+export function allTemplateKeys(files = ['.env.example', ...NEXT_ENV_FILES]): string[] {
+  const texts = files.flatMap((f) => {
+    try {
+      return [readFileSync(resolve(process.cwd(), f), 'utf8')];
+    } catch {
+      return []; // file does not exist (CI has only .env.example)
+    }
+  });
+  return unionKeys(texts);
 }
 
 const NEXT_ENV_FILES = ['.env', '.env.local', '.env.production', '.env.production.local'];
@@ -39,7 +60,14 @@ export function definesApiUrl(text: string): boolean {
  * A real value would point the e2e browser at another API. So the key must be
  * absent from every file Next reads (and from .env.e2e).
  */
-export function assertNoApiUrlOverride(files: string[] = [...NEXT_ENV_FILES, E2E_ENV_FILE]): void {
+export function assertNoApiUrlOverride(
+  files: string[] = [...NEXT_ENV_FILES, E2E_ENV_FILE],
+  processEnv: Record<string, string | undefined> = process.env,
+): void {
+  // Exported in the shell: the value is spread into the server's env and baked into the build.
+  if ('NEXT_PUBLIC_API_URL' in processEnv) {
+    throw new Error('[e2e] NEXT_PUBLIC_API_URL is set in your shell environment. Unset it — it must be absent, not blank.');
+  }
   for (const file of files) {
     let text: string;
     try {
