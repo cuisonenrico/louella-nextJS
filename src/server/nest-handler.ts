@@ -14,7 +14,6 @@
  */
 import 'reflect-metadata';
 
-import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { ExpressAdapter } from '@nestjs/platform-express';
 import { Prisma } from '@prisma/client';
@@ -23,6 +22,7 @@ import express, { type Express } from 'express';
 
 import { AppModule } from './app.module';
 import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter';
+import { createValidationPipe } from './common/pipes/validation-pipe.factory';
 import { createCapturedResponse, toNodeRequest, toWebResponse } from './http-bridge';
 
 // Serialize Prisma Decimal as a JSON number so API responses stay numeric.
@@ -66,9 +66,8 @@ async function bootstrap(): Promise<Express> {
 
   app.use(cookieParser());
   app.useGlobalFilters(new PrismaExceptionFilter());
-  app.useGlobalPipes(
-    new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
-  );
+  // Strict validation, but tolerant of the branchId BranchGuard stamps into a scoped user's query.
+  app.useGlobalPipes(createValidationPipe());
 
   // Swagger UI is deliberately not mounted. It was already disabled in
   // production, and under the catch-all only /api/v1/* reaches Nest, so its

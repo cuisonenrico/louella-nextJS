@@ -312,9 +312,9 @@ Full:
 
 ### 6.2 Inventory sheet — `smoke/inventory-sheet.spec.ts` (@smoke @stress), `full/inventory-sheet.spec.ts` (@stress)
 
-Driven as **admin** on `/inventory/details` for the world branch. A scoped
-manager cannot load the sheet today (see §6.2a), and the rules under test are
-role-independent. Rows are created with the **Initialize** button; edits are
+Driven as **admin** on `/inventory/details` for the world branch: the rules
+under test are role-independent (a manager loading and saving the sheet has its
+own regression test, §6.2a). Rows are created with the **Initialize** button; edits are
 staged and saved with **Save Changes**; only Delivery, Leftover and Reject are
 editable (the "Prev. Leftover" column is the derived opening).
 
@@ -333,14 +333,16 @@ Full:
   asserted: it keys off the newest inventory row across all branches with a
   5-minute memo, so it is order-dependent in a shared database.)
 
-### 6.2a Known production bug (found while writing this suite)
+### 6.2a A production bug found while writing this suite (fixed)
 
-A scoped branch manager gets `400 "property branchId should not exist"` on
+A scoped branch manager got `400 "property branchId should not exist"` on
 `GET /inventory/branch/:id/date` and `GET /inventory/date`, so their own daily
-sheet fails to load. `BranchGuard` pins `branchId` into `req.query`; the app's
-`ValidationPipe({ whitelist, forbidNonWhitelisted })` rejects it on DTOs that
-lack the field. `full/inventory-sheet.spec.ts` carries a `test.fixme` for the
-manager case; remove the `.fixme` when it is fixed.
+sheet failed to load. `BranchGuard` pins `branchId` into `req.query`; the app's
+`ValidationPipe({ whitelist, forbidNonWhitelisted })` rejected it on DTOs that
+lack the field. Fixed by `ScopedValidationPipe`, which drops only the guard's
+own stamp (marked with a symbol) for a DTO that does not declare `branchId`.
+Regression tests: `src/server/common/pipes/validation-pipe.http.spec.ts` and
+`full/inventory-sheet.spec.ts › a branch manager loads their own daily sheet and can save it`.
 
 ### 6.3 Production orders — `full/production-orders.spec.ts` (@stress)
 

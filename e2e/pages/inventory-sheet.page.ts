@@ -14,8 +14,8 @@ import { expect, type Locator, type Page } from '@playwright/test';
  *    checks the header order and fails loudly if the layout ever changes.
  *  - A leftover nobody has entered has title "Not counted yet — …" and sells nothing.
  *
- * Driven as ADMIN in v1: a scoped MANAGER cannot load this sheet at all today
- * (GET /inventory/branch/:id/date → 400 "property branchId should not exist").
+ * Most specs drive it as ADMIN (the rules are role-independent). A scoped MANAGER loading and saving it
+ * has its own regression test — it once failed with 400 "property branchId should not exist".
  */
 export type SheetField = 'delivery' | 'leftover' | 'reject';
 

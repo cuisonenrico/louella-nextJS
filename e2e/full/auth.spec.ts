@@ -29,19 +29,15 @@ test.describe('auth', () => {
     const { accessToken } = (await login.json()) as { accessToken: string };
     const headers = { Authorization: `Bearer ${accessToken}` };
     // Not /sales: MANAGER lacks the `analytics` feature, so that is a 403 for every branch.
-    // Not /inventory/branch/:id/date either: for a scoped manager it is 400 today (see the
-    // fixme'd test in full/inventory-sheet.spec.ts). The summary route is branch-guarded and works.
-    const summary = (branchId: number) =>
-      page.request.get('/api/v1/inventory/summary', {
-        params: { startDate: today(), endDate: today(), branchId },
-        headers,
-      });
+    // The daily-sheet route itself: branch-guarded, and manager-readable (`inventory-history`).
+    const sheet = (branchId: number) =>
+      page.request.get(`/api/v1/inventory/branch/${branchId}/date`, { params: { date: today() }, headers });
 
     // Positive control first: the route works for the manager's own branch…
-    const own = await summary(mine.branch.id);
+    const own = await sheet(mine.branch.id);
     expect(own.status(), await own.text()).toBe(200);
     // …and the same route refuses another branch.
-    expect((await summary(other.branch.id)).status()).toBe(403);
+    expect((await sheet(other.branch.id)).status()).toBe(403);
     await page.context().close();
   });
 

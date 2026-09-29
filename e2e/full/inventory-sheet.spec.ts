@@ -77,13 +77,13 @@ test.describe('inventory sheet @stress', () => {
     for (const p of world.products) expect(rowIds).toContain(p.id);
   });
 
-  // KNOWN PRODUCTION BUG — see .superpowers ledger / final report. A branch manager (scoped,
-  // no all-branches) gets 400 "property branchId should not exist" on
-  // GET /inventory/branch/:id/date and GET /inventory/date: BranchGuard pins branchId into
-  // req.query and the app's forbidNonWhitelisted ValidationPipe rejects it on DTOs without
-  // that field. Remove `.fixme` when it is fixed; this test then guards the fix.
-  test.fixme('a branch manager loads their own daily sheet', async ({ api, browser }) => {
+  // Regression: a branch manager (scoped, no all-branches) used to get 400
+  // "property branchId should not exist" on GET /inventory/branch/:id/date and GET /inventory/date,
+  // because BranchGuard pins branchId into req.query and the app's forbidNonWhitelisted
+  // ValidationPipe rejected it on DTOs without that field (fixed by ScopedValidationPipe).
+  test('a branch manager loads their own daily sheet and can save it', async ({ api, browser }) => {
     const world = await buildWorld(api, { products: 1 });
+    const product = world.products[0].name;
     const page = await managerPage(browser, world);
     const failed: string[] = [];
     page.on('response', (r) => {
@@ -91,7 +91,11 @@ test.describe('inventory sheet @stress', () => {
     });
 
     const sheet = new InventorySheet(page);
-    await sheet.open(world.branch.name, today(), [world.products[0].name]);
+    await sheet.open(world.branch.name, today(), [product]);
+    // The write path too: the manager's own PATCH /inventory/bulk goes through the same guard.
+    await sheet.enter(product, { delivery: 12, leftover: 2 });
+    await sheet.expectNumber(product, 'Sold', 12 - 2);
+
     expect(failed).toEqual([]);
     await page.context().close();
   });

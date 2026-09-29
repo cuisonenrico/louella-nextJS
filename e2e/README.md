@@ -90,14 +90,16 @@ uses its own material; and **a payroll run covers everyone in the cutoff**, so `
 | **`RouteGuard` sends a denied page to the user's first permitted route**; `/no-access` is only for accounts with none. | Assert the redirect target, not `/no-access`. |
 | **Autofill can't be asserted deterministically**: it keys off the newest inventory row across all branches with a 5-minute memo. | Test the explicit *Initialize* button instead. |
 
-## Known production bug this suite found
+## A production bug this suite found (fixed)
 
-A branch **manager** cannot load their own branch's daily sheet: `GET /inventory/branch/:id/date` and
-`GET /inventory/date` return `400 "property branchId should not exist"`. `BranchGuard` pins `branchId` into
-`req.query`, and the app's `forbidNonWhitelisted` `ValidationPipe` rejects it on DTOs without that field.
-The sheet flows therefore run as admin, and `full/inventory-sheet.spec.ts` has a `test.fixme` for the manager
-case. **Remove the `.fixme` when it is fixed** — that test then guards the fix. (The existing
-`branch.guard.http.spec.ts` uses a probe controller with no strict pipe, so it cannot see this.)
+A branch **manager** could not load their own branch's daily sheet: `GET /inventory/branch/:id/date` and
+`GET /inventory/date` returned `400 "property branchId should not exist"`. `BranchGuard` pins `branchId` into
+`req.query`, and the app's `forbidNonWhitelisted` `ValidationPipe` rejected it on DTOs without that field.
+Fixed by `ScopedValidationPipe` (`src/server/common/pipes/`), which leaves out only the value the guard itself
+stamped. `common/pipes/validation-pipe.http.spec.ts` covers the guard and the real pipe together (the older
+`branch.guard.http.spec.ts` has no strict pipe, so it could not see this), and
+`full/inventory-sheet.spec.ts › a branch manager loads their own daily sheet and can save it` guards it end to end.
+The other sheet flows still run as admin — they test role-independent rules.
 
 ## CI
 
