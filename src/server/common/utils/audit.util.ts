@@ -25,7 +25,10 @@ export type AuditEntity =
   | 'ExpenseCategory'
   | 'BranchExpense'
   | 'BranchVale'
-  | 'BranchCashDay';
+  | 'BranchCashDay'
+  | 'Holiday'
+  | 'HolidayRestDayWork'
+  | 'PayrollSettings';
 
 export type AuditAction =
   | 'create'
@@ -51,6 +54,9 @@ export const AUDITED_FIELDS: Record<AuditEntity, readonly string[]> = {
   BranchExpense: ['branchId', 'date', 'categoryId', 'amount', 'note', 'deletedAt'],
   BranchVale: ['branchId', 'date', 'employeeId', 'amount', 'note', 'deletedAt'],
   BranchCashDay: ['actualCash', 'note', 'status', 'salesAtVerify', 'expensesAtVerify', 'valeAtVerify'],
+  Holiday: ['date', 'name', 'type', 'isClosed', 'deletedAt'],
+  HolidayRestDayWork: ['holidayId', 'employeeId', 'deletedAt'],
+  PayrollSettings: ['regularHolidayMultiplier', 'specialHolidayMultiplier'],
 };
 
 type Row = Record<string, unknown> | null | undefined;

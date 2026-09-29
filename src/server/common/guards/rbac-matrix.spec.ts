@@ -36,6 +36,7 @@ import { AbsencesController } from '../../employees/absences.controller';
 import { EmployeesController } from '../../employees/employees.controller';
 import { JobRolesController } from '../../employees/job-roles.controller';
 import { PayrollController } from '../../payroll/payroll.controller';
+import { HolidaysController } from '../../payroll/holidays.controller';
 import { BranchCashController } from '../../branch-cash/branch-cash.controller';
 import { LandingAdminController, LandingPublicController } from '../../landing/landing.controller';
 
@@ -184,6 +185,8 @@ const MATRIX: [string, Target, [string, string, string, string]][] = [
   ['finalize payroll',     { controller: PayrollController, method: 'finalize' },        [D, D, D, A]],
   ['void payroll run',     { controller: PayrollController, method: 'voidRun' },         [D, D, D, A]],
   ['read payslip',         { controller: PayrollController, method: 'getPayslip' },      [D, D, D, A]],
+  ['payroll holidays',     { controller: HolidaysController, method: 'list' },           [D, D, D, A]],
+  ['payroll multipliers',  { controller: HolidaysController, method: 'updateSettings' }, [D, D, D, A]],
   // ── Branch cash: managers record their drawer, admins verify ──────────────
   ['cash day',             { controller: BranchCashController, method: 'getDay' },        [D, D, A, A]],
   ['cash summary',         { controller: BranchCashController, method: 'summary' },       [D, D, A, A]],
@@ -337,6 +340,7 @@ describe('payroll stays admin-only', () => {
     [JobRolesController, 'employees'],
     [AbsencesController, 'employees'],
     [PayrollController, 'payroll'],
+    [HolidaysController, 'payroll'],
   ] as const;
 
   it.each(PAYROLL_CONTROLLERS.map(([c, key]) => [c.name, c, key] as const))(
