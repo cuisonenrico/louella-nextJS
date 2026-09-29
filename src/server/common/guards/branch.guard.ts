@@ -46,8 +46,14 @@ import { ALL_BRANCHES_KEY } from '@/lib/rbac/features';
  * listing and every `:id` read/write for branch-confined users. Defining an
  * own property shadows the getter, so the stamp survives to the handler.
  */
+/** Marks a `req.query` whose `branchId` was stamped by BranchGuard. Non-enumerable, so it never leaves the object. */
+export const PINNED_BRANCH_QUERY = Symbol('pinnedBranchQuery');
+
 function pinQueryBranchId(req: Request, branchId: number): void {
   const query = { ...(req.query as Record<string, unknown> | undefined), branchId: String(branchId) };
+  // Tell the ValidationPipe this branchId is the guard's own stamp, not something the caller sent, so
+  // it can leave it out of a DTO that does not declare it (see ScopedValidationPipe).
+  Object.defineProperty(query, PINNED_BRANCH_QUERY, { value: true, enumerable: false });
   Object.defineProperty(req, 'query', {
     value: query,
     writable: true,
