@@ -1,5 +1,5 @@
 import { eachDate, weekdayOf, type Cutoff } from '@/lib/payroll/cutoff';
-import { centavos, pesos } from '../common/utils/decimal.util';
+import { centavos, pesos, scaleCentavos } from '../common/utils/decimal.util';
 
 /**
  * One employee's pay for one cutoff. Pure: no database, no clock.
@@ -10,8 +10,9 @@ import { centavos, pesos } from '../common/utils/decimal.util';
  */
 
 export type AdjustmentKind = 'ADDITION' | 'DEDUCTION';
-export type LineType = 'BASIC' | 'ADDITION' | 'DEDUCTION' | 'EMPLOYER_SHARE';
-export type LineSource = 'EmployeeRate' | 'PayrollAdjustment' | 'RecurringDeduction' | 'BranchVale';
+export type LineType = 'BASIC' | 'HOLIDAY' | 'ADDITION' | 'DEDUCTION' | 'EMPLOYER_SHARE';
+export type LineSource = 'EmployeeRate' | 'Holiday' | 'PayrollAdjustment' | 'RecurringDeduction' | 'BranchVale';
+export type HolidayType = 'REGULAR' | 'SPECIAL';
 
 export interface EmploymentInput {
   id: number;
@@ -44,6 +45,21 @@ export interface RecurringInput {
   employerShare: number;
 }
 
+/** A live holiday dated inside the cutoff. */
+export interface HolidayInput {
+  id: number;
+  date: string;
+  name: string;
+  type: HolidayType;
+  /** The bakery did not operate: nobody scheduled that day is paid for it. */
+  isClosed: boolean;
+}
+
+export interface HolidayMultipliers {
+  regular: number;
+  special: number;
+}
+
 export interface PayslipInput {
   employee: EmploymentInput;
   cutoff: Cutoff;
@@ -54,6 +70,10 @@ export interface PayslipInput {
   /** Active recurring deductions only. */
   recurring: RecurringInput[];
   skippedRecurringIds: number[];
+  holidays: HolidayInput[];
+  /** Holidays this employee worked although it was their rest day. */
+  restDayWorkHolidayIds: number[];
+  multipliers: HolidayMultipliers;
 }
 
 export interface ComputedLine {
@@ -68,6 +88,7 @@ export interface ComputedLine {
 
 export type PayslipWarning =
   | { code: 'MISSING_RATE'; blocking: true; dates: string[] }
+  | { code: 'IGNORED_REST_DAY_MARK'; blocking: false; dates: string[] }
   | { code: 'NEGATIVE_NET'; blocking: false }
   | { code: 'NO_DAYS_WORKED'; blocking: false };
 
@@ -77,6 +98,7 @@ export interface ComputedPayslip {
   absenceDays: number;
   daysWorked: number;
   basicPay: number;
+  holidayPay: number;
   totalAdditions: number;
   totalDeductions: number;
   netPay: number;
@@ -119,20 +141,48 @@ function rateOn(rates: RateInput[], date: string): RateInput | null {
 export function computePayslip(input: PayslipInput): ComputedPayslip {
   const { employee, cutoff } = input;
 
-  // 1–3. Working days, absences, days worked.
+  // 1–3. Working days, absences, days worked. A closed holiday is a scheduled
+  // day nobody worked, so it counts like an absence.
   const window = employmentWindow(employee, cutoff);
   const restDays = new Set(employee.restDays);
-  const workingDates = window
-    ? eachDate(window.start, window.end).filter((d) => !restDays.has(weekdayOf(d)))
-    : [];
+  const isRestDay = (d: string) => restDays.has(weekdayOf(d));
+  const holidayOn = new Map(input.holidays.map((h) => [h.date, h]));
+  const allDates = window ? eachDate(window.start, window.end) : [];
+  const workingDates = allDates.filter((d) => !isRestDay(d));
   const absent = new Set(input.absences);
-  const worked = workingDates.filter((d) => !absent.has(d));
+  const worked = workingDates.filter((d) => !absent.has(d) && !holidayOn.get(d)?.isClosed);
+  const workedSet = new Set(worked);
 
-  // 4. Basic pay: consecutive days at the same rate collapse into one line.
+  // Holidays: worked → the type's multiplier; rest day not worked → 1.00;
+  // scheduled but absent or closed → nothing.
+  const marked = new Set(input.restDayWorkHolidayIds);
+  const holidayDays: { holiday: HolidayInput; multiplier: number; suffix: string }[] = [];
+  const ignoredMarks: string[] = [];
+  let restDaysWorked = 0;
+  for (const date of allDates) {
+    const holiday = holidayOn.get(date);
+    if (!holiday) continue;
+    const multiplier = holiday.type === 'REGULAR' ? input.multipliers.regular : input.multipliers.special;
+    if (isRestDay(date)) {
+      if (marked.has(holiday.id) && !holiday.isClosed) {
+        holidayDays.push({ holiday, multiplier, suffix: 'rest day, worked' });
+        restDaysWorked += 1;
+      } else {
+        holidayDays.push({ holiday, multiplier: 1, suffix: 'rest day' });
+      }
+    } else {
+      if (marked.has(holiday.id)) ignoredMarks.push(date);
+      if (workedSet.has(date)) holidayDays.push({ holiday, multiplier, suffix: 'worked' });
+    }
+  }
+
+  // 4. Basic pay for ordinary worked days: consecutive days at the same rate
+  // collapse into one line.
   const rates = [...input.rates].sort((a, b) => a.effectiveOn.localeCompare(b.effectiveOn));
   const segments: { rate: RateInput; days: number }[] = [];
   const missingRate: string[] = [];
   for (const date of worked) {
+    if (holidayOn.has(date)) continue;
     const rate = rateOn(rates, date);
     if (!rate) {
       missingRate.push(date);
@@ -158,6 +208,29 @@ export function computePayslip(input: PayslipInput): ComputedPayslip {
       sourceId: rate.id,
     });
   }
+
+  // 4b. One line per paid holiday, by date. The multiplier is kept as the
+  // line's quantity so a finalized payslip shows the rate it used.
+  let holidayPay = 0;
+  for (const { holiday, multiplier, suffix } of holidayDays) {
+    const rate = rateOn(rates, holiday.date);
+    if (!rate) {
+      missingRate.push(holiday.date);
+      continue;
+    }
+    const cents = scaleCentavos(centavos(rate.dailyRate), multiplier);
+    holidayPay += cents;
+    lines.push({
+      type: 'HOLIDAY',
+      label: `${holiday.type === 'REGULAR' ? 'Regular' : 'Special'} holiday — ${shortDate(holiday.date)} (${suffix})`,
+      quantity: multiplier,
+      rate: rate.dailyRate,
+      amount: pesos(cents),
+      sourceType: 'Holiday',
+      sourceId: holiday.id,
+    });
+  }
+  missingRate.sort();
 
   // 5. One-off additions.
   let additions = 0;
@@ -228,19 +301,22 @@ export function computePayslip(input: PayslipInput): ComputedPayslip {
   lines.push(...employerLines);
 
   // 8. Net pay.
-  const net = basic + additions - deductions;
+  const net = basic + holidayPay + additions - deductions;
+  const daysWorked = worked.length + restDaysWorked;
 
   const warnings: PayslipWarning[] = [];
   if (missingRate.length > 0) warnings.push({ code: 'MISSING_RATE', blocking: true, dates: missingRate });
+  if (ignoredMarks.length > 0) warnings.push({ code: 'IGNORED_REST_DAY_MARK', blocking: false, dates: ignoredMarks });
   if (net < 0) warnings.push({ code: 'NEGATIVE_NET', blocking: false });
-  if (worked.length === 0 && recurringApplied > 0) warnings.push({ code: 'NO_DAYS_WORKED', blocking: false });
+  if (daysWorked === 0 && recurringApplied > 0) warnings.push({ code: 'NO_DAYS_WORKED', blocking: false });
 
   return {
     employeeId: employee.id,
     workingDays: workingDates.length,
     absenceDays: workingDates.length - worked.length,
-    daysWorked: worked.length,
+    daysWorked,
     basicPay: pesos(basic),
+    holidayPay: pesos(holidayPay),
     totalAdditions: pesos(additions),
     totalDeductions: pesos(deductions),
     netPay: pesos(net),

@@ -43,6 +43,15 @@ export function pesos(cents: number): number {
 }
 
 /**
+ * Centavos × a factor (a holiday multiplier), rounded half-up to whole
+ * centavos. Decimal, not float: 12345 × 1.3 is 16048.5, which float math
+ * lands just under and would round down.
+ */
+export function scaleCentavos(cents: number, factor: number): number {
+  return new Prisma.Decimal(cents).mul(factor).toDecimalPlaces(0, Prisma.Decimal.ROUND_HALF_UP).toNumber();
+}
+
+/**
  * The cost of a (fractional) quantity at a (4-dp) unit price, in centavos:
  * computed exactly, rounded once, half up.
  */

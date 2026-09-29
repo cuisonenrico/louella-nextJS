@@ -1,5 +1,5 @@
 import { cutoffOf } from '@/lib/payroll/cutoff';
-import { computePayslip, employmentWindow, type PayslipInput } from './compute-payslip';
+import { computePayslip, employmentWindow, type HolidayInput, type PayslipInput } from './compute-payslip';
 
 const FIRST_HALF = cutoffOf('2026-09-01'); // Sep 1–15, 13 working days with Sunday rest
 const SECOND_HALF = cutoffOf('2026-09-16'); // Sep 16–30, 13 working days
@@ -14,6 +14,9 @@ function input(overrides: Partial<PayslipInput> = {}): PayslipInput {
     vale: [],
     recurring: [],
     skippedRecurringIds: [],
+    holidays: [],
+    restDayWorkHolidayIds: [],
+    multipliers: { regular: 2, special: 1.3 },
     ...overrides,
   };
 }
@@ -180,5 +183,121 @@ describe('employmentWindow', () => {
       start: '2026-09-10',
       end: '2026-09-12',
     });
+  });
+});
+
+describe('holidays', () => {
+  const regular = (date: string, over: Partial<HolidayInput> = {}): HolidayInput => ({
+    id: 90, date, name: 'Holiday', type: 'REGULAR', isClosed: false, ...over,
+  });
+  const special = (date: string, over: Partial<HolidayInput> = {}): HolidayInput => regular(date, { type: 'SPECIAL', ...over });
+  const holidayLines = (slip: ReturnType<typeof computePayslip>) => slip.lines.filter((l) => l.type === 'HOLIDAY');
+
+  it('pays a worked regular holiday at the regular multiplier, outside basic pay', () => {
+    const slip = computePayslip(input({ holidays: [regular('2026-09-08')] }));
+    expect(slip.lines.filter((l) => l.type === 'BASIC')).toEqual([
+      { type: 'BASIC', label: 'Basic pay', quantity: 12, rate: 600, amount: 7200, sourceType: 'EmployeeRate', sourceId: 10 },
+    ]);
+    expect(holidayLines(slip)).toEqual([
+      { type: 'HOLIDAY', label: 'Regular holiday — Sep 8 (worked)', quantity: 2, rate: 600, amount: 1200, sourceType: 'Holiday', sourceId: 90 },
+    ]);
+    expect(slip).toMatchObject({ workingDays: 13, absenceDays: 0, daysWorked: 13, basicPay: 7200, holidayPay: 1200, netPay: 8400 });
+  });
+
+  it('pays a worked special holiday at the special multiplier', () => {
+    const slip = computePayslip(input({ holidays: [special('2026-09-08')] }));
+    expect(holidayLines(slip)[0]).toMatchObject({ label: 'Special holiday — Sep 8 (worked)', quantity: 1.3, amount: 780 });
+    expect(slip.netPay).toBe(7980);
+  });
+
+  it('pays nothing for an absence on a scheduled holiday', () => {
+    const slip = computePayslip(input({ holidays: [regular('2026-09-08')], absences: ['2026-09-08'] }));
+    expect(holidayLines(slip)).toEqual([]);
+    expect(slip).toMatchObject({ absenceDays: 1, daysWorked: 12, basicPay: 7200, holidayPay: 0, netPay: 7200 });
+  });
+
+  it('pays nothing for a closed holiday on a scheduled day, and counts it absent', () => {
+    const slip = computePayslip(input({ holidays: [regular('2026-09-08', { isClosed: true })] }));
+    expect(holidayLines(slip)).toEqual([]);
+    expect(slip).toMatchObject({ absenceDays: 1, daysWorked: 12, netPay: 7200 });
+  });
+
+  it('pays 100% for a holiday on an unmarked rest day, either type', () => {
+    const slip = computePayslip(input({ holidays: [regular('2026-09-06'), special('2026-09-13', { id: 91 })] }));
+    expect(holidayLines(slip).map((l) => [l.label, l.quantity, l.amount])).toEqual([
+      ['Regular holiday — Sep 6 (rest day)', 1, 600],
+      ['Special holiday — Sep 13 (rest day)', 1, 600],
+    ]);
+    expect(slip).toMatchObject({ daysWorked: 13, basicPay: 7800, holidayPay: 1200 });
+  });
+
+  it('pays the multiplier for a rest-day holiday marked worked, and counts the day worked', () => {
+    const slip = computePayslip(input({ holidays: [special('2026-09-13', { id: 91 })], restDayWorkHolidayIds: [91] }));
+    expect(holidayLines(slip)).toEqual([
+      { type: 'HOLIDAY', label: 'Special holiday — Sep 13 (rest day, worked)', quantity: 1.3, rate: 600, amount: 780, sourceType: 'Holiday', sourceId: 91 },
+    ]);
+    expect(slip.daysWorked).toBe(14);
+  });
+
+  it('pays 100% for a closed holiday on a rest day even with a mark', () => {
+    const slip = computePayslip(input({ holidays: [regular('2026-09-06', { isClosed: true })], restDayWorkHolidayIds: [90] }));
+    expect(holidayLines(slip)[0]).toMatchObject({ label: 'Regular holiday — Sep 6 (rest day)', quantity: 1, amount: 600 });
+    expect(slip.daysWorked).toBe(13);
+  });
+
+  it('ignores a mark on a day that is no longer a rest day, with a warning', () => {
+    const slip = computePayslip(input({ holidays: [regular('2026-09-08')], restDayWorkHolidayIds: [90] }));
+    expect(holidayLines(slip)[0]).toMatchObject({ label: 'Regular holiday — Sep 8 (worked)', quantity: 2 });
+    expect(slip.warnings).toEqual([{ code: 'IGNORED_REST_DAY_MARK', blocking: false, dates: ['2026-09-08'] }]);
+  });
+
+  it('pays the rate in effect on the holiday after a mid-cutoff raise', () => {
+    const slip = computePayslip(
+      input({
+        rates: [
+          { id: 10, dailyRate: 600, effectiveOn: '2026-01-01' },
+          { id: 11, dailyRate: 650, effectiveOn: '2026-09-08' },
+        ],
+        holidays: [regular('2026-09-10')],
+      }),
+    );
+    expect(slip.lines.filter((l) => l.type === 'BASIC').map((l) => [l.quantity, l.rate])).toEqual([[6, 600], [6, 650]]);
+    expect(holidayLines(slip)[0]).toMatchObject({ rate: 650, amount: 1300 });
+  });
+
+  it('blocks on a missing rate for a paid holiday', () => {
+    const slip = computePayslip(input({ rates: [], holidays: [regular('2026-09-06')] }));
+    const missing = slip.warnings.find((w) => w.code === 'MISSING_RATE');
+    expect(missing).toMatchObject({ blocking: true });
+    expect(missing && 'dates' in missing ? missing.dates : []).toEqual(
+      ['2026-09-01', '2026-09-02', '2026-09-03', '2026-09-04', '2026-09-05', '2026-09-06', '2026-09-07',
+       '2026-09-08', '2026-09-09', '2026-09-10', '2026-09-11', '2026-09-12', '2026-09-14', '2026-09-15'],
+    );
+  });
+
+  it('rounds a multiplied half centavo up', () => {
+    const slip = computePayslip(input({ rates: [{ id: 10, dailyRate: 123.45, effectiveOn: '2026-01-01' }], holidays: [special('2026-09-08')] }));
+    expect(holidayLines(slip)[0].amount).toBe(160.49);
+  });
+
+  it('pays nothing for a holiday outside the employment window', () => {
+    const hiredLater = computePayslip(
+      input({ employee: { id: 1, restDays: [0], hiredOn: '2026-09-10', separatedOn: null }, holidays: [regular('2026-09-06')] }),
+    );
+    expect(holidayLines(hiredLater)).toEqual([]);
+    expect(hiredLater.holidayPay).toBe(0);
+  });
+
+  it('adds holiday pay to net pay alongside additions and deductions', () => {
+    const slip = computePayslip(
+      input({
+        holidays: [regular('2026-09-08')],
+        adjustments: [{ id: 5, kind: 'ADDITION', category: 'BONUS', description: 'Bonus', amount: 100 }],
+        recurring: [SSS],
+      }),
+    );
+    // 7200 basic + 1200 holiday + 100 bonus − 450 SSS
+    expect(slip.netPay).toBe(8050);
+    expect(slip.lines.map((l) => l.type)).toEqual(['BASIC', 'HOLIDAY', 'ADDITION', 'DEDUCTION', 'EMPLOYER_SHARE']);
   });
 });
