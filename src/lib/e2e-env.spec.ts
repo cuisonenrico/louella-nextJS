@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assertEnvComplete, assertSafeDatabase } from '../../e2e/support/env';
+import { assertEnvComplete, assertSafeDatabase, definesApiUrl } from '../../e2e/support/env';
 
 const url = (host: string, db = 'louella_e2e', q = '') => `postgresql://u:p@${host}:54329/${db}${q}`;
 const env = (d: string, direct = d) => ({ DATABASE_URL: d, DIRECT_URL: direct });
@@ -37,5 +37,18 @@ describe('assertEnvComplete', () => {
 
   it('treats a blank value as present', () => {
     expect(() => assertEnvComplete({ A: '' }, ['A'])).not.toThrow();
+  });
+});
+
+// api.ts does `NEXT_PUBLIC_API_URL ?? '/api/v1'`: a blank value is NOT unset, it
+// makes the browser post to /auth/login. The key must be absent from every file Next reads.
+describe('definesApiUrl', () => {
+  it.each([
+    ['a real url', 'NEXT_PUBLIC_API_URL=https://api.example.com\n', true],
+    ['a blank value', 'NEXT_PUBLIC_API_URL=\n', true],
+    ['absent', 'DATABASE_URL=x\n', false],
+    ['commented out', '# NEXT_PUBLIC_API_URL=https://api.example.com\n', false],
+  ])('%s', (_label, text, expected) => {
+    expect(definesApiUrl(text)).toBe(expected);
   });
 });

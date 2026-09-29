@@ -1,7 +1,7 @@
-/** Every reachable route, derived from src/app/**\/page.tsx + the RBAC nav manifest. */
+// Every route that has a page.tsx under src/app. Keep in sync with spec §8.1 — the adding-e2e-coverage skill enforces it.
 export const PUBLIC_ROUTES = ['/', '/login', '/register'];
 
-export const APP_ROUTES = [
+export const STATIC_ROUTES = [
   '/dashboard',
   '/sales',
   '/inventory',
@@ -9,13 +9,13 @@ export const APP_ROUTES = [
   '/inventory/gaps',
   '/inventory/rejections',
   '/inventory-adjustments',
+  '/inventory-import',
+  '/inventory-import/history',
   '/production',
   '/production/orders',
   '/production-orders',
   '/production-cost',
   '/production-efficiency',
-  '/inventory-import',
-  '/inventory-import/history',
   '/material-inventory',
   '/material-inventory/gaps',
   '/materials',
@@ -25,11 +25,18 @@ export const APP_ROUTES = [
   '/suppliers',
   '/unit-conversions',
   '/config/product-order',
+  '/employees',
+  '/payroll',
+  '/branch-cash',
   '/settings/users',
   '/settings/permissions',
   '/settings/jobs',
+  '/settings/payroll',
+  '/settings/landing',
   '/no-access',
   '/change-password',
 ];
 
-export const ADMIN = { email: 'admin@louella.com', password: 'Admin@123' };
+export function dynamicRoutes(ctx: { employeeId: number; periodStart: string }): string[] {
+  return [`/employees/${ctx.employeeId}`, `/payroll/${ctx.periodStart}`];
+}

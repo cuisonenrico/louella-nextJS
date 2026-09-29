@@ -26,6 +26,33 @@ export function envExampleKeys(file = '.env.example'): string[] {
   return Object.keys(parse(readFileSync(resolve(process.cwd(), file), 'utf8')));
 }
 
+const NEXT_ENV_FILES = ['.env', '.env.local', '.env.production', '.env.production.local'];
+
+/** True if the dotenv text sets NEXT_PUBLIC_API_URL at all — even blank. */
+export function definesApiUrl(text: string): boolean {
+  return 'NEXT_PUBLIC_API_URL' in parse(text);
+}
+
+/**
+ * api.ts does `NEXT_PUBLIC_API_URL ?? '/api/v1'`, and the value is inlined at
+ * build time. A blank value is not "unset": it sends the browser to /auth/login.
+ * A real value would point the e2e browser at another API. So the key must be
+ * absent from every file Next reads (and from .env.e2e).
+ */
+export function assertNoApiUrlOverride(files: string[] = [...NEXT_ENV_FILES, E2E_ENV_FILE]): void {
+  for (const file of files) {
+    let text: string;
+    try {
+      text = readFileSync(resolve(process.cwd(), file), 'utf8');
+    } catch {
+      continue; // file does not exist
+    }
+    if (definesApiUrl(text)) {
+      throw new Error(`[e2e] ${file} sets NEXT_PUBLIC_API_URL. Remove the line — it must be absent, not blank.`);
+    }
+  }
+}
+
 function isSafe(url: string | undefined): boolean {
   if (!url) return false;
   try {

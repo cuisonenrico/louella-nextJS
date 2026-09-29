@@ -1,5 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
-import { assertSafeDatabase, loadE2eEnv } from './e2e/support/env';
+import { assertNoApiUrlOverride, assertSafeDatabase, loadE2eEnv } from './e2e/support/env';
 
 /**
  * E2E suite. Runs a production build on :4100 against the throwaway
@@ -8,6 +8,7 @@ import { assertSafeDatabase, loadE2eEnv } from './e2e/support/env';
  */
 const env = loadE2eEnv();
 assertSafeDatabase(env);
+assertNoApiUrlOverride();
 const CI = !!process.env.CI;
 
 export default defineConfig({
@@ -35,5 +36,10 @@ export default defineConfig({
     stdout: 'ignore',
     stderr: 'pipe',
   },
-  projects: [{ name: 'desktop-chromium', use: { ...devices['Desktop Chrome'] } }],
+  // No shared storageState / setup project: each test signs in on its own
+  // (fixtures/test.ts), because a refresh token cannot be shared across tests.
+  projects: [
+    { name: 'desktop-chromium', use: { ...devices['Desktop Chrome'] } },
+    { name: 'tablet-webkit', use: { ...devices['iPad (gen 7) landscape'] } },
+  ],
 });
