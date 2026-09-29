@@ -52,9 +52,14 @@ export default defineConfig({
     {
       name: 'tablet-webkit',
       use: { ...devices['iPad (gen 7) landscape'] },
-      // Runs AFTER desktop, not beside it: payroll finalizes one shared cutoff, so two projects
-      // running it at the same time would collide. (Also skips webkit if desktop already failed.)
-      dependencies: ['desktop-chromium'],
+      // WebKit on the iPad profile is slower, and the multi-page tests (the sheet is re-opened several
+      // times) sat right at the 60 s default when both projects ran together: every failure in a
+      // stress run was that limit, on different steps. Twice the budget, for this project only.
+      timeout: 120_000,
+      // Payroll finalizes shared cutoffs, so two projects running it at once would collide. It is
+      // desktop-only (its rules don't depend on the browser), which lets the two projects run side
+      // by side — and a desktop failure no longer hides the tablet result as "did not run".
+      testIgnore: /payroll\.spec\.ts/,
     },
   ],
 });

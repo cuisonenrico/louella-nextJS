@@ -13,7 +13,7 @@ doing anything** unless both database URLs are exactly that. It also refuses to 
 ```bash
 npm run e2e:db          # start the throwaway Postgres (Docker) — tmpfs, so every start is empty
 npm run e2e:smoke       # the CI gate (desktop Chromium, @smoke only)
-npm run e2e             # everything, desktop Chromium + iPad WebKit
+npm run e2e             # everything: desktop Chromium + iPad WebKit side by side (payroll is desktop-only)
 npm run e2e:stress      # @stress tests ×10 across 4 workers — the flake detector
 npm run e2e:ui          # Playwright UI mode, for writing tests
 npm run e2e:db:down
@@ -31,6 +31,11 @@ seeds the database (`e2e/global-setup.ts`). Your dev server on :4000 can keep ru
 
 Each `playwright test` invocation drops and rebuilds the schema. To check that a spec is safe to rerun
 against leftover data, use `--repeat-each` (payroll: `--workers=1`), not two invocations.
+
+Payroll (`full/payroll.spec.ts`) tests the two most recent ended cutoffs every run — always one 1–15 and one
+16–end — so both halves of the recurring-deduction rule are covered whatever the date, and it also checks the
+print page. It is desktop-only: the iPad project ignores it, so the projects can run in parallel, and the iPad
+project has a 120 s test timeout (it is slower, and the sheet tests re-open the page several times).
 
 ## Layout
 

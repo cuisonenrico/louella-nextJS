@@ -177,7 +177,8 @@ In order:
   so it is not a readiness probe), `env` = parsed `.env.e2e`,
   `reuseExistingServer: !process.env.CI`, `timeout: 300_000`.
 - Projects: `desktop-chromium` (`devices['Desktop Chrome']`) and
-  `tablet-webkit` (`devices['iPad (gen 7) landscape']`, excluded from CI).
+  `tablet-webkit` (`devices['iPad (gen 7) landscape']`, excluded from CI, and
+ignoring `payroll.spec.ts` — see §6.5). The projects run side by side.
   **There is no `setup` project and no `storageState` file.** Refresh tokens
   rotate on every page load and the predecessor lives only 60 s
   (`auth.service.ts`), so a token file shared by parallel, minutes-long tests
@@ -375,22 +376,29 @@ Full:
 ### 6.5 Payroll — `full/payroll.spec.ts` (serial)
 
 `test.describe.configure({ mode: 'serial' })`. Not tagged `@stress` (a cutoff
-has one run for everyone). Uses `previousCutoff()` and an employee created with
-`hireDate` before that cutoff and a daily rate.
+has one run for everyone), and **desktop-only** — the iPad project ignores it
+(`testIgnore`), because two projects finalizing the same cutoffs would collide
+and payroll's rules do not depend on the browser.
 
-- `beforeAll`: void any non-voided run on the previous cutoff (API), so reruns
-  and `--repeat-each` start clean.
+The file runs the same four tests for **two cutoffs**: `previousCutoff()` (the
+most recent ended one) and `cutoffBefore(previousCutoff())`. Two consecutive
+cutoffs are always one 1–15 and one 16–end, so **every run exercises both halves
+of the recurring-deduction rule**, whatever day it is. Each has an employee
+created with `hireDate` 30 days before it and a daily rate.
+
+- `beforeAll`: void any non-voided run on both cutoffs (API), so reruns and
+  `--repeat-each` start clean; then build **all** the worlds *before* anything is
+  finalized (hiring someone before a finalized cutoff is refused).
 - Add one absence on a working day and one REGULAR holiday marked worked in
-  that cutoff (API). On `/payroll/[periodStart]`, the draft for the employee
+  each cutoff (API). On `/payroll/[periodStart]`, the draft for the employee
   shows: `rate × days worked + rate × regular multiplier (from PayrollSettings)
   − nothing for the absence`. Compute the expected figure in the test from the
   cutoff's working days and the employee's rest days — not a hardcoded total.
-- The world is built with `recurringDeduction: 500`. If the previous cutoff is
-  a 1–15 cutoff, the draft deducts 500; if it is 16–end, it deducts nothing.
-  (Branch on `previousCutoff()` so the test passes on either half of the
-  month.)
+- The world is built with `recurringDeduction: 500`. On the 1–15 cutoff the draft
+  deducts 500; on the 16–end cutoff it deducts nothing.
 - Finalize through the UI. The payslip (`/payroll/payslips/[id]`) matches the
-  draft figures.
+  draft figures, and the **print page** (`/payroll/runs/[id]/print`) lists one
+  payslip per employee in the run, ours among them.
 - Adding an absence in that cutoff is refused (cutoff locked).
 - Void the run through the UI; finalize again succeeds.
 
@@ -422,8 +430,8 @@ text, no response ≥ 500 from `/api/v1`, and the page's main heading is visible
 This is the authoritative list. `routes.ts` must contain every route below.
 Phase **v1** is built (2026-09-29: auth, inventory sheet, production orders,
 branch cash, payroll, and the route sweep over 38 of the 40 pages — the payroll
-print page and the payslip page need a finalized run; the payslip is covered by
-the payroll spec, the print page by nothing yet); **v2** is the next
+print page and the payslip page need a finalized run, so both are covered by the
+payroll spec instead); **v2** is the next
 pass; **v3** needs extra infrastructure. The skill (§10) requires updating this
 table when a feature lands or changes.
 
@@ -469,7 +477,7 @@ marked "sweep v1" is covered by the route sweep only.
 | `/payroll` | payroll | v1 | Cutoff list; §6.5 entry point |
 | `/payroll/[periodStart]` | payroll | v1 | §6.5 |
 | `/payroll/payslips/[id]` | payroll | v1 | §6.5 |
-| `/payroll/runs/[id]/print` | payroll | sweep v1; v2 | Print view lists every payslip of the run |
+| `/payroll/runs/[id]/print` | payroll | v1 | §6.5: print view lists one payslip per employee in the run |
 | `/branch-cash` | branch-cash | v1 | §6.4 |
 | `/settings/users` | users | sweep v1; v2 | Create user, change role/branch, deactivate → cannot log in |
 | `/settings/permissions` | permissions | sweep v1; v2 | Revoking a feature hides the nav item and redirects the user to their first permitted route |
