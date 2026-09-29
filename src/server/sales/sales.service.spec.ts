@@ -109,3 +109,37 @@ describe('SalesService — exact money', () => {
     expect(result.breakdown.every((r) => r.sales === 0.1)).toBe(true);
   });
 });
+
+describe('SalesService — counted days', () => {
+  const inv = (id: number, branchId: number, countedAt: Date | null) => ({
+    id,
+    date: new Date('2026-09-01T00:00:00Z'),
+    branch: { id: branchId, name: `B${branchId}` },
+    product: { id: 1, name: 'Pandesal', type: 'BREAD', price: 5 },
+    quantity: 10,
+    delivery: 0,
+    leftover: countedAt ? 4 : 10,
+    reject: 0,
+    leftoverCountedAt: countedAt,
+    adjustments: [],
+    notes: null,
+  });
+
+  it('marks a row settled only once its leftover is counted', async () => {
+    const prisma = makePrisma();
+    prisma.inventory.findMany.mockResolvedValue([inv(1, 1, new Date()), inv(2, 1, null)]);
+    const result = await new SalesService(prisma as never).getByBranchAndDate(1, '2026-09-01');
+
+    expect(result.breakdown.map((r) => [r.sold, r.settled])).toEqual([[6, true], [0, false]]);
+    expect(result.totals).toMatchObject({ totalSales: 30, settledDays: 1, unsettledDays: 1 });
+  });
+
+  it('summarises several branches from one read', async () => {
+    const prisma = makePrisma();
+    prisma.inventory.findMany.mockResolvedValue([inv(1, 1, new Date()), inv(2, 2, new Date())]);
+    const summaries = await new SalesService(prisma as never).getDailySummaries([1, 2, 3], '2026-09-01', '2026-09-01');
+
+    expect(prisma.inventory.findMany).toHaveBeenCalledTimes(1);
+    expect(summaries.map((s) => [s.branchId, s.totals.totalSales])).toEqual([[1, 30], [2, 30], [3, 0]]);
+  });
+});

@@ -57,7 +57,7 @@ function RejectionsReport() {
 
   const chartData = pageItems.map((item) => ({
     name: item.name,
-    Delivered: item.totalDelivery,
+    'On hand': item.totalSupply,
     Rejected: item.totalReject,
   }));
 
@@ -126,7 +126,7 @@ function RejectionsReport() {
                   <YAxis tick={{ fontSize: 11 }} />
                   <RechartsTooltip />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Bar dataKey="Delivered" fill="#6B3FA0" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="On hand" fill="#6B3FA0" radius={[3, 3, 0, 0]} />
                   <Bar dataKey="Rejected" fill="#d32f2f" radius={[3, 3, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -140,7 +140,7 @@ function RejectionsReport() {
                     </div>
                     <div className="flex items-center gap-3 text-sm text-right">
                       <span className="text-muted-foreground">
-                        {item.totalDelivery.toLocaleString()} delivered
+                        {item.totalSupply.toLocaleString()} on hand
                       </span>
                       <span className="text-destructive font-medium">
                         {item.totalReject.toLocaleString()} rejected
@@ -186,7 +186,7 @@ function RejectionsReport() {
 }
 
 export default function RejectionsPage() {
-  usePageHeader({ title: 'Rejected vs Delivered by Product' });
+  usePageHeader({ title: 'Rejected vs On Hand by Product' });
   return (
     <>
         {/* useSearchParams must sit under a Suspense boundary for the static build */}

@@ -21,6 +21,8 @@ export interface CashDayView {
   note: string | null;
   expenses: { id: number; category: { id: number; name: string }; amount: number; note: string | null }[];
   vale: { id: number; employee: { id: number; name: string }; amount: number; note: string | null }[];
+  /** Products on the sheet whose leftover nobody has counted: their sales are not in yet. */
+  uncountedProducts: number;
   totals: CashDayTotals;
 }
 
@@ -77,7 +79,7 @@ export class BranchCashDaysService {
   ) {}
 
   async getDay(branchId: number, date: string): Promise<CashDayView> {
-    const [sales, lines, cashDay] = await Promise.all([
+    const [{ sales, uncounted }, lines, cashDay] = await Promise.all([
       this.salesOn(branchId, date),
       this.lines(this.prisma, branchId, date),
       this.prisma.branchCashDay.findUnique({ where: { branchId_date: { branchId, date: toUtcDay(date) } } }),
@@ -100,6 +102,7 @@ export class BranchCashDaysService {
         amount: num(v.amount),
         note: v.note,
       })),
+      uncountedProducts: uncounted,
       totals: computeCashDay({
         sales,
         expenseAmounts: lines.expenses.map((e) => num(e.amount)),
@@ -128,8 +131,7 @@ export class BranchCashDaysService {
       this.prisma.branchExpense.findMany({ where, select: amountSelect }),
       this.prisma.branchVale.findMany({ where, select: amountSelect }),
       this.prisma.branchCashDay.findMany({ where: { branchId: { in: branchIds }, date: { gte, lte } } }),
-      // One call per branch; there are only a handful.
-      Promise.all(branches.map((b) => this.sales.getDailySummary(b.id, q.from, q.to))),
+      this.sales.getDailySummaries(branchIds, q.from, q.to),
     ]);
 
     type Acc = { branchId: number; date: string; sales: number; expenses: number[]; vale: number[]; cashDay: BranchCashDay | null };
@@ -191,7 +193,14 @@ export class BranchCashDaysService {
       if (!before || before.actualCash == null) {
         throw new BadRequestException('Enter the counted cash before verifying.');
       }
-      const [sales, lines] = await Promise.all([this.salesOn(branchId, date), this.lines(tx, branchId, date)]);
+      const [{ sales, uncounted }, lines] = await Promise.all([this.salesOn(branchId, date), this.lines(tx, branchId, date)]);
+      // An uncounted product has sold nothing yet, so expected cash would be
+      // short by its sales and the day would freeze a false SHORT.
+      if (uncounted > 0) {
+        throw new BadRequestException(
+          `${uncounted} ${uncounted === 1 ? 'product has' : 'products have'} no leftover count for this day. Count the sheet before verifying.`,
+        );
+      }
       const totals = computeCashDay({
         sales,
         expenseAmounts: lines.expenses.map((e) => num(e.amount)),
@@ -250,9 +259,9 @@ export class BranchCashDaysService {
       .map((r) => ({ id: r.id, name: `${r.firstName} ${r.lastName}`, branchId: r.branchId }));
   }
 
-  private async salesOn(branchId: number, date: string): Promise<number> {
+  private async salesOn(branchId: number, date: string): Promise<{ sales: number; uncounted: number }> {
     const result = await this.sales.getByBranchAndDate(branchId, date);
-    return result.totals.totalSales;
+    return { sales: result.totals.totalSales, uncounted: result.totals.unsettledDays };
   }
 
   private async lines(db: Db, branchId: number, date: string) {

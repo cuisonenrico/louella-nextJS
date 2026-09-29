@@ -105,11 +105,18 @@ export default function CashReconciliation({
         </p>
       ))}
 
+      {!verified && day.uncountedProducts > 0 ? (
+        <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-900/30 dark:text-amber-200">
+          {day.uncountedProducts} {day.uncountedProducts === 1 ? 'product has' : 'products have'} no leftover
+          count yet, so {day.uncountedProducts === 1 ? 'its' : 'their'} sales are not in the expected cash.
+        </p>
+      ) : null}
+
       {canVerify ? (
         verified ? (
           <Button size="sm" variant="outline" onClick={onReopen} disabled={busy}>Reopen</Button>
         ) : (
-          <Button size="sm" onClick={onVerify} disabled={busy || totals.actualCash == null}>Verify day</Button>
+          <Button size="sm" onClick={onVerify} disabled={busy || totals.actualCash == null || day.uncountedProducts > 0}>Verify day</Button>
         )
       ) : null}
     </div>

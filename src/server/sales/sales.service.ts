@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { getEffectivePrice } from '../common/utils/price-history.util';
+import {
+  loadPriceHistory,
+  revenueCentavos,
+  type PriceHistoryMap,
+} from '../common/utils/price-history.util';
 import { centavos, pesos } from '../common/utils/decimal.util';
 import { computeSold } from '../common/utils/inventory-metrics.util';
 import {
@@ -26,8 +30,9 @@ type InventoryRow = {
   date: Date;
   quantity: number;
   delivery: number;
-  leftover: number | null;
+  leftover: number;
   reject: number;
+  leftoverCountedAt: Date | null;
   notes: string | null;
   branch: { id: number; name: string };
   product: {
@@ -39,22 +44,9 @@ type InventoryRow = {
   adjustments: Array<{ type: string; value: number }>;
 };
 
-type HistoryMap = Map<number, { price: number; effectiveAt: Date }[]>;
-
-function computeRow(row: InventoryRow, historyByProduct: HistoryMap) {
-  const sold = computeSold({
-    quantity: row.quantity,
-    delivery: row.delivery,
-    leftover: row.leftover ?? 0,
-    reject: row.reject,
-    adjustments: row.adjustments,
-  });
-  const effectivePrice = getEffectivePrice(
-    row.product.id,
-    row.date,
-    Number(row.product.price),
-    historyByProduct,
-  );
+function computeRow(row: InventoryRow, historyByProduct: PriceHistoryMap) {
+  const sold = computeSold(row);
+  const revenue = revenueCentavos(sold, { productId: row.product.id, date: row.date, product: row.product }, historyByProduct);
   return {
     inventoryId: row.id,
     date: row.date,
@@ -65,8 +57,10 @@ function computeRow(row: InventoryRow, historyByProduct: HistoryMap) {
     leftover: row.leftover,
     reject: row.reject,
     sold,
-    sales: pesos(sold * centavos(effectivePrice)),
-    settled: row.leftover !== null,
+    sales: pesos(revenue),
+    // Settled once someone has counted the leftover. Until then the row's
+    // close is derived and it has sold nothing yet.
+    settled: row.leftoverCountedAt !== null,
     notes: row.notes,
   };
 }
@@ -82,6 +76,7 @@ export class SalesService {
     delivery: true,
     leftover: true,
     reject: true,
+    leftoverCountedAt: true,
     notes: true,
     branch: { select: { id: true, name: true } },
     product: { select: { id: true, name: true, type: true, price: true } },
@@ -91,21 +86,8 @@ export class SalesService {
     },
   } as const;
 
-  private async fetchHistoryMap(productIds: number[]): Promise<HistoryMap> {
-    if (productIds.length === 0) return new Map();
-    const histories = await this.prisma.productPriceHistory.findMany({
-      where: { productId: { in: productIds } },
-      // id breaks ties: two prices set on one day share an effectiveAt,
-      // and the one entered later must win.
-      orderBy: [{ effectiveAt: 'asc' }, { id: 'asc' }],
-    });
-    const map: HistoryMap = new Map();
-    for (const h of histories) {
-      const arr = map.get(h.productId) ?? [];
-      arr.push({ price: h.price.toNumber(), effectiveAt: h.effectiveAt });
-      map.set(h.productId, arr);
-    }
-    return map;
+  private fetchHistoryMap(productIds: number[]): Promise<PriceHistoryMap> {
+    return loadPriceHistory(this.prisma, productIds);
   }
 
   // Sales for a specific branch on a specific date
@@ -227,19 +209,39 @@ export class SalesService {
 
   // Daily sales summary for a branch (one row per day, all products aggregated)
   async getDailySummary(branchId: number, startDate: string, endDate: string) {
-    const rows = await this.prisma.inventory.findMany({
+    const [summary] = await this.getDailySummaries([branchId], startDate, endDate);
+    return summary;
+  }
+
+  /**
+   * getDailySummary for several branches in two queries. The branch-cash
+   * period view needs every branch; it used to call the one-branch version
+   * once per branch.
+   */
+  async getDailySummaries(branchIds: number[], startDate: string, endDate: string) {
+    const all = await this.prisma.inventory.findMany({
       where: {
-        branchId,
+        branchId: { in: branchIds },
         date: dayRange(startDate, endDate),
         deletedAt: null,
       },
       select: this.salesSelect,
       orderBy: { date: 'asc' },
     });
+    const historyByProduct = await this.fetchHistoryMap(all.map((r) => r.product.id));
+    return branchIds.map((branchId) =>
+      this.summarise(branchId, startDate, endDate, all.filter((r) => r.branch.id === branchId), historyByProduct),
+    );
+  }
 
-    const historyByProduct = await this.fetchHistoryMap([
-      ...new Set(rows.map((r) => r.product.id)),
-    ]);
+  private summarise(
+    branchId: number,
+    startDate: string,
+    endDate: string,
+    rows: InventoryRow[],
+    historyByProduct: PriceHistoryMap,
+  ) {
+
     const computed = rows.map((r) => computeRow(r, historyByProduct));
 
     // Group by date
@@ -273,6 +275,7 @@ function computeTotals(rows: ReturnType<typeof computeRow>[]) {
     totalSales: pesos(rows.reduce((s, r) => s + centavos(r.sales), 0)),
     totalDelivery: rows.reduce((s, r) => s + r.delivery, 0),
     totalReject: rows.reduce((s, r) => s + r.reject, 0),
+    // Rows (one product on one day), not calendar days.
     settledDays: settled.length,
     unsettledDays: rows.length - settled.length,
   };

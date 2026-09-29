@@ -152,6 +152,12 @@ export default function SalesPage() {
           <p className="text-center text-muted-foreground py-20">No data for the selected range.</p>
         ) : (
           <>
+            {dashboard.uncountedRows > 0 && (
+              <p className="mb-4 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-900/30 dark:text-amber-200">
+                {dashboard.uncountedRows} product {dashboard.uncountedRows === 1 ? 'row has' : 'rows have'} no leftover count
+                in this range, so {dashboard.uncountedRows === 1 ? 'its' : 'their'} sales are not included yet.
+              </p>
+            )}
             {/* Metric Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
               <Card>

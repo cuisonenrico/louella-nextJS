@@ -44,7 +44,14 @@ export function InventoryTableRow({
   onMoveInColumn,
   onMoveLinear,
 }: InventoryTableRowProps) {
-  const effectiveInv = pending ? { ...inv, ...pending } : inv;
+  const merged = pending ? { ...inv, ...pending } : inv;
+  // Nobody has counted this day's leftover: the server derives the close from
+  // the stock on hand and books nothing as sold, so the sheet does the same
+  // while a delivery or reject is being typed. Typing a leftover counts it.
+  const uncounted = inv.leftoverCountedAt === null && pending?.leftover === undefined;
+  const effectiveInv = uncounted
+    ? { ...merged, leftover: getTotalStock(merged) - (merged.reject ?? 0) }
+    : merged;
   const adjSum = getAdjSum(effectiveInv);
   const totalStock = getTotalStock(effectiveInv);
   const sold = getSold(effectiveInv, productById);
@@ -54,7 +61,7 @@ export function InventoryTableRow({
   const editCell = (field: EditableField) => (
     <SheetInput
       id={getInputId(inv.id, field)}
-      value={pending?.[field] ?? inv[field]}
+      value={pending?.[field] ?? effectiveInv[field]}
       onValueChange={(value) => onCellChange(inv.id, field, value)}
       onColumnMove={(dir) => onMoveInColumn(inv.id, field, dir)}
       onLinearMove={(dir) => onMoveLinear(getInputId(inv.id, field), dir)}
@@ -62,7 +69,10 @@ export function InventoryTableRow({
   );
 
   const numberCell = (field: EditableField) => (
-    <TableCell className={cn(CELL, 'p-0')}>
+    <TableCell
+      className={cn(CELL, 'p-0', field === 'leftover' && uncounted && 'italic text-muted-foreground')}
+      title={field === 'leftover' && uncounted ? 'Not counted yet — enter the leftover to count this day' : undefined}
+    >
       {isEditable ? editCell(field) : <div className="px-2 text-right tabular-nums">{effectiveInv[field]}</div>}
     </TableCell>
   );

@@ -166,7 +166,9 @@ export default function InventoryDetailsPage() {
       const existingProductIds = new Set(rows.map((r) => r.productId));
       const payload = products
         .filter((p) => p.isActive && !existingProductIds.has(p.id))
-        .map((p) => ({ branchId, productId: p.id, date: filterDateFrom, quantity: 0, delivery: 0, leftover: 0, reject: 0 }));
+        // No leftover: an initialized row is not a count. It opens on the
+        // previous close and sells nothing until its leftover is entered.
+        .map((p) => ({ branchId, productId: p.id, date: filterDateFrom, quantity: 0, delivery: 0, reject: 0 }));
       return inventoryApi.createBulk(payload);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory'] }),

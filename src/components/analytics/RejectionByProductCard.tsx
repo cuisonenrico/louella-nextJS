@@ -171,7 +171,7 @@ export default function RejectionByProductCard({
                 </div>
                 <div className="flex items-center gap-3 text-sm text-right">
                   <span className="text-muted-foreground">
-                    {item.totalDelivery.toLocaleString()} delivered
+                    {item.totalSupply.toLocaleString()} on hand
                   </span>
                   <span className="text-destructive font-medium">
                     {item.totalReject.toLocaleString()} rejected

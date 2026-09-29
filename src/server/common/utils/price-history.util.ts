@@ -1,3 +1,6 @@
+import { Prisma } from '@prisma/client';
+import { centavos, num } from './decimal.util';
+
 /**
  * Returns the most recent price from historyByProduct whose effectiveAt is
  * on or before `date`.
@@ -27,4 +30,42 @@ export function getEffectivePrice(
     }
   }
   return effectivePrice;
+}
+
+export type PriceHistoryMap = Map<number, { price: number; effectiveAt: Date }[]>;
+
+/**
+ * Every recorded price for these products, oldest first, keyed by product —
+ * the input getEffectivePrice expects. Sales, the inventory reads and the
+ * dashboard all load it through here, so revenue is priced one way.
+ */
+export async function loadPriceHistory(
+  db: Pick<Prisma.TransactionClient, 'productPriceHistory'>,
+  productIds: number[],
+): Promise<PriceHistoryMap> {
+  const map: PriceHistoryMap = new Map();
+  if (productIds.length === 0) return map;
+  const histories = await db.productPriceHistory.findMany({
+    where: { productId: { in: [...new Set(productIds)] } },
+    // id breaks ties: two prices set on one day share an effectiveAt, and the
+    // one entered later must win.
+    orderBy: [{ effectiveAt: 'asc' }, { id: 'asc' }],
+    select: { productId: true, price: true, effectiveAt: true },
+  });
+  for (const h of histories) {
+    const list = map.get(h.productId) ?? [];
+    list.push({ price: num(h.price), effectiveAt: h.effectiveAt });
+    map.set(h.productId, list);
+  }
+  return map;
+}
+
+/** A row's revenue in centavos: sold × the price in force on its day. */
+export function revenueCentavos(
+  sold: number,
+  row: { productId: number; date: Date; product: { price: number | { toNumber(): number } } },
+  history: PriceHistoryMap,
+): number {
+  const current = typeof row.product.price === 'number' ? row.product.price : row.product.price.toNumber();
+  return sold * centavos(getEffectivePrice(row.productId, row.date, current, history));
 }

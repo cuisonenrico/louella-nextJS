@@ -240,6 +240,46 @@ describe('InventoryService — opening stock follows the previous close', () => 
     });
   });
 
+  describe('uncounted days (no leftover entered)', () => {
+    const isCounted = (id: number) => db.tables.inventory.find((r) => r.id === id)!.leftoverCountedAt !== null;
+
+    it('keeps a placeholder uncounted when only its delivery is typed, so nothing is sold', async () => {
+      const { wed } = seedWeek();
+
+      await service.update(wed.id, { delivery: 30 });
+
+      expect(isCounted(wed.id)).toBe(false);
+      expect(chain().slice(2)).toEqual([
+        { date: '2026-09-16', opening: 15, leftover: 45 }, // 15 + 30 on hand, none sold
+        { date: '2026-09-17', opening: 45, leftover: 45 },
+      ]);
+    });
+
+    it('counts a day once its leftover is entered', async () => {
+      const { wed } = seedWeek();
+
+      await service.updateBulk([{ id: wed.id, delivery: 30 }], undefined, 1);
+      await service.updateBulk([{ id: wed.id, leftover: 12 }], undefined, 1);
+
+      expect(isCounted(wed.id)).toBe(true);
+      expect(chain().slice(2)).toEqual([
+        { date: '2026-09-16', opening: 15, leftover: 12 }, // 33 sold
+        { date: '2026-09-17', opening: 12, leftover: 12 },
+      ]);
+    });
+
+    it('creates an Initialize row (no leftover) uncounted, opening on the previous close', async () => {
+      seedWeek();
+
+      const [created] = await service.createBulk([
+        { branchId: B, productId: P, date: '2026-09-18', quantity: 0, delivery: 0, reject: 0 },
+      ]);
+
+      expect(isCounted(created.id)).toBe(false);
+      expect(chain().at(-1)).toEqual({ date: '2026-09-18', opening: 15, leftover: 15 });
+    });
+  });
+
   describe('deleting a day', () => {
     it('re-opens the next day on the day before the deleted one', async () => {
       const { tue } = seedWeek();

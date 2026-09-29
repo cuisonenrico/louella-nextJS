@@ -21,8 +21,8 @@ function fakeDb() {
   };
   db.$transaction.mockImplementation((fn: (tx: typeof db) => unknown) => fn(db));
   const sales = {
-    getByBranchAndDate: jest.fn().mockResolvedValue({ totals: { totalSales: 12450 } }),
-    getDailySummary: jest.fn(),
+    getByBranchAndDate: jest.fn().mockResolvedValue({ totals: { totalSales: 12450, unsettledDays: 0 } }),
+    getDailySummaries: jest.fn(),
   };
   return { db, sales, service: new BranchCashDaysService(db as never, sales as never) };
 }
@@ -58,7 +58,7 @@ describe('BranchCashDaysService.getDay', () => {
 
   it('shows who verified and what moved since', async () => {
     const { db, sales, service } = fakeDb();
-    sales.getByBranchAndDate.mockResolvedValue({ totals: { totalSales: 12510 } });
+    sales.getByBranchAndDate.mockResolvedValue({ totals: { totalSales: 12510, unsettledDays: 0 } });
     db.branchCashDay.findUnique.mockResolvedValue({
       status: 'VERIFIED',
       actualCash: 11050,
@@ -81,6 +81,14 @@ describe('BranchCashDaysService.verify / reopen', () => {
     db.branchCashDay.findUnique.mockResolvedValue({ id: 70, status: 'OPEN', actualCash: null });
     await expect(service.verify(3, '2026-10-01', 1)).rejects.toThrow('Enter the counted cash before verifying.');
     await expect(service.verify(3, '2026-10-02', 1)).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('refuses to verify while products are uncounted', async () => {
+    const { db, sales, service } = fakeDb();
+    db.branchCashDay.findUnique.mockResolvedValue({ id: 70, status: 'OPEN', actualCash: 11050 });
+    sales.getByBranchAndDate.mockResolvedValue({ totals: { totalSales: 9000, unsettledDays: 2 } });
+    await expect(service.verify(3, '2026-10-01', 1)).rejects.toThrow('2 products have no leftover count');
+    expect(db.branchCashDay.update).not.toHaveBeenCalled();
   });
 
   it('refuses to verify twice', async () => {
@@ -136,10 +144,12 @@ describe('BranchCashDaysService.summary', () => {
       { id: 1, name: 'Main' },
       { id: 2, name: 'Cubao' },
     ]);
-    ctx.sales.getDailySummary.mockImplementation(async (branchId: number) => ({
-      branchId,
-      dailySummary: branchId === 1 ? [{ date: '2026-10-01', totalSales: 1000 }] : [],
-    }));
+    ctx.sales.getDailySummaries.mockImplementation(async (branchIds: number[]) =>
+      branchIds.map((branchId) => ({
+        branchId,
+        dailySummary: branchId === 1 ? [{ date: '2026-10-01', totalSales: 1000 }] : [],
+      })),
+    );
     // Cubao spent on a day it had no inventory: the row must still appear.
     ctx.db.branchExpense.findMany.mockResolvedValue([{ branchId: 2, date: at('2026-10-02'), amount: 60 }]);
     ctx.db.branchCashDay.findMany.mockResolvedValue([

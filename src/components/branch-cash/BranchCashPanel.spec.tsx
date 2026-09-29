@@ -34,6 +34,7 @@ function view(over: Partial<CashDayView> = {}): CashDayView {
     verifiedBy: null,
     note: null,
     expenses: [{ id: 11, category: { id: 2, name: 'Utilities' }, amount: 850, note: 'LPG' }],
+    uncountedProducts: 0,
     vale: [{ id: 21, employee: { id: 5, name: 'Ana Cruz' }, amount: 500, note: null }],
     totals: {
       sales: 12450,
