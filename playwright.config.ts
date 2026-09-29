@@ -40,6 +40,12 @@ export default defineConfig({
   // (fixtures/test.ts), because a refresh token cannot be shared across tests.
   projects: [
     { name: 'desktop-chromium', use: { ...devices['Desktop Chrome'] } },
-    { name: 'tablet-webkit', use: { ...devices['iPad (gen 7) landscape'] } },
+    {
+      name: 'tablet-webkit',
+      use: { ...devices['iPad (gen 7) landscape'] },
+      // Runs AFTER desktop, not beside it: payroll finalizes one shared cutoff, so two projects
+      // running it at the same time would collide. (Also skips webkit if desktop already failed.)
+      dependencies: ['desktop-chromium'],
+    },
   ],
 });

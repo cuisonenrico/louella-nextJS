@@ -1,4 +1,4 @@
-import type { Locator, Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 
 /** /login — src/app/login/page.tsx: labelled Email / Password, "Sign In" button, error in an <Alert>. */
 export class LoginPage {
@@ -14,8 +14,16 @@ export class LoginPage {
   }
 
   async login(email: string, password: string) {
-    await this.page.getByLabel('Email').fill(email);
-    await this.page.getByLabel('Password').fill(password);
+    // Filling before React hydrates can be undone when it does (seen on WebKit: the Email box came
+    // back empty, and the browser's `required` check then swallowed the submit with no request and
+    // no error). So fill until the value sticks.
+    for (const [label, value] of [['Email', email], ['Password', password]] as const) {
+      const field = this.page.getByLabel(label);
+      await expect(async () => {
+        await field.fill(value);
+        await expect(field).toHaveValue(value);
+      }).toPass();
+    }
     await this.page.getByRole('button', { name: 'Sign In' }).click();
   }
 }
