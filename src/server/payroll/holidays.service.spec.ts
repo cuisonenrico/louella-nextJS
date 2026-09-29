@@ -96,6 +96,12 @@ describe('HolidaysService', () => {
       prisma.holiday.findFirst.mockResolvedValue(null);
       await expect(service.update(90, { name: 'X' }, 7)).rejects.toThrow(NotFoundException);
     });
+
+    it('404s when the holiday was deleted between the initial read and the lock', async () => {
+      prisma.holiday.findFirst.mockResolvedValueOnce(holidayRow()).mockResolvedValueOnce(null);
+      await expect(service.update(90, { name: 'X' }, 7)).rejects.toThrow(NotFoundException);
+      expect(prisma.holiday.update).not.toHaveBeenCalled();
+    });
   });
 
   describe('remove', () => {
@@ -107,6 +113,12 @@ describe('HolidaysService', () => {
     it('refuses a finalized cutoff', async () => {
       prisma.payrollRun.findFirst.mockResolvedValue({ id: 3 });
       await expect(service.remove(90, 7)).rejects.toThrow(ConflictException);
+    });
+
+    it('404s when the holiday was already removed between the initial read and the lock', async () => {
+      prisma.holiday.findFirst.mockResolvedValueOnce(holidayRow()).mockResolvedValueOnce(null);
+      await expect(service.remove(90, 7)).rejects.toThrow(NotFoundException);
+      expect(prisma.holiday.update).not.toHaveBeenCalled();
     });
   });
 
@@ -141,6 +153,21 @@ describe('HolidaysService', () => {
     it('refuses a finalized cutoff', async () => {
       prisma.payrollRun.findFirst.mockResolvedValue({ id: 3 });
       await expect(service.addRestDayWork(90, { employeeId: 1 }, 7)).rejects.toThrow(ConflictException);
+    });
+
+    it('refuses when the holiday was closed between the initial read and the lock', async () => {
+      // First read (to find the date for the lock) sees it open; the re-read after the lock sees it closed.
+      prisma.holiday.findFirst
+        .mockResolvedValueOnce(holidayRow({ isClosed: false }))
+        .mockResolvedValueOnce(holidayRow({ isClosed: true }));
+      await expect(service.addRestDayWork(90, { employeeId: 1 }, 7)).rejects.toThrow(BadRequestException);
+      expect(prisma.holidayRestDayWork.create).not.toHaveBeenCalled();
+    });
+
+    it('404s when the holiday was deleted between the initial read and the lock', async () => {
+      prisma.holiday.findFirst.mockResolvedValueOnce(holidayRow()).mockResolvedValueOnce(null);
+      await expect(service.addRestDayWork(90, { employeeId: 1 }, 7)).rejects.toThrow(NotFoundException);
+      expect(prisma.holidayRestDayWork.create).not.toHaveBeenCalled();
     });
 
     it('removes a mark while the cutoff is open', async () => {

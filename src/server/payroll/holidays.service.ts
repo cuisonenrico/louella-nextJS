@@ -59,8 +59,10 @@ export class HolidaysService {
 
   update(id: number, dto: UpdateHolidayDto, userId: number) {
     return this.prisma.$transaction(async (tx) => {
+      const initial = await this.requireHoliday(tx, id);
+      await assertCutoffOpen(tx, cutoffOf(day(initial.date)).periodStart);
+      // Re-read after the lock: another writer may have deleted it while we waited.
       const before = await this.requireHoliday(tx, id);
-      await assertCutoffOpen(tx, cutoffOf(day(before.date)).periodStart);
       if (dto.isClosed === true && !before.isClosed) {
         const marks = await tx.holidayRestDayWork.count({ where: { holidayId: id, deletedAt: null } });
         if (marks > 0) {
@@ -78,8 +80,10 @@ export class HolidaysService {
 
   remove(id: number, userId: number) {
     return this.prisma.$transaction(async (tx) => {
+      const initial = await this.requireHoliday(tx, id);
+      await assertCutoffOpen(tx, cutoffOf(day(initial.date)).periodStart);
+      // Re-read after the lock: another writer may have deleted it while we waited.
       const before = await this.requireHoliday(tx, id);
-      await assertCutoffOpen(tx, cutoffOf(day(before.date)).periodStart);
       const after = await tx.holiday.update({ where: { id }, data: { deletedAt: new Date() } });
       await recordChanges(tx, [{ entity: 'Holiday', entityId: id, before, after, action: 'delete' }], userId);
       return { id };
@@ -88,9 +92,11 @@ export class HolidaysService {
 
   addRestDayWork(holidayId: number, dto: CreateRestDayWorkDto, userId: number) {
     return this.prisma.$transaction(async (tx) => {
+      const initial = await this.requireHoliday(tx, holidayId);
+      await assertCutoffOpen(tx, cutoffOf(day(initial.date)).periodStart);
+      // Re-read after the lock: another writer may have deleted or closed it while we waited.
       const holiday = await this.requireHoliday(tx, holidayId);
       const date = day(holiday.date);
-      await assertCutoffOpen(tx, cutoffOf(date).periodStart);
       if (holiday.isClosed) throw new BadRequestException('Nobody works a closed holiday');
       const employee = await tx.employee.findFirst({ where: { id: dto.employeeId, deletedAt: null } });
       if (!employee) throw new NotFoundException('Employee not found');
