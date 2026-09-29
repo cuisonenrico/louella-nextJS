@@ -56,7 +56,8 @@ against anything else — **never point it at `.env`, which is production.** See
 `docs/superpowers/specs/2026-09-29-e2e-playwright-design.md`.
 
 **Any task that changes what a user can see or do adds or updates its e2e test
-in the same change** — load the `adding-e2e-coverage` skill.
+in the same change** — load the `adding-e2e-coverage` skill
+(`.claude/skills/adding-e2e-coverage/SKILL.md`) before you call the task done.
 
 ## Architecture
 
