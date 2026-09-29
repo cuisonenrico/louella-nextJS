@@ -29,10 +29,15 @@ export default function PayrollPage() {
 
   return (
     <>
-      <div className="mb-4 flex items-center gap-2">
-        <Button variant="ghost" size="icon" aria-label="Previous year" onClick={() => setYear((y) => y - 1)}><ChevronLeft className="h-4 w-4" /></Button>
-        <span className="w-16 text-center font-semibold">{year}</span>
-        <Button variant="ghost" size="icon" aria-label="Next year" onClick={() => setYear((y) => y + 1)}><ChevronRight className="h-4 w-4" /></Button>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" aria-label="Previous year" onClick={() => setYear((y) => y - 1)}><ChevronLeft className="h-4 w-4" /></Button>
+          <span className="w-16 text-center font-semibold">{year}</span>
+          <Button variant="ghost" size="icon" aria-label="Next year" onClick={() => setYear((y) => y + 1)}><ChevronRight className="h-4 w-4" /></Button>
+        </div>
+        <Button variant="outline" size="sm" asChild>
+          <Link href="/settings/payroll">Holidays &amp; multipliers</Link>
+        </Button>
       </div>
       <Card className="overflow-x-auto">
         <Table>

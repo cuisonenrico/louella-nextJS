@@ -105,6 +105,7 @@ describe('RBAC manifest', () => {
       expect(featureForPath('/settings/jobs')?.key).toBe('jobs');
       expect(featureForPath('/settings/users')?.key).toBe('user-management');
       expect(featureForPath('/settings/permissions')?.key).toBe('permissions');
+      expect(featureForPath('/settings/payroll')?.key).toBe('payroll');
       // /production must not swallow /production/orders.
       expect(featureForPath('/production')?.key).toBe('production');
       expect(featureForPath('/production/orders')?.key).toBe('production-orders');

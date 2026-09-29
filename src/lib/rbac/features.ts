@@ -678,7 +678,7 @@ export const FEATURES = [
     key: 'payroll',
     label: 'Payroll',
     description: 'Semi-monthly payroll runs and payslips',
-    routes: ['/payroll'],
+    routes: ['/payroll', '/settings/payroll'],
     nav: { group: 'People', href: '/payroll', label: 'Payroll', order: 48 },
     platform: 'web',
   },
