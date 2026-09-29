@@ -53,7 +53,7 @@ running dev server on :4000 — **the production database** — and
 | `e2e/09-reload-probe.spec.ts` | Deleted | Reload-keeps-session is in `auth.spec.ts` |
 | `e2e/11-retry-count.spec.ts` | Deleted | One-off probe |
 | `e2e/12-session-migration.spec.ts` | Deleted | One-off migration probe (`has_session` flag) |
-| `e2e/auth.setup.ts` | Rewritten | Logs in admin + a seeded manager, writes both storage states |
+| `e2e/auth.setup.ts` | Deleted | Shared storage states cannot work (refresh-token rotation, §4.3); sign-in is per test |
 | `e2e/routes.ts` | Rewritten | Adds every missing route (§8); drops hardcoded credentials |
 | `playwright.config.ts` | Rewritten | §4 |
 
@@ -128,15 +128,20 @@ AWS_SECRET_ACCESS_KEY=
 S3_BUCKET_NAME=
 FIREBASE_SERVICE_ACCOUNT=
 VERCEL_OIDC_TOKEN=
-NEXT_PUBLIC_API_URL=
 ```
 
 `CACHE_ENABLED=false` removes the 45 s per-instance cache as a source of stale
 reads between a write and the next assertion. Storage, S3, Firebase and the
 Vercel token are blanked on purpose (§3.2) — uploads and push are out of v1.
 `TZ` is blank to match Vercel, which runs in UTC; this keeps the
-"never rely on the process zone" rule tested. `NEXT_PUBLIC_API_URL` is blank
-because it is inlined at build time and must stay relative.
+"never rely on the process zone" rule tested.
+
+**`NEXT_PUBLIC_API_URL` is deliberately absent — not blank.** It is inlined at
+build time and `src/lib/api.ts` does `NEXT_PUBLIC_API_URL ?? '/api/v1'`, so a
+blank value is *not* unset: the browser would post to `/auth/login` and every
+UI login would fail. It is not a fall-through risk to omit (no env file sets it),
+and `assertNoApiUrlOverride()` in `playwright.config.ts` fails the run if the key
+appears in `.env`, `.env.local`, `.env.production(.local)` or `.env.e2e`.
 
 `PRODUCTION_BRANCH_ID=1` names the base-seed kitchen branch (§5.1).
 
@@ -163,11 +168,15 @@ In order:
   `url: 'http://localhost:4100/login'` (the API root is behind the JWT guard,
   so it is not a readiness probe), `env` = parsed `.env.e2e`,
   `reuseExistingServer: !process.env.CI`, `timeout: 300_000`.
-- Projects:
-  - `setup` — `testMatch: /auth\.setup\.ts/`.
-  - `desktop-chromium` — `devices['Desktop Chrome']`, depends on `setup`.
-  - `tablet-webkit` — `devices['iPad (gen 7) landscape']` (or the current
-    iPad preset), depends on `setup`. Excluded from CI.
+- Projects: `desktop-chromium` (`devices['Desktop Chrome']`) and
+  `tablet-webkit` (`devices['iPad (gen 7) landscape']`, excluded from CI).
+  **There is no `setup` project and no `storageState` file.** Refresh tokens
+  rotate on every page load and the predecessor lives only 60 s
+  (`auth.service.ts`), so a token file shared by parallel, minutes-long tests
+  dies mid-run. `fixtures/test.ts` instead overrides `context` to sign in as
+  admin per test (option `asAdmin`, default true; `test.use({ asAdmin: false })`
+  for tests that start signed out), and `managerPage()` does the same for a
+  world's manager.
 - Build note (Windows): `npm run build` runs `prisma generate`, which fails
   with `EPERM` while a dev server holds the engine DLL. Stop the dev server, or
   start the e2e server yourself and rely on `reuseExistingServer`. Document in
@@ -203,9 +212,9 @@ Only what the API cannot create or what every test needs:
 - Admin user `e2e-admin@louella.test` / `E2E_ADMIN_PASSWORD`, bcrypt-hashed
   with the same cost as `users.service`.
 - Manager `e2e-manager@louella.test` / `E2E_MANAGER_PASSWORD`, assigned to
-  `E2E Kitchen` (used by `auth.setup.ts` for the shared manager storage state).
-- Viewer `e2e-viewer@louella.test` (role `VIEWER`, same password as the
-  manager) for the `/no-access` check in §6.1.
+  `E2E Kitchen`. (`User.branchId` is `@unique`: one user per branch.)
+- Viewer `e2e-viewer@louella.test` (role `VIEWER`, no branch, same password as
+  the manager) for the redirect check in §6.1.
 - One `JobRole`, one `ExpenseCategory`.
 - Features come from migration `20260819000000_seed_rbac_feature_registry`;
   `PayrollSettings` from its migration. Do not re-seed them.
@@ -228,8 +237,8 @@ const world = await buildWorld({
 ```
 
 - Every test gets **its own branch** and **its own manager** assigned to it.
-  `world.manager.page` is a logged-in page for that manager (login via the API
-  cookie flow, no UI).
+  `managerPage(browser, world)` returns a page signed in as that manager (login
+  via the API cookie flow, no UI).
 - Stock chains, branch-day locks and cash verification are per branch, so
   tests are independent and safe under `--repeat-each` and parallel workers.
 - **Materials are global** (`MaterialInventory` has no `branchId`); each test
@@ -259,7 +268,6 @@ Layout:
 
 ```
 e2e/
-  auth.setup.ts
   global-setup.ts
   routes.ts
   README.md
@@ -285,16 +293,22 @@ Smoke:
 Full:
 - Logout returns to `/login`; visiting `/dashboard` afterwards redirects to
   `/login`.
-- Manager branch scoping: the world's manager sees only their branch in the
-  branch picker; requesting inventory for another world's branch returns none
-  of its rows (UI shows empty; API cross-check).
-- A viewer-level user is sent to `/no-access` for an admin page (e.g.
-  `/settings/users`).
+- Manager branch scoping: `GET /branches` is an open catalog read, so the
+  picker lists every branch; the scoping is on **data**. The manager's own
+  branch is selectable and `GET /inventory/summary?branchId=<own>` is 200,
+  while the same route for another world's branch is **403** (`BranchGuard`).
+- A viewer-level user visiting an admin page (e.g. `/settings/users`) is sent
+  to their first permitted route (`/dashboard`) by `RouteGuard`; `/no-access`
+  is only where an account with no permitted route lands.
 - `/change-password` changes the password; the old one no longer logs in.
 
 ### 6.2 Inventory sheet — `smoke/inventory-sheet.spec.ts` (@smoke @stress), `full/inventory-sheet.spec.ts` (@stress)
 
-Uses `world.manager.page` on `/inventory/details` for the world branch.
+Driven as **admin** on `/inventory/details` for the world branch. A scoped
+manager cannot load the sheet today (see §6.2a), and the rules under test are
+role-independent. Rows are created with the **Initialize** button; edits are
+staged and saved with **Save Changes**; only Delivery, Leftover and Reject are
+editable (the "Prev. Leftover" column is the derived opening).
 
 Smoke:
 - For **yesterday**, enter delivery, reject and leftover for `products[0]`.
@@ -307,8 +321,18 @@ Full:
 - A row with no leftover entered is shown as uncounted and contributes sold 0
   (`leftoverCountedAt` null) — cross-check via the sales API.
 - An adjustment (`PULL_IN`) added for the day appears in Σadj and moves sold.
-- Autofill: opening a day with no rows creates today's rows
-  (`isAutoGenerated`), without error.
+- **Initialize** creates a row for every active product. (Autofill is *not*
+  asserted: it keys off the newest inventory row across all branches with a
+  5-minute memo, so it is order-dependent in a shared database.)
+
+### 6.2a Known production bug (found while writing this suite)
+
+A scoped branch manager gets `400 "property branchId should not exist"` on
+`GET /inventory/branch/:id/date` and `GET /inventory/date`, so their own daily
+sheet fails to load. `BranchGuard` pins `branchId` into `req.query`; the app's
+`ValidationPipe({ whitelist, forbidNonWhitelisted })` rejects it on DTOs that
+lack the field. `full/inventory-sheet.spec.ts` carries a `test.fixme` for the
+manager case; remove the `.fixme` when it is fixed.
 
 ### 6.3 Production orders — `full/production-orders.spec.ts` (@stress)
 
@@ -386,9 +410,15 @@ text, no response ≥ 500 from `/api/v1`, and the page's main heading is visible
 ## 8. Coverage matrix — every route and module
 
 This is the authoritative list. `routes.ts` must contain every route below.
-Phase **v1** is built now; **v2** is the next pass; **v3** needs extra
-infrastructure. The skill (§10) requires updating this table when a feature
-lands or changes.
+Phase **v1** is built (2026-09-29: auth, inventory sheet, production orders,
+branch cash, payroll, and the route sweep over all 40 pages); **v2** is the next
+pass; **v3** needs extra infrastructure. The skill (§10) requires updating this
+table when a feature lands or changes.
+
+v1 rows that were built: `/login`, `/change-password`, `/inventory/details`,
+`/production-orders` (and its re-export `/production/orders`), `/branch-cash`,
+`/payroll`, `/payroll/[periodStart]`, `/payroll/payslips/[id]`. Everything
+marked "sweep v1" is covered by the route sweep only.
 
 ### 8.1 Routes (`src/app/**/page.tsx`)
 
@@ -398,7 +428,7 @@ lands or changes.
 | `/login` | auth | v1 | §6.1 |
 | `/register` | auth | v2 | Registration form validates; new user cannot reach admin pages |
 | `/change-password` | auth | v1 | §6.1 |
-| `/no-access` | permissions | v1 | Reached by a user lacking a feature (§6.1) |
+| `/no-access` | permissions | sweep v1 | Only for an account with no permitted route; a denied page redirects to the first permitted route instead (§6.1) |
 | `/dashboard` | dashboard | sweep v1; v2 | Figures for a world branch match the sales API for the day |
 | `/sales` | sales | sweep v1; v2 | Branch/day sales equals Σ sold × effective price; uncounted rows shown |
 | `/inventory` | inventory | sweep v1; v2 | Branch overview lists the world's products with today's figures |
@@ -422,7 +452,7 @@ lands or changes.
 | `/suppliers` | suppliers | sweep v1; v2 | CRUD |
 | `/unit-conversions` | unit-conversions | sweep v1; v2 | Creating KG→G also shows G→KG |
 | `/config/product-order` | products | sweep v1; v2 | Reorder persists and changes sheet row order |
-| `/employees` | employees | sweep v1; v2 | Create employee with rate; admin-only (manager → `/no-access`) |
+| `/employees` | employees | sweep v1; v2 | Create employee with rate; admin-only (a manager is redirected to their first permitted route) |
 | `/employees/[id]` | employees | sweep v1; v2 | Rate history; rest days; hire/separation change crossing a finalized cutoff refused |
 | `/payroll` | payroll | v1 | Cutoff list; §6.5 entry point |
 | `/payroll/[periodStart]` | payroll | v1 | §6.5 |
@@ -430,7 +460,7 @@ lands or changes.
 | `/payroll/runs/[id]/print` | payroll | sweep v1; v2 | Print view lists every payslip of the run |
 | `/branch-cash` | branch-cash | v1 | §6.4 |
 | `/settings/users` | users | sweep v1; v2 | Create user, change role/branch, deactivate → cannot log in |
-| `/settings/permissions` | permissions | sweep v1; v2 | Revoking a feature hides nav item and sends user to `/no-access` |
+| `/settings/permissions` | permissions | sweep v1; v2 | Revoking a feature hides the nav item and redirects the user to their first permitted route |
 | `/settings/jobs` | jobs | sweep v1; v2 | Job runs listed with `trigger: 'auto'` after an autofill |
 | `/settings/payroll` | payroll | sweep v1; v2 | Holiday multipliers editable; used by drafts only |
 | `/settings/landing` | landing | sweep v1; v3 | Edit draft, publish, `/` shows it; restore revision (needs Storage for images) |
@@ -443,7 +473,7 @@ lands or changes.
 |---|---|
 | auth | §6.1 |
 | users | §6.1 (fixture), v2 `/settings/users` |
-| permissions | §6.1 (`/no-access`), v2 `/settings/permissions` |
+| permissions | §6.1 (route redirect), v2 `/settings/permissions` |
 | branches | fixture, v2 `/branches` |
 | products | fixture, v2 `/products`, `/config/product-order` |
 | inventory | §6.2 |

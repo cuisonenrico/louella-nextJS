@@ -31,6 +31,8 @@ npm run test:server      # jest only — the src/server suites
 npm run prisma:migrate   # run pending migrations (dev)
 npm run prisma:generate  # regenerate the Prisma client after schema changes
 npm run prisma:deploy    # apply migrations to a deployed database
+npm run e2e:db           # throwaway e2e Postgres (Docker, :54329)
+npm run e2e:smoke        # the CI gate; `npm run e2e` runs everything, `e2e:stress` repeats
 ```
 
 Run a single server test: `npx jest src/server/inventory/inventory.service.spec.ts`
@@ -44,6 +46,17 @@ npm run build && npm start
 
 > **Windows:** `prisma generate` fails with `EPERM ... query_engine-windows.dll.node`
 > while a dev server holds the engine DLL. Stop the dev server first.
+
+### E2E tests
+
+`e2e/` is a Playwright suite that runs a production build on :4100 against a
+throwaway database (`.env.e2e`, `louella_e2e` on :54329). It refuses to run
+against anything else — **never point it at `.env`, which is production.** See
+`e2e/README.md`; the coverage table is §8 of
+`docs/superpowers/specs/2026-09-29-e2e-playwright-design.md`.
+
+**Any task that changes what a user can see or do adds or updates its e2e test
+in the same change** — load the `adding-e2e-coverage` skill.
 
 ## Architecture
 
