@@ -1,0 +1,15 @@
+# Throwaway Postgres for the Playwright suite. tmpfs: every container start is
+# an empty database. Never point the e2e suite at .env — that is production.
+services:
+  db:
+    image: postgres:16
+    ports: ["54329:5432"]
+    environment:
+      POSTGRES_USER: louella
+      POSTGRES_PASSWORD: louella
+      POSTGRES_DB: louella_e2e
+    tmpfs: ["/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U louella -d louella_e2e"]
+      interval: 2s
+      retries: 30

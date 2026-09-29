@@ -34,6 +34,8 @@ yarn-error.log*
 .env*
 # ...but the template carries no secrets and is the reference for deployment.
 !.env.example
+# ...and the e2e suite's env: fake secrets, local database only.
+!.env.e2e
 
 # vercel
 .vercel
