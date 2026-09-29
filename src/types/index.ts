@@ -1041,7 +1041,8 @@ export interface CutoffHoliday {
   name: string;
   type: HolidayType;
   isClosed: boolean;
-  restDayEmployees: { employeeId: number; employeeName: string; markId: number | null }[];
+  /** `stale`: the mark is live but the date is no longer a valid rest day for this employee. */
+  restDayEmployees: { employeeId: number; employeeName: string; markId: number | null; stale: boolean }[];
 }
 // ─── Branch cash ─────────────────────────────────────────────────────────────
 

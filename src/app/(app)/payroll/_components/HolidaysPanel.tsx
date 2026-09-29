@@ -42,10 +42,13 @@ export function HolidaysPanel({
               <p className="text-xs text-muted-foreground">On rest day — switch on if they came in to work:</p>
               {h.restDayEmployees.map((e) => (
                 <div key={e.employeeId} className="flex items-center justify-between gap-2">
-                  <span>{e.employeeName}</span>
+                  <span>
+                    {e.employeeName}
+                    {e.stale && <span className="ml-2 text-xs text-muted-foreground">no longer a rest day</span>}
+                  </span>
                   <Switch
                     checked={e.markId !== null}
-                    disabled={!editable || h.isClosed || busy}
+                    disabled={!editable || busy || (!e.stale && h.isClosed)}
                     onCheckedChange={() => onToggle(h, e)}
                     aria-label={`${e.employeeName} worked ${h.name}`}
                   />

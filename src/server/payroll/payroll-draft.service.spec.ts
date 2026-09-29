@@ -148,8 +148,51 @@ describe('PayrollDraftService', () => {
         type: 'SPECIAL',
         isClosed: false,
         // Ben rests on Tuesdays; Cy was hired after the holiday.
-        restDayEmployees: [{ employeeId: 1, employeeName: 'Ana Cruz', markId: 5 }],
+        restDayEmployees: [{ employeeId: 1, employeeName: 'Ana Cruz', markId: 5, stale: false }],
       },
     ]);
+  });
+
+  it('still lists a live mark whose employee is no longer eligible, flagged stale', async () => {
+    // Employee 9's rest days changed (now Tuesday, not Sunday) since the mark was made.
+    prisma.employee.findMany.mockImplementation(({ where }: any) => {
+      if (where?.id?.in) {
+        return Promise.resolve([
+          { id: 9, firstName: 'Xen', lastName: 'Yu', restDays: [2], hiredOn: at('2026-01-05'), separatedOn: null, deletedAt: null },
+        ]);
+      }
+      return Promise.resolve([]);
+    });
+    prisma.holiday.findMany.mockResolvedValue([
+      { id: 91, date: at('2026-09-06'), name: 'Sun holiday', type: 'SPECIAL', isClosed: false, restDayWork: [{ id: 5, employeeId: 9 }] },
+    ]);
+    const holidays = await service.holidays('2026-09-01');
+    expect(holidays).toEqual([
+      {
+        id: 91,
+        date: '2026-09-06',
+        name: 'Sun holiday',
+        type: 'SPECIAL',
+        isClosed: false,
+        restDayEmployees: [{ employeeId: 9, employeeName: 'Xen Yu', markId: 5, stale: true }],
+      },
+    ]);
+  });
+
+  it('flags stale a live mark whose employee was soft-deleted, loading it without a deletedAt filter', async () => {
+    prisma.employee.findMany.mockImplementation(({ where }: any) => {
+      if (where?.id?.in) {
+        expect(where).toEqual({ id: { in: [9] } });
+        return Promise.resolve([
+          { id: 9, firstName: 'Xen', lastName: 'Yu', restDays: [0], hiredOn: at('2026-01-05'), separatedOn: null, deletedAt: at('2026-09-10') },
+        ]);
+      }
+      return Promise.resolve([]);
+    });
+    prisma.holiday.findMany.mockResolvedValue([
+      { id: 91, date: at('2026-09-06'), name: 'Sun holiday', type: 'SPECIAL', isClosed: false, restDayWork: [{ id: 5, employeeId: 9 }] },
+    ]);
+    const holidays = await service.holidays('2026-09-01');
+    expect(holidays[0].restDayEmployees).toEqual([{ employeeId: 9, employeeName: 'Xen Yu', markId: 5, stale: true }]);
   });
 });

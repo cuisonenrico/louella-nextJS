@@ -31,7 +31,7 @@ export interface CutoffHoliday {
   type: 'REGULAR' | 'SPECIAL';
   isClosed: boolean;
   /** Employees employed that day whose rest day it is, with their mark if any. */
-  restDayEmployees: { employeeId: number; employeeName: string; markId: number | null }[];
+  restDayEmployees: { employeeId: number; employeeName: string; markId: number | null; stale: boolean }[];
 }
 
 function loadHolidays(db: Prisma.TransactionClient, start: Date, end: Date) {
@@ -164,25 +164,42 @@ export class PayrollDraftService {
       select: { id: true, firstName: true, lastName: true, restDays: true, hiredOn: true, separatedOn: true },
       orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
     });
+    const byId = new Map(employees.map((e) => [e.id, e]));
+
+    // A live mark's employee may no longer be loaded above: their rest days,
+    // hire/separation dates changed since, or they were soft-deleted. Load
+    // those by id with no deletedAt/employment filter so the mark is still
+    // shown (stale) instead of silently disappearing.
+    const markedIds = new Set(rows.flatMap((h) => h.restDayWork.map((m) => m.employeeId)));
+    const missingIds = [...markedIds].filter((id) => !byId.has(id));
+    if (missingIds.length > 0) {
+      const stragglers = await db.employee.findMany({
+        where: { id: { in: missingIds } },
+        select: { id: true, firstName: true, lastName: true, restDays: true, hiredOn: true, separatedOn: true },
+      });
+      for (const e of stragglers) byId.set(e.id, e);
+    }
+
     return rows.map((h) => {
       const date = day(h.date);
       const weekday = weekdayOf(date);
+      const isValidRestDay = (e: { restDays: number[]; hiredOn: Date; separatedOn: Date | null }) =>
+        e.restDays.includes(weekday) && day(e.hiredOn) <= date && (e.separatedOn === null || day(e.separatedOn) >= date);
       const markBy = new Map(h.restDayWork.map((m) => [m.employeeId, m.id]));
-      return {
-        id: h.id,
-        date,
-        name: h.name,
-        type: h.type,
-        isClosed: h.isClosed,
-        restDayEmployees: employees
-          .filter(
-            (e) =>
-              e.restDays.includes(weekday) &&
-              day(e.hiredOn) <= date &&
-              (e.separatedOn === null || day(e.separatedOn) >= date),
-          )
-          .map((e) => ({ employeeId: e.id, employeeName: `${e.firstName} ${e.lastName}`, markId: markBy.get(e.id) ?? null })),
-      };
+
+      const restDayEmployees = employees
+        .filter(isValidRestDay)
+        .map((e) => ({ employeeId: e.id, employeeName: `${e.firstName} ${e.lastName}`, markId: markBy.get(e.id) ?? null, stale: false }));
+
+      const listedIds = new Set(restDayEmployees.map((e) => e.employeeId));
+      for (const m of h.restDayWork) {
+        if (listedIds.has(m.employeeId)) continue;
+        const e = byId.get(m.employeeId);
+        const employeeName = e ? `${e.firstName} ${e.lastName}` : `Employee #${m.employeeId}`;
+        restDayEmployees.push({ employeeId: m.employeeId, employeeName, markId: m.id, stale: true });
+      }
+
+      return { id: h.id, date, name: h.name, type: h.type, isClosed: h.isClosed, restDayEmployees };
     });
   }
 }
