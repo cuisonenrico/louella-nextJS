@@ -2,6 +2,8 @@ import { execSync } from 'node:child_process';
 import { PrismaClient } from '@prisma/client';
 import { assertEnvComplete, assertSafeDatabase, envExampleKeys, loadE2eEnv } from './support/env';
 import { seedBase } from './seed/base';
+import { assertE2eServer } from './support/server';
+import { ADMIN } from './support/credentials';
 
 export default async function globalSetup(): Promise<void> {
   const env = loadE2eEnv();
@@ -28,4 +30,7 @@ export default async function globalSetup(): Promise<void> {
   } finally {
     await seeded.$disconnect();
   }
+
+  // Last: the seed is in, so the e2e admin must be able to log in through whatever is serving :4100.
+  await assertE2eServer('http://localhost:4100', ADMIN);
 }

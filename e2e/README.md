@@ -23,8 +23,11 @@ Playwright builds the app (`npm run build`) and serves it on **:4100**, then res
 seeds the database (`e2e/global-setup.ts`). Your dev server on :4000 can keep running.
 
 > **Windows:** `npm run build` runs `prisma generate`, which fails with `EPERM …query_engine-windows.dll.node`
-> while a dev server holds the engine DLL. Stop `npm run dev` first, or start the e2e server yourself and
-> let `reuseExistingServer` pick it up.
+> while a dev server holds the engine DLL. Stop `npm run dev` first.
+>
+> Don't start the :4100 server by hand: a plain `next start` loads `.env` (production). If something is already
+> on :4100, Playwright reuses it, so `global-setup` checks that the seeded e2e admin can log in through it and
+> aborts with "not the e2e server" if not. Let Playwright start the server.
 
 Each `playwright test` invocation drops and rebuilds the schema. To check that a spec is safe to rerun
 against leftover data, use `--repeat-each` (payroll: `--workers=1`), not two invocations.

@@ -53,11 +53,15 @@ export function assertNoApiUrlOverride(files: string[] = [...NEXT_ENV_FILES, E2E
   }
 }
 
+/** Prisma's Postgres connector lets these query parameters override the URL's host. */
+const HOST_OVERRIDES = ['host', 'hostaddr'];
+
 function isSafe(url: string | undefined): boolean {
   if (!url) return false;
   try {
     const u = new URL(url);
-    return SAFE_HOSTS.has(u.hostname.toLowerCase()) && u.pathname === SAFE_DB;
+    const overridden = [...u.searchParams.keys()].some((k) => HOST_OVERRIDES.includes(k.toLowerCase()));
+    return !overridden && SAFE_HOSTS.has(u.hostname.toLowerCase()) && u.pathname === SAFE_DB;
   } catch {
     return false;
   }

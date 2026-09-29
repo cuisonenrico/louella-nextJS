@@ -21,10 +21,15 @@ const FORBIDDEN_SECRET_VALUES = new Set([
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1']);
 
-/** True only for a postgres URL whose host is exactly localhost or 127.0.0.1. */
+/** Prisma's Postgres connector lets these query parameters override the URL's host. */
+const HOST_OVERRIDES = ['host', 'hostaddr'];
+
+/** True only for a postgres URL whose host is exactly localhost or 127.0.0.1, with no host override. */
 export function isLocalDatabaseUrl(url: string): boolean {
   try {
-    return LOCAL_HOSTS.has(new URL(url).hostname.toLowerCase());
+    const u = new URL(url);
+    const overridden = [...u.searchParams.keys()].some((k) => HOST_OVERRIDES.includes(k.toLowerCase()));
+    return !overridden && LOCAL_HOSTS.has(u.hostname.toLowerCase());
   } catch {
     return false;
   }

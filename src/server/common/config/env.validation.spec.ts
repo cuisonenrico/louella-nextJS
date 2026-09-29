@@ -68,6 +68,10 @@ describe('isLocalDatabaseUrl', () => {
     ['postgresql://u:p@127.0.0.1:54329/louella_e2e', true],
     ['postgresql://u:p@LOCALHOST:54329/louella_e2e', true],
     ['postgresql://u:p@localhost.evil.com:5432/x', false],
+    // A `host`/`hostaddr` query parameter overrides the URL's host in Prisma's connector.
+    ['postgresql://u:p@localhost:54329/louella_e2e?host=db.x.supabase.co', false],
+    ['postgresql://u:p@localhost:54329/louella_e2e?hostaddr=203.0.113.9', false],
+    ['postgresql://u:p@localhost:54329/louella_e2e?schema=public', true],
     ['postgresql://u:p@db.supabase.co:5432/postgres', false],
     ['not a url', false],
   ])('%s → %s', (url, expected) => {

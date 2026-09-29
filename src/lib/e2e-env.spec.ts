@@ -19,6 +19,16 @@ describe('assertSafeDatabase', () => {
     expect(() => assertSafeDatabase(env(u))).toThrow(/louella_e2e/);
   });
 
+  // Prisma's Postgres connector lets a `host` query parameter override the URL's host.
+  it.each([
+    ['host', '?host=db.abc.supabase.co'],
+    ['hostaddr', '?hostaddr=203.0.113.9'],
+    ['HOST in caps', '?HOST=db.abc.supabase.co'],
+    ['host among others', '?schema=public&host=db.abc.supabase.co'],
+  ])('refuses a %s override hidden in the query', (_label, q) => {
+    expect(() => assertSafeDatabase(env(url('localhost', 'louella_e2e', q)))).toThrow(/louella_e2e/);
+  });
+
   it('accepts query params on a safe url', () => {
     expect(() => assertSafeDatabase(env(url('localhost', 'louella_e2e', '?schema=public')))).not.toThrow();
   });
