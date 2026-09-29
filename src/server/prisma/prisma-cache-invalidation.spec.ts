@@ -1,4 +1,4 @@
-import { buildInvalidationExtension } from './prisma-cache-invalidation';
+import { buildInvalidationExtension, withPostCommitBump } from './prisma-cache-invalidation';
 import { CACHE_NS } from '../common/cache/cache-namespaces';
 
 function runHook(hook: any, operation: string) {
@@ -76,5 +76,37 @@ describe('PrismaService (extended + proxy)', () => {
     expect(typeof (svc as any).materialInventory.upsert).toBe('function');
     // Custom lifecycle method still resolves off the base target.
     expect(typeof svc.onModuleInit).toBe('function');
+  });
+});
+
+describe('withPostCommitBump', () => {
+  it('bumps what a transaction wrote again once it settles', async () => {
+    const bump = jest.fn();
+    const ext = buildInvalidationExtension({ bump });
+    let bumpsBeforeCommit = 0;
+
+    await withPostCommitBump({ bump }, async () => {
+      await runHook(ext.query.inventory, 'update');
+      await runHook(ext.query.product, 'findMany');
+      bumpsBeforeCommit = bump.mock.calls.length;
+    });
+
+    // Once during the write, once after: a read cached in between is orphaned.
+    expect(bump.mock.calls.length).toBe(bumpsBeforeCommit * 2);
+    expect(bump.mock.calls.slice(bumpsBeforeCommit).map((c) => c[0]).sort()).toEqual(
+      [CACHE_NS.DASHBOARD_AGG, CACHE_NS.INVENTORY_AGG].sort(),
+    );
+  });
+
+  it('bumps after a rolled-back transaction too, and rethrows', async () => {
+    const bump = jest.fn();
+    const ext = buildInvalidationExtension({ bump });
+    await expect(
+      withPostCommitBump({ bump }, async () => {
+        await runHook(ext.query.inventory, 'update');
+        throw new Error('rollback');
+      }),
+    ).rejects.toThrow('rollback');
+    expect(bump).toHaveBeenCalledTimes(4);
   });
 });

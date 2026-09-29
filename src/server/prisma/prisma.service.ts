@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { CacheNamespaceService } from '../common/cache/cache-namespace.service';
-import { buildInvalidationExtension } from './prisma-cache-invalidation';
+import { buildInvalidationExtension, withPostCommitBump } from './prisma-cache-invalidation';
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit {
@@ -20,8 +20,15 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     // cannot be expressed in the static type system — the unsafe-* rules are
     // suppressed for exactly this trap, not the file.
      
+    // Transactions are wrapped so the cache is invalidated again after commit.
+    const transaction = (...args: unknown[]) =>
+      withPostCommitBump(cache, () =>
+        (extended.$transaction as (...a: unknown[]) => Promise<unknown>)(...args),
+      );
+
     return new Proxy<PrismaService>(this, {
       get(target, prop, receiver) {
+        if (prop === '$transaction') return transaction;
         if (prop in (extended as object)) {
           const value = (extended as Record<string | symbol, unknown>)[prop];
           return typeof value === 'function' ? value.bind(extended) : value;

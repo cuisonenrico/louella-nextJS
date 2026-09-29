@@ -1,4 +1,36 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { CACHE_NS } from '../common/cache/cache-namespaces';
+
+/**
+ * Namespaces written inside the interactive transaction running in this
+ * async context. PrismaService bumps them again once the transaction commits.
+ */
+const writesInTransaction = new AsyncLocalStorage<Set<string>>();
+
+/**
+ * Run a transaction, then bump every namespace it wrote to after it settles.
+ *
+ * The per-query bump below fires before COMMIT. A read landing between that
+ * bump and the commit still sees the old rows and caches them under the new
+ * version, where they stayed for the whole TTL. The second bump orphans that
+ * entry the moment the write becomes visible.
+ */
+export function withPostCommitBump<T>(registry: Registry, run: () => Promise<T>): Promise<T> {
+  const touched = new Set<string>();
+  const bumpAll = () => {
+    for (const namespace of touched) registry.bump(namespace);
+  };
+  return writesInTransaction.run(touched, run).then(
+    (value) => {
+      bumpAll();
+      return value;
+    },
+    (err: unknown) => {
+      bumpAll();
+      throw err;
+    },
+  );
+}
 
 /** Prisma operations that mutate rows and therefore invalidate aggregations. */
 const WRITE_OPS = new Set([
@@ -31,11 +63,15 @@ export function buildInvalidationExtension(registry: Registry) {
     async $allOperations({ operation, args, query }: AllOpsArgs) {
       // Bump fires after the operation executes. Inside an interactive
       // transaction this is before commit, so a later ROLLBACK still
-      // invalidated — this is intentional and benign: it only forces a
-      // recompute on next read and can never serve stale data.
+      // invalidated — benign, it only forces a recompute. The namespaces are
+      // also noted for withPostCommitBump, which bumps again after COMMIT.
       const result = await query(args); // only invalidate after success
       if (WRITE_OPS.has(operation)) {
-        for (const namespace of namespaces) registry.bump(namespace);
+        const pending = writesInTransaction.getStore();
+        for (const namespace of namespaces) {
+          registry.bump(namespace);
+          pending?.add(namespace);
+        }
       }
       return result;
     },
