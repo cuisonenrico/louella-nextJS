@@ -38,20 +38,36 @@ const FIELD_COLUMN: Record<SheetField, SheetColumn> = { delivery: 'Delivery', le
 export class InventorySheet {
   constructor(private readonly page: Page) {}
 
-  /** Select the branch and day, create missing rows, and wait until every named product has a row. */
+  /**
+   * Select the branch and day, create missing rows, and wait until every named product has a row.
+   *
+   * Always loads the page fresh. The sheet keeps the PREVIOUS query's rows on screen while a new
+   * one loads (keepPreviousData) and caches for 30 s — with "All" selected it even shows one
+   * placeholder row per branch — so reading it mid-transition gives stale or duplicated rows.
+   * A fresh page has an empty cache, and we wait for the exact response before deciding anything.
+   */
   async open(branchName: string, date: string, productNames: string[]) {
-    if (!this.page.url().includes('/inventory/details')) await this.page.goto('/inventory/details');
+    await this.page.goto('/inventory/details');
 
-    const branch = this.page.getByRole('radio', { name: branchName, exact: true });
-    await expect(branch).toBeVisible();
-    // Radix single ToggleGroup: clicking the pressed item turns it off.
-    if ((await branch.getAttribute('aria-checked')) !== 'true') await branch.click();
-    await expect(branch).toHaveAttribute('aria-checked', 'true');
+    const dateInput = this.page.locator('input[type="date"]').first();
+    await expect(dateInput).toBeVisible();
 
-    await this.page.locator('input[type="date"]').first().fill(date);
-    await this.page.waitForLoadState('networkidle');
+    // Register before acting: the request for the FINAL branch+day is the one we wait for.
+    const loaded = this.page.waitForResponse(
+      (r) =>
+        r.request().method() === 'GET' &&
+        /\/api\/v1\/inventory\/branch\/\d+\/date\?/.test(r.url()) &&
+        r.url().includes(`date=${date}`),
+    );
+    await this.page.getByRole('radio', { name: branchName, exact: true }).click();
+    if ((await dateInput.inputValue()) !== date) await dateInput.fill(date);
+    expect((await loaded).ok()).toBe(true);
 
+    // Either the rows are there (branch-only "Adjustments" column) or the Initialize bar is.
     const initialize = this.page.getByRole('button', { name: /^Initialize \d+ rows?$/ });
+    const adjustments = this.page.getByRole('columnheader', { name: 'Adjustments', exact: true });
+    await expect(initialize.or(adjustments).first()).toBeVisible();
+
     if (await initialize.isVisible()) {
       const created = this.page.waitForResponse(
         (r) => r.url().includes('/api/v1/inventory/bulk') && r.request().method() === 'POST',
@@ -60,6 +76,7 @@ export class InventorySheet {
       expect((await created).ok()).toBe(true);
     }
 
+    await expect(adjustments).toBeVisible();
     for (const name of productNames) await expect(this.row(name)).toBeVisible();
     await this.assertLayout();
   }
