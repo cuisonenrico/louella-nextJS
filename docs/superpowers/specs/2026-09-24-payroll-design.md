@@ -206,8 +206,8 @@ in.
 
 ### Holidays
 
-Not modelled. A holiday counts as a normal working day paid at the daily
-rate. Holiday premium pay is entered as a `HOLIDAY` addition.
+Superseded by `2026-09-29-payroll-holidays-design.md`: admin-set regular and
+special holidays, paid automatically with multipliers from Settings → Payroll.
 
 ## 5. Lifecycle
 
