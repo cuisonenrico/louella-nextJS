@@ -3,7 +3,7 @@ import { idempotencyHeader } from './useIdempotencyKey';
 import type { LandingContent } from './landing/schema';
 import type {
   CashDayView, CashSummary, ExpenseCategory, ValeEmployeeOption,
-  Absence, CutoffHoliday, CutoffSummary, CutoffView, Employee, EmployeeAccount, EmployeeInput, EmployeeRate, JobRole, PayrollAdjustment, PayrollAdjustmentCategory, PayrollAdjustmentKind, PayrollHoliday, PayrollHolidayInput, PayrollRun, PayrollSettings, PayslipWithRun, RecurringDeduction,
+  Absence, CutoffSummary, CutoffView, Employee, EmployeeAccount, EmployeeInput, EmployeeRate, JobRole, PayrollAdjustment, PayrollAdjustmentCategory, PayrollAdjustmentKind, PayrollHoliday, PayrollHolidayInput, PayrollRun, PayrollSettings, PayslipWithRun, RecurringDeduction,
   AuthResponse,
   Branch,
   PermissionsMatrixResponse,

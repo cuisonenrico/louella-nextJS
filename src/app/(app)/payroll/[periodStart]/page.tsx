@@ -8,7 +8,7 @@ import { ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { usePageHeader } from '@/components/layout/usePageHeader';
 import { payrollApi } from '@/lib/apiServices';
-import type { DraftPayslip, PayrollAdjustmentKind } from '@/types';
+import type { CutoffHoliday, DraftPayslip, PayrollAdjustmentKind } from '@/types';
 import { extractError } from '@/lib/errors';
 import { useIdempotencyKey } from '@/lib/useIdempotencyKey';
 import { cutoffOf, formatCutoff, isPeriodStart } from '@/lib/payroll/cutoff';
@@ -20,6 +20,7 @@ import QueryError from '@/components/QueryError';
 import { AdjustmentDialog, type AdjustmentInput } from '../_components/AdjustmentDialog';
 import { CutoffTable, type SlipRow } from '../_components/CutoffTable';
 import { FinalizeBar } from '../_components/FinalizeBar';
+import { HolidaysPanel } from '../_components/HolidaysPanel';
 import { RunActions } from '../_components/RunActions';
 import { RunStatusBadge } from '../_components/RunStatusBadge';
 
@@ -66,6 +67,14 @@ export default function CutoffPage() {
     onSuccess: refresh,
     onError,
   });
+  const toggleRestDayWork = useMutation({
+    mutationFn: ({ holiday, employee }: { holiday: CutoffHoliday; employee: CutoffHoliday['restDayEmployees'][number] }) =>
+      employee.markId !== null
+        ? payrollApi.unmarkRestDayWork(employee.markId)
+        : payrollApi.markRestDayWork(holiday.id, employee.employeeId),
+    onSuccess: refresh,
+    onError,
+  });
 
   if (!valid) {
     return <Alert variant="destructive"><AlertDescription>A cutoff starts on the 1st or the 16th.</AlertDescription></Alert>;
@@ -74,7 +83,7 @@ export default function CutoffPage() {
   if (isError) return <QueryError error={error} onRetry={() => refetch()} />;
   if (!data) return null;
 
-  const busy = removeAdjustment.isPending || toggleSkip.isPending || addAdjustment.isPending;
+  const busy = removeAdjustment.isPending || toggleSkip.isPending || addAdjustment.isPending || toggleRestDayWork.isPending;
 
   return (
     <div className="space-y-4">
@@ -87,6 +96,13 @@ export default function CutoffPage() {
         </div>
         {data.run && <RunActions run={data.run} />}
       </div>
+
+      <HolidaysPanel
+        holidays={data.holidays}
+        editable={data.status === 'OPEN'}
+        busy={busy}
+        onToggle={(holiday, employee) => toggleRestDayWork.mutate({ holiday, employee })}
+      />
 
       {data.draft && (
         <>
