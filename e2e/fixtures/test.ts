@@ -8,9 +8,11 @@ type WorkerFixtures = { api: Api };
 
 export const test = base.extend<TestFixtures, WorkerFixtures>({
   api: [
-    async ({ playwright }, use) => {
+    // (Playwright's fixture callback is conventionally called `use`; it is named `provide` here
+    // because eslint-plugin-react-hooks mistakes `use(...)` for React's `use` hook.)
+    async ({ playwright }, provide) => {
       const request = await playwright.request.newContext({ baseURL: 'http://localhost:4100' });
-      await use(await Api.login(request, ADMIN));
+      await provide(await Api.login(request, ADMIN));
       await request.dispose();
     },
     { scope: 'worker' },
@@ -24,16 +26,16 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
    * A shared storageState file would not survive: refresh rotates the token and
    * the old one only lives on for a 60 s grace window (auth.service.ts).
    */
-  context: async ({ context, asAdmin }, use) => {
+  context: async ({ context, asAdmin }, provide) => {
     if (asAdmin) {
       const res = await context.request.post('/api/v1/auth/login', { data: ADMIN });
       if (!res.ok()) throw new Error(`admin login → ${res.status()}: ${await res.text()}`);
     }
-    await use(context);
+    await provide(context);
   },
 
-  world: async ({ api }, use) => {
-    await use(await buildWorld(api));
+  world: async ({ api }, provide) => {
+    await provide(await buildWorld(api));
   },
 });
 
