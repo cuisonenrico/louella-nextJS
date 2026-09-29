@@ -910,7 +910,7 @@ export interface PayrollAdjustment {
 }
 
 export interface PayslipLineView {
-  type: 'BASIC' | 'ADDITION' | 'DEDUCTION' | 'EMPLOYER_SHARE';
+  type: 'BASIC' | 'HOLIDAY' | 'ADDITION' | 'DEDUCTION' | 'EMPLOYER_SHARE';
   label: string;
   quantity: number | null;
   rate: number | null;
@@ -922,7 +922,8 @@ export interface PayslipLineView {
 export type PayslipWarning =
   | { code: 'MISSING_RATE'; blocking: true; dates: string[] }
   | { code: 'NEGATIVE_NET'; blocking: false }
-  | { code: 'NO_DAYS_WORKED'; blocking: false };
+  | { code: 'NO_DAYS_WORKED'; blocking: false }
+  | { code: 'IGNORED_REST_DAY_MARK'; blocking: false; dates: string[] };
 
 export interface DraftPayslip {
   employeeId: number;
@@ -933,6 +934,7 @@ export interface DraftPayslip {
   absenceDays: number;
   daysWorked: number;
   basicPay: number;
+  holidayPay: number;
   totalAdditions: number;
   totalDeductions: number;
   netPay: number;
@@ -963,6 +965,7 @@ export interface PayslipRecord {
   absenceDays: number;
   daysWorked: number;
   basicPay: number;
+  holidayPay: number;
   totalAdditions: number;
   totalDeductions: number;
   netPay: number;
@@ -991,6 +994,7 @@ export interface CutoffView {
   status: 'OPEN' | 'FINALIZED' | 'PAID';
   run: PayrollRun | null;
   draft: CutoffDraft | null;
+  holidays: CutoffHoliday[];
 }
 
 export interface CutoffSummary {
@@ -1006,6 +1010,38 @@ export interface CutoffSummary {
 
 export interface PayslipWithRun extends PayslipRecord {
   run: { id: number; periodStart: string; periodEnd: string; status: PayrollRunStatus };
+}
+
+export type HolidayType = 'REGULAR' | 'SPECIAL';
+
+export interface PayrollHoliday {
+  id: number;
+  date: string;
+  name: string;
+  type: HolidayType;
+  isClosed: boolean;
+  locked: boolean;
+}
+
+export interface PayrollHolidayInput {
+  date: string;
+  name: string;
+  type: HolidayType;
+  isClosed?: boolean;
+}
+
+export interface PayrollSettings {
+  regularHolidayMultiplier: number;
+  specialHolidayMultiplier: number;
+}
+
+export interface CutoffHoliday {
+  id: number;
+  date: string;
+  name: string;
+  type: HolidayType;
+  isClosed: boolean;
+  restDayEmployees: { employeeId: number; employeeName: string; markId: number | null }[];
 }
 // ─── Branch cash ─────────────────────────────────────────────────────────────
 

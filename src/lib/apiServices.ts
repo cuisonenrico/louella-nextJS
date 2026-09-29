@@ -3,7 +3,7 @@ import { idempotencyHeader } from './useIdempotencyKey';
 import type { LandingContent } from './landing/schema';
 import type {
   CashDayView, CashSummary, ExpenseCategory, ValeEmployeeOption,
-  Absence, CutoffSummary, CutoffView, Employee, EmployeeAccount, EmployeeInput, EmployeeRate, JobRole, PayrollAdjustment, PayrollAdjustmentCategory, PayrollAdjustmentKind, PayrollRun, PayslipWithRun, RecurringDeduction,
+  Absence, CutoffHoliday, CutoffSummary, CutoffView, Employee, EmployeeAccount, EmployeeInput, EmployeeRate, JobRole, PayrollAdjustment, PayrollAdjustmentCategory, PayrollAdjustmentKind, PayrollHoliday, PayrollHolidayInput, PayrollRun, PayrollSettings, PayslipWithRun, RecurringDeduction,
   AuthResponse,
   Branch,
   PermissionsMatrixResponse,
@@ -565,6 +565,16 @@ export const payrollApi = {
   voidRun: (runId: number, reason: string) => api.post<PayrollRun>(`/payroll/runs/${runId}/void`, { reason }),
   run: (runId: number) => api.get<PayrollRun>(`/payroll/runs/${runId}`),
   payslip: (id: number) => api.get<PayslipWithRun>(`/payroll/payslips/${id}`),
+  settings: () => api.get<PayrollSettings>('/payroll/settings'),
+  updateSettings: (data: Partial<PayrollSettings>) => api.patch<PayrollSettings>('/payroll/settings', data),
+  holidays: (year: number) => api.get<PayrollHoliday[]>('/payroll/holidays', { params: { year } }),
+  createHoliday: (data: PayrollHolidayInput) => api.post<PayrollHoliday>('/payroll/holidays', data),
+  updateHoliday: (id: number, data: Partial<Omit<PayrollHolidayInput, 'date'>>) =>
+    api.patch<PayrollHoliday>(`/payroll/holidays/${id}`, data),
+  removeHoliday: (id: number) => api.delete(`/payroll/holidays/${id}`),
+  markRestDayWork: (holidayId: number, employeeId: number) =>
+    api.post<{ id: number }>(`/payroll/holidays/${holidayId}/rest-day-work`, { employeeId }),
+  unmarkRestDayWork: (id: number) => api.delete(`/payroll/rest-day-work/${id}`),
 };
 export const branchCashApi = {
   day: (branchId: number, date: string) =>

@@ -14,6 +14,7 @@ const slip: PayslipRecord = {
   absenceDays: 1,
   daysWorked: 12,
   basicPay: 7200,
+  holidayPay: 0,
   totalAdditions: 1000,
   totalDeductions: 450,
   netPay: 7750,
@@ -51,5 +52,28 @@ describe('PayslipView', () => {
   it('carries no voided banner on a valid run', () => {
     render(<PayslipView slip={slip} run={run} />);
     expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('shows holiday lines in their own section with a total', () => {
+    const withHoliday: PayslipRecord = {
+      ...slip,
+      holidayPay: 1200,
+      netPay: 8950,
+      lines: [
+        slip.lines[0],
+        { type: 'HOLIDAY', label: 'Regular holiday — Sep 8 (worked)', quantity: 2, rate: 600, amount: 1200, sourceType: 'Holiday', sourceId: 90 },
+        ...slip.lines.slice(1),
+      ],
+    };
+    render(<PayslipView slip={withHoliday} run={run} />);
+    expect(screen.getByText('Regular holiday — Sep 8 (worked)')).toBeInTheDocument();
+    expect(screen.getByText(/2\.00 × ₱600\.00/)).toBeInTheDocument();
+    expect(screen.getByText('Total holiday pay')).toBeInTheDocument();
+    expect(screen.getByTestId('net-pay')).toHaveTextContent('8,950.00');
+  });
+
+  it('leaves the holiday section out when there were no holidays', () => {
+    render(<PayslipView slip={slip} run={run} />);
+    expect(screen.queryByText('Total holiday pay')).toBeNull();
   });
 });

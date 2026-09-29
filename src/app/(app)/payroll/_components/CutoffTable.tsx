@@ -21,6 +21,7 @@ export interface SlipRow {
   absenceDays: number;
   daysWorked: number;
   basicPay: number;
+  holidayPay: number;
   totalAdditions: number;
   totalDeductions: number;
   netPay: number;
@@ -50,6 +51,8 @@ function WarningBadges({ row }: { row: SlipRow }) {
           </Badge>
         ) : w.code === 'NEGATIVE_NET' ? (
           <Badge key={w.code} variant="destructive">Net pay below zero</Badge>
+        ) : w.code === 'IGNORED_REST_DAY_MARK' ? (
+          <Badge key={w.code} variant="secondary">Rest-day mark ignored ({w.dates.length})</Badge>
         ) : (
           <Badge key={w.code} variant="secondary">No days worked</Badge>
         ),
@@ -61,6 +64,9 @@ function WarningBadges({ row }: { row: SlipRow }) {
 function lineLabel(l: PayslipLineView): string {
   if (l.type === 'BASIC' && l.quantity !== null && l.rate !== null) {
     return `${l.label} — ${l.quantity} day${l.quantity === 1 ? '' : 's'} × ${peso(l.rate)}`;
+  }
+  if (l.type === 'HOLIDAY' && l.quantity !== null && l.rate !== null) {
+    return `${l.label} — ${l.quantity.toFixed(2)} × ${peso(l.rate)}`;
   }
   return l.type === 'EMPLOYER_SHARE' ? `${l.label} · not deducted` : l.label;
 }
@@ -150,6 +156,7 @@ export function CutoffTable({ rows, actions }: { rows: SlipRow[]; actions?: Cuto
               <TableHead className="text-right">Absent</TableHead>
               <TableHead className="text-right">Worked</TableHead>
               <TableHead className="text-right">Basic</TableHead>
+              <TableHead className="text-right">Holiday</TableHead>
               <TableHead className="text-right">Additions</TableHead>
               <TableHead className="text-right">Deductions</TableHead>
               <TableHead className="text-right">Net pay</TableHead>
@@ -171,6 +178,7 @@ export function CutoffTable({ rows, actions }: { rows: SlipRow[]; actions?: Cuto
                     <TableCell className="text-right tabular-nums">{row.absenceDays}</TableCell>
                     <TableCell className="text-right tabular-nums">{row.daysWorked}</TableCell>
                     <TableCell className="text-right tabular-nums">{peso(row.basicPay)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{peso(row.holidayPay)}</TableCell>
                     <TableCell className="text-right tabular-nums">{peso(row.totalAdditions)}</TableCell>
                     <TableCell className="text-right tabular-nums">{peso(row.totalDeductions)}</TableCell>
                     <TableCell className={cn('text-right font-semibold tabular-nums', row.netPay < 0 && 'text-destructive')}>
@@ -180,7 +188,7 @@ export function CutoffTable({ rows, actions }: { rows: SlipRow[]; actions?: Cuto
                   {expanded && (
                     <TableRow>
                       <TableCell />
-                      <TableCell colSpan={8}><LineDetails row={row} actions={actions} /></TableCell>
+                      <TableCell colSpan={9}><LineDetails row={row} actions={actions} /></TableCell>
                     </TableRow>
                   )}
                 </Fragment>

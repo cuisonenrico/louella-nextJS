@@ -17,6 +17,9 @@ function Section({ title, lines, total }: { title: string; lines: PayslipLineVie
               {l.type === 'BASIC' && l.quantity !== null && l.rate !== null && (
                 <span className="text-neutral-500"> ({l.quantity} days × {peso(l.rate)})</span>
               )}
+              {l.type === 'HOLIDAY' && l.quantity !== null && l.rate !== null && (
+                <span className="text-neutral-500"> ({l.quantity.toFixed(2)} × {peso(l.rate)})</span>
+              )}
             </span>
             <span className="tabular-nums">{peso(l.amount)}</span>
           </li>
@@ -45,6 +48,7 @@ export function PayslipView({
   className?: string;
 }) {
   const earnings = slip.lines.filter((l) => l.type === 'BASIC' || l.type === 'ADDITION');
+  const holidays = slip.lines.filter((l) => l.type === 'HOLIDAY');
   const deductions = slip.lines.filter((l) => l.type === 'DEDUCTION');
 
   return (
@@ -69,6 +73,7 @@ export function PayslipView({
         {slip.absenceDays > 0 ? ` (${slip.absenceDays} absent)` : ''}
       </p>
       <Section title="Earnings" lines={earnings} total={(cents(slip.basicPay) + cents(slip.totalAdditions)) / 100} />
+      {holidays.length > 0 && <Section title="Holiday pay" lines={holidays} total={slip.holidayPay} />}
       <Section title="Deductions" lines={deductions} total={slip.totalDeductions} />
       <footer className="mt-4 flex justify-between border-t-2 pt-3 text-base font-bold">
         <span>Net pay</span>
