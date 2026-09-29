@@ -39,6 +39,15 @@ describe('employee DTO validation', () => {
     expect(errorsOf(CreateEmployeeDto, { ...valid, restDays: [0, 0] })).toEqual(['restDays']);
   });
 
+  it('stores government ids as free text up to 30 characters', () => {
+    const ids = { sssNumber: '34-1234567-8', philhealthNumber: '12-345678901-2', pagibigNumber: '1234-5678-9012' };
+    expect(errorsOf(CreateEmployeeDto, { ...valid, ...ids })).toEqual([]);
+    expect(errorsOf(CreateEmployeeDto, { ...valid, sssNumber: null })).toEqual([]);
+    expect(errorsOf(CreateEmployeeDto, { ...valid, sssNumber: 'x'.repeat(31) })).toEqual(['sssNumber']);
+    expect(errorsOf(CreateEmployeeDto, { ...valid, philhealthNumber: 'x'.repeat(31) })).toEqual(['philhealthNumber']);
+    expect(errorsOf(CreateEmployeeDto, { ...valid, pagibigNumber: 'x'.repeat(31) })).toEqual(['pagibigNumber']);
+  });
+
   it('requires separatedOn to be a date or explicitly null', () => {
     expect(errorsOf(SetSeparationDto, { separatedOn: null })).toEqual([]);
     expect(errorsOf(SetSeparationDto, { separatedOn: '2026-09-30' })).toEqual([]);

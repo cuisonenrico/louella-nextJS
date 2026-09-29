@@ -35,6 +35,9 @@ export function toEmployeeView(e: EmployeeRow, today: string = manilaToday()) {
     isActive: separatedOn === null || separatedOn >= today,
     phone: e.phone,
     address: e.address,
+    sssNumber: e.sssNumber,
+    philhealthNumber: e.philhealthNumber,
+    pagibigNumber: e.pagibigNumber,
     currentDailyRate: current ? num(current.dailyRate) : null,
     account: e.user
       ? { userId: e.user.id, email: e.user.email, role: e.user.role, isActive: e.user.isActive }
@@ -85,6 +88,9 @@ export class EmployeesService {
           hiredOn,
           phone: dto.phone?.trim() || null,
           address: dto.address?.trim() || null,
+          sssNumber: dto.sssNumber?.trim() || null,
+          philhealthNumber: dto.philhealthNumber?.trim() || null,
+          pagibigNumber: dto.pagibigNumber?.trim() || null,
           rates: { create: { dailyRate: dto.dailyRate, effectiveOn: hiredOn, createdById: userId } },
         },
         include: EMPLOYEE_INCLUDE,
@@ -122,6 +128,9 @@ export class EmployeesService {
           hiredOn: dto.hiredOn === undefined ? undefined : toUtcDay(dto.hiredOn),
           phone: dto.phone === undefined ? undefined : dto.phone?.trim() || null,
           address: dto.address === undefined ? undefined : dto.address?.trim() || null,
+          sssNumber: dto.sssNumber === undefined ? undefined : dto.sssNumber?.trim() || null,
+          philhealthNumber: dto.philhealthNumber === undefined ? undefined : dto.philhealthNumber?.trim() || null,
+          pagibigNumber: dto.pagibigNumber === undefined ? undefined : dto.pagibigNumber?.trim() || null,
         },
         include: EMPLOYEE_INCLUDE,
       });

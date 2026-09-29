@@ -41,6 +41,9 @@ export function ProfileTab({ employee }: { employee: Employee }) {
     ['Current daily rate', employee.currentDailyRate === null ? '—' : peso(employee.currentDailyRate)],
     ['Phone', employee.phone ?? '—'],
     ['Address', employee.address ?? '—'],
+    ['SSS no.', employee.sssNumber ?? '—'],
+    ['PhilHealth no.', employee.philhealthNumber ?? '—'],
+    ['Pag-IBIG no.', employee.pagibigNumber ?? '—'],
   ];
 
   return (

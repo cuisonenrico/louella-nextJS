@@ -852,6 +852,9 @@ export interface Employee {
   isActive: boolean;
   phone: string | null;
   address: string | null;
+  sssNumber: string | null;
+  philhealthNumber: string | null;
+  pagibigNumber: string | null;
   currentDailyRate: number | null;
   account: EmployeeAccount | null;
 }
@@ -865,6 +868,9 @@ export interface EmployeeInput {
   restDays: number[];
   phone: string | null;
   address: string | null;
+  sssNumber: string | null;
+  philhealthNumber: string | null;
+  pagibigNumber: string | null;
   dailyRate: number;
 }
 

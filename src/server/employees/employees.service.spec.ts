@@ -16,6 +16,9 @@ function employeeRow(overrides: Record<string, unknown> = {}) {
     userId: null,
     phone: null,
     address: null,
+    sssNumber: null,
+    philhealthNumber: null,
+    pagibigNumber: null,
     createdAt: at('2026-01-05'),
     updatedAt: at('2026-01-05'),
     deletedAt: null,
@@ -65,6 +68,36 @@ describe('EmployeesService', () => {
     expect(data).toMatchObject({ firstName: 'Ana', restDays: [0], hiredOn: at('2026-01-05') });
     expect(data.rates).toEqual({ create: { dailyRate: 600, effectiveOn: at('2026-01-05'), createdById: 7 } });
     expect(prisma.auditEvent.createMany).toHaveBeenCalled();
+  });
+
+  it('trims government ids and stores blanks as null', async () => {
+    await service.create(
+      {
+        firstName: 'Ana',
+        lastName: 'Cruz',
+        jobRoleId: 2,
+        hiredOn: '2026-01-05',
+        dailyRate: 600,
+        sssNumber: ' 34-1234567-8 ',
+        philhealthNumber: '   ',
+      },
+      7,
+    );
+    expect(prisma.employee.create.mock.calls[0][0].data).toMatchObject({
+      sssNumber: '34-1234567-8',
+      philhealthNumber: null,
+      pagibigNumber: null,
+    });
+
+    await service.update(1, { pagibigNumber: '1234-5678-9012', sssNumber: '' }, 7);
+    const data = prisma.employee.update.mock.calls[0][0].data;
+    expect(data).toMatchObject({ pagibigNumber: '1234-5678-9012', sssNumber: null });
+    expect(data.philhealthNumber).toBeUndefined();
+  });
+
+  it('returns government ids on the employee view', () => {
+    const view = toEmployeeView(employeeRow({ sssNumber: '34-1234567-8', pagibigNumber: '1234-5678-9012' }) as never);
+    expect(view).toMatchObject({ sssNumber: '34-1234567-8', philhealthNumber: null, pagibigNumber: '1234-5678-9012' });
   });
 
   it('refuses an inactive job role', async () => {

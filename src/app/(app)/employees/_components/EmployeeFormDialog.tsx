@@ -29,11 +29,14 @@ interface Form {
   dailyRate: string;
   phone: string;
   address: string;
+  sssNumber: string;
+  philhealthNumber: string;
+  pagibigNumber: string;
 }
 
 function formFor(employee?: Employee): Form {
   if (!employee) {
-    return { firstName: '', lastName: '', jobRoleId: '', branchId: NO_BRANCH, hiredOn: manilaToday(), restDays: [0], dailyRate: '', phone: '', address: '' };
+    return { firstName: '', lastName: '', jobRoleId: '', branchId: NO_BRANCH, hiredOn: manilaToday(), restDays: [0], dailyRate: '', phone: '', address: '', sssNumber: '', philhealthNumber: '', pagibigNumber: '' };
   }
   return {
     firstName: employee.firstName,
@@ -45,6 +48,9 @@ function formFor(employee?: Employee): Form {
     dailyRate: '',
     phone: employee.phone ?? '',
     address: employee.address ?? '',
+    sssNumber: employee.sssNumber ?? '',
+    philhealthNumber: employee.philhealthNumber ?? '',
+    pagibigNumber: employee.pagibigNumber ?? '',
   };
 }
 
@@ -76,6 +82,9 @@ export function EmployeeFormDialog({
         restDays: form.restDays,
         phone: form.phone.trim() || null,
         address: form.address.trim() || null,
+        sssNumber: form.sssNumber.trim() || null,
+        philhealthNumber: form.philhealthNumber.trim() || null,
+        pagibigNumber: form.pagibigNumber.trim() || null,
       };
       return employee
         ? employeesApi.update(employee.id, base)
@@ -161,6 +170,20 @@ export function EmployeeFormDialog({
             <div className="space-y-2">
               <Label htmlFor="address">Address</Label>
               <Input id="address" value={form.address} onChange={(e) => set('address', e.target.value)} />
+            </div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="space-y-2">
+              <Label htmlFor="sssNumber">SSS no.</Label>
+              <Input id="sssNumber" maxLength={30} value={form.sssNumber} onChange={(e) => set('sssNumber', e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="philhealthNumber">PhilHealth no.</Label>
+              <Input id="philhealthNumber" maxLength={30} value={form.philhealthNumber} onChange={(e) => set('philhealthNumber', e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="pagibigNumber">Pag-IBIG no.</Label>
+              <Input id="pagibigNumber" maxLength={30} value={form.pagibigNumber} onChange={(e) => set('pagibigNumber', e.target.value)} />
             </div>
           </div>
           {employee && <p className="text-xs text-muted-foreground">Change the daily rate from the Rates tab, so the history is kept.</p>}

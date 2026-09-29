@@ -66,6 +66,22 @@ export class CreateEmployeeDto {
   @IsString()
   @MaxLength(200)
   address?: string | null;
+
+  /** Government ids, stored as entered: formats vary and are not validated. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  sssNumber?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  philhealthNumber?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  pagibigNumber?: string | null;
 }
 
 export class UpdateEmployeeDto extends PartialType(OmitType(CreateEmployeeDto, ['dailyRate'] as const)) {}

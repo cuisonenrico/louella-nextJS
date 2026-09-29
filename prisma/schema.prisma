@@ -841,20 +841,23 @@ model JobRole {
 
 /// A person on payroll. The login, if any, is the optional `user`.
 model Employee {
-  id          Int       @id @default(autoincrement())
-  firstName   String
-  lastName    String
-  jobRoleId   Int
-  branchId    Int? // null = central kitchen / unassigned; not an access control
-  restDays    Int[]     @default([0]) // weekdays off, 0 = Sunday … 6 = Saturday
-  hiredOn     DateTime  @db.Date
-  separatedOn DateTime? @db.Date
-  userId      Int?      @unique
-  phone       String?
-  address     String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  deletedAt   DateTime?
+  id               Int       @id @default(autoincrement())
+  firstName        String
+  lastName         String
+  jobRoleId        Int
+  branchId         Int? // null = central kitchen / unassigned; not an access control
+  restDays         Int[]     @default([0]) // weekdays off, 0 = Sunday … 6 = Saturday
+  hiredOn          DateTime  @db.Date
+  separatedOn      DateTime? @db.Date
+  userId           Int?      @unique
+  phone            String?
+  address          String?
+  sssNumber        String? // government ids: stored as entered, not validated
+  philhealthNumber String?
+  pagibigNumber    String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
 
   jobRole             JobRole                  @relation(fields: [jobRoleId], references: [id])
   branch              Branch?                  @relation(fields: [branchId], references: [id], onDelete: SetNull)
