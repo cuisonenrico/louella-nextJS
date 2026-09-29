@@ -8,6 +8,21 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 <!-- END:nextjs-agent-rules -->
 
+## Definition of done: e2e coverage
+
+If your change alters anything a user can see or do — a page, label, button, figure, permission,
+lock or business rule, **including a small tweak or a bug fix** — the task is **not done** until its
+Playwright test is written **in the same change**: a new test for new or fixed behaviour, and an update
+to any existing one your change breaks. Unit tests do not count.
+
+- "I can't run it here" means report `not run`. It never means skip writing it.
+- "It's small", "keep it tight" and "the demo is soon" are not exceptions, and neither is "I'll add it after".
+- Steps and rules: `.claude/skills/adding-e2e-coverage/SKILL.md`. Read it before you finish.
+
+End your final message with this line:
+`E2E: <spec files added or changed> · matrix: <route/row> · run: <result, or "not run — <reason>">`
+(or `E2E: none — <why no user can see the change>`).
+
 # Louella — the application
 
 This project is **one deployable**: the Next.js 16 frontend and the NestJS 11
@@ -55,9 +70,8 @@ against anything else — **never point it at `.env`, which is production.** See
 `e2e/README.md`; the coverage table is §8 of
 `docs/superpowers/specs/2026-09-29-e2e-playwright-design.md`.
 
-**Any task that changes what a user can see or do adds or updates its e2e test
-in the same change** — load the `adding-e2e-coverage` skill
-(`.claude/skills/adding-e2e-coverage/SKILL.md`) before you call the task done.
+Changing what a user can see or do requires an e2e test in the same change — see
+*Definition of done: e2e coverage* at the top of this file.
 
 ## Architecture
 

@@ -41,6 +41,23 @@ edited."
 4. **Scope is read literally.** "Small change", "one-word relabel", "the demo starts soon" all read as permission to
    skip. The coverage matrix (spec §8) was not updated, and no `routes.ts` check happened.
 
-## GREEN — with the skill and the AGENTS.md rule
+## GREEN round 1 — skill + a one-line rule inside AGENTS.md's Development section: **FAILED**
 
-_(filled in after the skill is written)_
+| | Loaded the skill? | Added/updated e2e? | Said |
+|---|---|---|---|
+| S1 | No | No | "I ran no tests, lint or the app, because dependencies aren't installed… I didn't check how it looks in the browser." (no mention of e2e or the rule) |
+| S2 | No | Updated the page object (grep), nothing new | "I did not add tests, as you asked." |
+| S3 | No — but **saw the rule** | No | "I did not add or update an e2e test. AGENTS.md says visible changes should get one, so that is still owed after the demo." |
+
+Diagnosis: the skill's *content* was never read, so it could not help. The trigger was the problem: agents skim
+AGENTS.md for how to build, and a rule inside a "Development" subsection either went unseen (S1, S2) or was
+seen and deferred (S3 — the exact "I'll add it afterwards" the skill's table counters, unread).
+
+**REFACTOR:** the rule moved to the top of AGENTS.md as a *Definition of done*, in the imperative, with the essential
+counters inline ("can't run" ≠ skip; small/soon/after are not exceptions) and a **required closing line** in the
+agent's final message (`E2E: … · matrix: … · run: …`), so the check happens at the moment the agent reports back
+and does not depend on opening a second file.
+
+## GREEN round 2 — skill + top-of-file Definition of done
+
+_(filled in after the re-run)_
