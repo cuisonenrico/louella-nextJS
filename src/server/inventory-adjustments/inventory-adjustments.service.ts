@@ -59,6 +59,7 @@ export class InventoryAdjustmentsService {
   private async carryForward(
     tx: Prisma.TransactionClient,
     inventoryIds: number[],
+    userId?: number | null,
   ): Promise<void> {
     const rows = await tx.inventory.findMany({
       where: { id: { in: inventoryIds } },
@@ -67,7 +68,26 @@ export class InventoryAdjustmentsService {
     await reconcileInventoryChains(
       tx,
       rows.map((r) => ({ branchId: r.branchId, productId: r.productId, fromDate: r.date })),
+      { userId },
     );
+  }
+
+  /**
+   * One movement is recorded as two legs once the receiver accepts, and the
+   * receiving branch's stock, sales and cash then depend on it. Neither side
+   * may change it alone: a correction is a new transfer the other way, which
+   * the other branch accepts in turn. Legacy transfers (linked, no status)
+   * are treated the same.
+   */
+  private assertNotAcceptedTransfer(adjustment: {
+    transferStatus: string | null;
+    linkedAdjustmentId: number | null;
+  }): void {
+    if (adjustment.transferStatus === 'ACCEPTED' || adjustment.linkedAdjustmentId !== null) {
+      throw new ConflictException(
+        'An accepted transfer cannot be changed or deleted. To correct it, send a transfer back.',
+      );
+    }
   }
 
   /**
@@ -121,6 +141,9 @@ export class InventoryAdjustmentsService {
       select: {
         quantity: true,
         delivery: true,
+        leftover: true,
+        reject: true,
+        leftoverCountedAt: true,
         adjustments: {
           where: { deletedAt: null },
           select: { id: true, type: true, value: true },
@@ -137,10 +160,21 @@ export class InventoryAdjustmentsService {
         ? row.adjustments
         : row.adjustments.filter((a) => a.id !== excludeAdjustmentId);
 
-    const available = row.quantity + row.delivery + computeAdjSum(others);
+    // Rejects are gone, and on a counted day the leftover is already spoken
+    // for: pulling out past them made sold (and revenue) negative. A pull-out
+    // of counted leftover needs the leftover lowered first.
+    const onHand = row.quantity + row.delivery + computeAdjSum(others);
+    const heldBack = row.reject + (row.leftoverCountedAt !== null ? row.leftover : 0);
+    const available = onHand - heldBack;
     if (value > available) {
+      const why =
+        row.leftoverCountedAt !== null
+          ? ` (${onHand} on hand, less ${row.leftover} counted leftover and ${row.reject} rejected). If the leftover is being moved, lower the counted leftover first.`
+          : row.reject > 0
+            ? ` (${onHand} on hand, less ${row.reject} rejected).`
+            : '.';
       throw new BadRequestException(
-        `Cannot pull out ${value} units — only ${available} are on hand for this product and day.`,
+        `Cannot pull out ${value} units — only ${Math.max(0, available)} are available for this product and day${why}`,
       );
     }
   }
@@ -162,7 +196,12 @@ export class InventoryAdjustmentsService {
       const created = await tx.inventoryAdjustment.create({
         data: { ...dto, createdById: user?.id ?? null },
       });
-      await this.carryForward(tx, [dto.inventoryId]);
+      await recordChanges(
+        tx,
+        [{ entity: 'InventoryAdjustment', entityId: created.id, before: null, after: created }],
+        user?.id,
+      );
+      await this.carryForward(tx, [dto.inventoryId], user?.id);
       return created;
     }, WRITE_TX_OPTIONS);
   }
@@ -189,6 +228,8 @@ export class InventoryAdjustmentsService {
     const existing = await this.branchOfAdjustment(id);
     this.assertBranchAccess(user, existing.inventory.branchId);
 
+    this.assertNotAcceptedTransfer(existing);
+
     // A pending transfer is still a transfer: its type is fixed, though the
     // sender may correct the quantity until the receiver answers.
     if (
@@ -199,55 +240,6 @@ export class InventoryAdjustmentsService {
       throw new BadRequestException(
         'Cannot change the type of a pending transfer. Cancel it and create a new one.',
       );
-    }
-
-    // A transfer is one movement recorded as two opposite, equal legs. Letting
-    // one leg drift breaks that invariant: a re-typed leg would have both
-    // branches pulling the same direction, and a re-valued leg would move more
-    // units out of the source than arrive at the destination. So the type is
-    // frozen and the value is mirrored onto the counterpart.
-    if (existing.linkedAdjustmentId) {
-      if (dto.type !== undefined && dto.type !== existing.type) {
-        throw new BadRequestException(
-          'Cannot change the type of a transfer adjustment. Delete the transfer and create a new one.',
-        );
-      }
-      if (dto.value !== undefined && dto.value !== existing.value) {
-        const linkedId = existing.linkedAdjustmentId;
-        const newValue = dto.value;
-        return this.prisma.$transaction(async (tx) => {
-          const counterpart = await tx.inventoryAdjustment.findFirst({
-            where: { id: linkedId, deletedAt: null },
-            select: { inventoryId: true },
-          });
-          await this.lockRows(tx, [
-            existing.inventoryId,
-            ...(counterpart ? [counterpart.inventoryId] : []),
-          ]);
-          // The new value lands on both legs, so the *source* branch is what
-          // has to be able to cover it, whichever leg is being edited.
-          await this.assertTransferStock(tx, existing, newValue);
-
-          const updated = await tx.inventoryAdjustment.update({
-            where: { id },
-            data: { ...dto, updatedById: user?.id ?? null },
-          });
-          await recordChanges(
-            tx,
-            [{ entity: 'InventoryAdjustment', entityId: id, before: existing, after: updated }],
-            user?.id,
-          );
-          await tx.inventoryAdjustment.updateMany({
-            where: { id: linkedId, deletedAt: null },
-            data: { value: dto.value },
-          });
-          await this.carryForward(tx, [
-            existing.inventoryId,
-            ...(counterpart ? [counterpart.inventoryId] : []),
-          ]);
-          return updated;
-        }, WRITE_TX_OPTIONS);
-      }
     }
 
     // Standalone adjustment: cap it exactly as create() does, so the cap cannot
@@ -274,84 +266,34 @@ export class InventoryAdjustmentsService {
         [{ entity: 'InventoryAdjustment', entityId: id, before: existing, after: updated }],
         user?.id,
       );
-      await this.carryForward(tx, [existing.inventoryId]);
+      await this.carryForward(tx, [existing.inventoryId], user?.id);
       return updated;
     }, WRITE_TX_OPTIONS);
-  }
-
-  /**
-   * Cap the pull-out side of a transfer whose value is being revised.
-   *
-   * If the edited leg is itself the PULL_OUT, that is the row and the branch to
-   * check. If it is the PULL_IN, the mirrored write moves the units out of the
-   * counterpart's branch, so the counterpart is what must have the stock.
-   */
-  private async assertTransferStock(
-    tx: Prisma.TransactionClient,
-    existing: {
-      id: number;
-      type: string;
-      inventoryId: number;
-      linkedAdjustmentId: number | null;
-    },
-    value: number,
-  ): Promise<void> {
-    if (existing.type === 'PULL_OUT') {
-      await this.assertStockAvailable(tx, existing.inventoryId, value, existing.id);
-      return;
-    }
-
-    const counterpart = await tx.inventoryAdjustment.findFirst({
-      where: { id: existing.linkedAdjustmentId ?? -1, deletedAt: null },
-      select: { id: true, inventoryId: true, type: true },
-    });
-    if (counterpart?.type === 'PULL_OUT') {
-      await this.assertStockAvailable(
-        tx,
-        counterpart.inventoryId,
-        value,
-        counterpart.id,
-      );
-    }
   }
 
   async remove(id: number, user?: RequestUser) {
     const existing = await this.branchOfAdjustment(id);
     this.assertBranchAccess(user, existing.inventory.branchId);
+    // A pending transfer may be cancelled by its sender; an accepted one is
+    // the receiver's stock too.
+    this.assertNotAcceptedTransfer(existing);
 
-    const deletedAt = new Date();
-
-    // Both legs of a transfer go together. Soft-deleting only the row the user
-    // clicked would leave its counterpart live, inventing stock at one branch
-    // that never left the other.
     return this.prisma.$transaction(async (tx) => {
-      const counterpartRow = existing.linkedAdjustmentId
-        ? await tx.inventoryAdjustment.findFirst({
-            where: { id: existing.linkedAdjustmentId },
-            select: { inventoryId: true },
-          })
-        : null;
-      await this.lockRows(tx, [
-        existing.inventoryId,
-        ...(counterpartRow ? [counterpartRow.inventoryId] : []),
-      ]);
+      await this.lockRows(tx, [existing.inventoryId]);
+      const before = await tx.inventoryAdjustment.findFirst({ where: { id, deletedAt: null } });
+      if (!before) throw new NotFoundException('Inventory adjustment not found');
+      // Re-checked under the lock: the receiver may have accepted meanwhile.
+      this.assertNotAcceptedTransfer(before);
       const updated = await tx.inventoryAdjustment.update({
         where: { id },
-        data: { deletedAt },
+        data: { deletedAt: new Date(), updatedById: user?.id ?? null },
       });
-      const touched = [existing.inventoryId];
-      if (existing.linkedAdjustmentId) {
-        const counterpart = await tx.inventoryAdjustment.findFirst({
-          where: { id: existing.linkedAdjustmentId, deletedAt: null },
-          select: { inventoryId: true },
-        });
-        await tx.inventoryAdjustment.updateMany({
-          where: { id: existing.linkedAdjustmentId, deletedAt: null },
-          data: { deletedAt },
-        });
-        if (counterpart) touched.push(counterpart.inventoryId);
-      }
-      await this.carryForward(tx, touched);
+      await recordChanges(
+        tx,
+        [{ entity: 'InventoryAdjustment', entityId: id, before, after: updated, action: 'delete' }],
+        user?.id,
+      );
+      await this.carryForward(tx, [existing.inventoryId], user?.id);
       return updated;
     }, WRITE_TX_OPTIONS);
   }
@@ -421,7 +363,12 @@ export class InventoryAdjustmentsService {
           transferToInventoryId: dto.toInventoryId,
         },
       });
-      await this.carryForward(tx, [dto.fromInventoryId]);
+      await recordChanges(
+        tx,
+        [{ entity: 'InventoryAdjustment', entityId: out.id, before: null, after: out }],
+        user?.id,
+      );
+      await this.carryForward(tx, [dto.fromInventoryId], user?.id);
       return out;
     }, WRITE_TX_OPTIONS);
 
@@ -494,7 +441,16 @@ export class InventoryAdjustmentsService {
         where: { id },
         data: { linkedAdjustmentId: pullIn.id },
       });
-      await this.carryForward(tx, [destinationId]);
+      const { transferTo: _transferTo, ...answered } = out;
+      await recordChanges(
+        tx,
+        [
+          { entity: 'InventoryAdjustment', entityId: id, before: answered, after: pullOut },
+          { entity: 'InventoryAdjustment', entityId: pullIn.id, before: null, after: pullIn },
+        ],
+        user?.id,
+      );
+      await this.carryForward(tx, [destinationId], user?.id);
       return { pullOut, pullIn, status: 'ACCEPTED' as const };
     }, WRITE_TX_OPTIONS);
   }
@@ -521,7 +477,14 @@ export class InventoryAdjustmentsService {
       if (claimed.count !== 1) {
         throw new ConflictException('This transfer was already answered or cancelled.');
       }
-      await this.carryForward(tx, [out.inventoryId]);
+      const after = await tx.inventoryAdjustment.findUniqueOrThrow({ where: { id } });
+      const { transferTo: _transferTo, ...answered } = out;
+      await recordChanges(
+        tx,
+        [{ entity: 'InventoryAdjustment', entityId: id, before: answered, after, action: 'delete' }],
+        user?.id,
+      );
+      await this.carryForward(tx, [out.inventoryId], user?.id);
       return { status: 'REJECTED' as const };
     }, WRITE_TX_OPTIONS);
   }

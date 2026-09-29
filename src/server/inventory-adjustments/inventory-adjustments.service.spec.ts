@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
@@ -66,6 +67,9 @@ function makeInvRow(overrides: Record<string, unknown> = {}) {
     date: new Date('2026-09-02'),
     quantity: 100,
     delivery: 20,
+    leftover: 0,
+    reject: 0,
+    leftoverCountedAt: null,
     adjustments: [],
     ...overrides,
   };
@@ -245,6 +249,9 @@ describe('InventoryAdjustmentsService', () => {
       prisma.inventory.findFirst.mockResolvedValue({
         quantity: 100,
         delivery: 20,
+        leftover: 0,
+        reject: 0,
+        leftoverCountedAt: null,
         adjustments: [{ type: 'PULL_OUT', value: 5 }],
       });
 
@@ -259,6 +266,9 @@ describe('InventoryAdjustmentsService', () => {
       prisma.inventory.findFirst.mockResolvedValue({
         quantity: 100,
         delivery: 20,
+        leftover: 0,
+        reject: 0,
+        leftoverCountedAt: null,
         adjustments: [{ type: 'PULL_OUT', value: 5 }],
       });
       prisma.inventoryAdjustment.update.mockResolvedValue({ id: 1, value: 100 });
@@ -278,6 +288,9 @@ describe('InventoryAdjustmentsService', () => {
       prisma.inventory.findFirst.mockResolvedValue({
         quantity: 10,
         delivery: 0,
+        leftover: 0,
+        reject: 0,
+        leftoverCountedAt: null,
         adjustments: [{ id: 1, type: 'PULL_OUT', value: 10 }],
       });
       prisma.inventoryAdjustment.update.mockResolvedValue({ id: 1, value: 8 });
@@ -299,28 +312,23 @@ describe('InventoryAdjustmentsService', () => {
       expect(prisma.inventoryAdjustment.update).toHaveBeenCalled();
     });
 
-    it('caps the source leg when the pull-in leg of a transfer is raised', async () => {
-      // Editing the destination leg mirrors the new value onto the source
-      // PULL_OUT, so the source branch is where the stock must exist.
-      prisma.inventoryAdjustment.findFirst
-        .mockResolvedValueOnce(
-          pullOut({ id: 2, type: 'PULL_IN', inventoryId: 20, linkedAdjustmentId: 1 }),
-        )
-        // Read once to lock both legs' chains, once for the stock check.
-        .mockResolvedValueOnce({ id: 1, inventoryId: 9, type: 'PULL_OUT' })
-        .mockResolvedValueOnce({ id: 1, inventoryId: 9, type: 'PULL_OUT' });
+    it('counts rejects and a counted leftover against what can be pulled out', async () => {
+      prisma.inventoryAdjustment.findFirst.mockResolvedValue(pullOut());
       prisma.inventory.findFirst.mockResolvedValue({
-        quantity: 10,
-        delivery: 0,
+        quantity: 100,
+        delivery: 20,
+        leftover: 90,
+        reject: 10,
+        leftoverCountedAt: new Date(),
         adjustments: [{ id: 1, type: 'PULL_OUT', value: 5 }],
       });
 
+      // 120 on hand, 90 counted, 10 rejected: 20 can leave, not 21.
       await expect(
-        service.update(2, { value: 500 }, unscoped()),
+        service.update(1, { value: 21 }, unscoped()),
       ).rejects.toBeInstanceOf(BadRequestException);
-      // Checked inside the locked transaction; nothing written.
-      expect(prisma.inventoryAdjustment.update).not.toHaveBeenCalled();
-      expect(prisma.inventoryAdjustment.updateMany).not.toHaveBeenCalled();
+      prisma.inventoryAdjustment.update.mockResolvedValue({ id: 1, value: 20 });
+      await expect(service.update(1, { value: 20 }, unscoped())).resolves.toBeDefined();
     });
   });
 
@@ -352,46 +360,41 @@ describe('InventoryAdjustmentsService', () => {
       expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     });
 
-    it('refuses to re-type one leg of a transfer', async () => {
-      prisma.inventoryAdjustment.findFirst.mockResolvedValue({
-        id: 1,
-        type: 'PULL_OUT',
-        value: 5,
-        linkedAdjustmentId: 2,
-        inventory: { branchId: 1 },
-      });
-
-      await expect(
-        service.update(1, { type: 'PULL_IN' }, unscoped()),
-      ).rejects.toBeInstanceOf(BadRequestException);
+    it('refuses to change either leg of an accepted transfer', async () => {
+      for (const leg of [
+        { id: 1, type: 'PULL_OUT', transferStatus: 'ACCEPTED', linkedAdjustmentId: 2 },
+        { id: 2, type: 'PULL_IN', transferStatus: 'ACCEPTED', linkedAdjustmentId: 1 },
+        // Pre-acceptance transfers: linked, no status.
+        { id: 3, type: 'PULL_OUT', transferStatus: null, linkedAdjustmentId: 4 },
+      ]) {
+        prisma.inventoryAdjustment.findFirst.mockResolvedValue({
+          ...leg,
+          value: 5,
+          inventory: { branchId: 1 },
+        });
+        await expect(
+          service.update(leg.id, { value: 8 }, unscoped()),
+        ).rejects.toBeInstanceOf(ConflictException);
+      }
       expect(prisma.inventoryAdjustment.update).not.toHaveBeenCalled();
+      expect(prisma.inventoryAdjustment.updateMany).not.toHaveBeenCalled();
     });
 
-    it('mirrors a changed value onto the transfer counterpart', async () => {
+    it('records the edit and its author', async () => {
       prisma.inventoryAdjustment.findFirst.mockResolvedValue({
         id: 1,
-        inventoryId: 9,
-        type: 'PULL_OUT',
+        type: 'PULL_IN',
         value: 5,
-        linkedAdjustmentId: 2,
+        transferStatus: null,
+        linkedAdjustmentId: null,
         inventory: { branchId: 1 },
       });
-      prisma.inventory.findFirst.mockResolvedValue({
-        quantity: 100,
-        delivery: 0,
-        adjustments: [{ id: 1, type: 'PULL_OUT', value: 5 }],
-      });
+      prisma.inventoryAdjustment.update.mockResolvedValue({ id: 1, type: 'PULL_IN', value: 3 });
 
-      await service.update(1, { value: 8 }, unscoped());
+      await service.update(1, { value: 3 }, unscoped());
 
-      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-      expect(prisma.inventoryAdjustment.update).toHaveBeenCalledWith({
-        where: { id: 1 },
-        data: { value: 8, updatedById: 1 },
-      });
-      expect(prisma.inventoryAdjustment.updateMany).toHaveBeenCalledWith({
-        where: { id: 2, deletedAt: null },
-        data: { value: 8 },
+      expect(prisma.auditEvent.createMany).toHaveBeenCalledWith({
+        data: [expect.objectContaining({ entity: 'InventoryAdjustment', entityId: 1, action: 'update', userId: 1 })],
       });
     });
   });
@@ -413,25 +416,24 @@ describe('InventoryAdjustmentsService', () => {
 
       expect(prisma.inventoryAdjustment.update).toHaveBeenCalledWith({
         where: { id: 1 },
-        data: { deletedAt: expect.any(Date) },
+        data: { deletedAt: expect.any(Date), updatedById: 1 },
+      });
+      expect(prisma.auditEvent.createMany).toHaveBeenCalledWith({
+        data: [expect.objectContaining({ entity: 'InventoryAdjustment', entityId: 1, action: 'delete', userId: 1 })],
       });
     });
 
-    it('deletes both legs of a transfer together', async () => {
+    it('refuses to delete an accepted transfer', async () => {
       prisma.inventoryAdjustment.findFirst.mockResolvedValue({
         id: 1,
+        transferStatus: 'ACCEPTED',
         linkedAdjustmentId: 2,
         inventory: { branchId: 1 },
       });
 
-      await service.remove(1, unscoped());
-
-      // Leaving the counterpart live would invent stock at the other branch.
-      expect(prisma.inventoryAdjustment.updateMany).toHaveBeenCalledWith({
-        where: { id: 2, deletedAt: null },
-        data: { deletedAt: expect.any(Date) },
-      });
-      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      await expect(service.remove(1, unscoped())).rejects.toBeInstanceOf(ConflictException);
+      expect(prisma.inventoryAdjustment.update).not.toHaveBeenCalled();
+      expect(prisma.inventoryAdjustment.updateMany).not.toHaveBeenCalled();
     });
 
     it('refuses to delete another branch’s adjustment', async () => {
