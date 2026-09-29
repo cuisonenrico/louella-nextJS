@@ -1,7 +1,7 @@
 # End-to-end test suite (Playwright) — design
 
 Date: 2026-09-29
-Status: draft, awaiting review
+Status: implemented (v1) — see §8 for coverage and the README for gotchas found while building it
 
 ## 1. Purpose
 
@@ -59,20 +59,28 @@ running dev server on :4000 — **the production database** — and
 
 ## 3. Safety: the suite cannot reach production
 
-1. **`e2e/global-setup.ts` guard, first statement.** Parse `DATABASE_URL` and
-   `DIRECT_URL`; abort with a clear error unless both have host `localhost` or
-   `127.0.0.1` **and** database name `louella_e2e`. Nothing (no reset, no
-   migrate, no build) runs before this check.
+1. **Database guard, first statement of `playwright.config.ts`** (repeated in
+   `e2e/global-setup.ts`). Parse `DATABASE_URL` and `DIRECT_URL`; abort with a
+   clear error unless both have host `localhost` or `127.0.0.1` **and**
+   database name `louella_e2e`, with no `host`/`hostaddr` query parameter (Prisma
+   lets those override the URL's host). The config runs before the server is
+   built or started, so nothing (no build, reset or migrate) precedes it.
+   Playwright also starts the `webServer` **before** `globalSetup`, so the guard
+   cannot live only there.
 2. **Nothing may fall through from `.env` / `.env.local`.** `playwright.config.ts`
    loads `.env.e2e` explicitly and passes it to `webServer.env`. Next.js still
    loads `.env*` files itself, and it fills in **any variable not already set**
    in the process environment — so a key missing from `.env.e2e` (e.g.
    `SUPABASE_SERVICE_ROLE_KEY`, `FIREBASE_SERVICE_ACCOUNT`) would silently pick
-   up the production value. Therefore `.env.e2e` lists **every key in
-   `.env.example` and `.env.local`**, set to an empty string where unused
-   (an empty value counts as set, so Next does not replace it).
-   `global-setup.ts` asserts that every key of `.env.example` is present in
-   `.env.e2e` and fails naming the missing key.
+   up the production value. Therefore `.env.e2e` lists **every key found in
+   `.env.example`, `.env`, `.env.local` and `.env.production(.local)`**, set to
+   an empty string where unused (an empty value counts as set, so Next does not
+   replace it; verified to survive the Windows shell spawn). The config asserts
+   this, naming any missing key.
+   1. **The server on :4100 must be the e2e one.** `reuseExistingServer` accepts
+      any process on the port, e.g. a plain `next start` that loaded `.env`.
+      `global-setup.ts` therefore requires the seeded e2e admin (which exists
+      only in the e2e database) to log in through whatever is serving.
 3. **`E2E_RELAX_THROTTLE` is refused outside a local database.**
    `src/server/common/config/env.validation.ts` throws at boot if
    `E2E_RELAX_THROTTLE` is set and `DATABASE_URL`'s host is not
@@ -233,7 +241,7 @@ const world = await buildWorld({
   hireDate?: string,
   recurringDeduction?: number, // monthly amount on each employee (payroll spec)
 });
-// → { branch, manager: { user, page }, products, material?, recipe?, employees }
+// → { id, branch, manager: { id, email, password }, products, material?, recipe?, employees }
 ```
 
 - Every test gets **its own branch** and **its own manager** assigned to it.
@@ -411,7 +419,9 @@ text, no response ≥ 500 from `/api/v1`, and the page's main heading is visible
 
 This is the authoritative list. `routes.ts` must contain every route below.
 Phase **v1** is built (2026-09-29: auth, inventory sheet, production orders,
-branch cash, payroll, and the route sweep over all 40 pages); **v2** is the next
+branch cash, payroll, and the route sweep over 38 of the 40 pages — the payroll
+print page and the payslip page need a finalized run; the payslip is covered by
+the payroll spec, the print page by nothing yet); **v2** is the next
 pass; **v3** needs extra infrastructure. The skill (§10) requires updating this
 table when a feature lands or changes.
 

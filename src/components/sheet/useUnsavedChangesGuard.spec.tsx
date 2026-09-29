@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { guardNavigation } from '@/lib/navigationGuard';
@@ -9,11 +10,17 @@ vi.mock('next/navigation', () => ({
 
 const { useUnsavedChangesGuard } = await import('./useUnsavedChangesGuard');
 
-let confirm: (proceed: () => void, cancel?: () => void) => void = () => {};
+type ConfirmDiscard = (proceed: () => void, cancel?: () => void) => void;
+
+// The hook's function is handed out from an effect, not assigned during render (react-hooks/globals).
+const captured: { confirmDiscard: ConfirmDiscard } = { confirmDiscard: () => {} };
+const confirm: ConfirmDiscard = (proceed, cancel) => captured.confirmDiscard(proceed, cancel);
 
 function Sheet({ dirty }: { dirty: boolean }) {
   const { confirmDiscard, dialog } = useUnsavedChangesGuard(dirty);
-  confirm = confirmDiscard;
+  useEffect(() => {
+    captured.confirmDiscard = confirmDiscard;
+  });
   return (
     <>
       <a href="/production">Production</a>

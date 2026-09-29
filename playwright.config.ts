@@ -1,5 +1,11 @@
 import { defineConfig, devices } from '@playwright/test';
-import { assertNoApiUrlOverride, assertSafeDatabase, loadE2eEnv } from './e2e/support/env';
+import {
+  allTemplateKeys,
+  assertEnvComplete,
+  assertNoApiUrlOverride,
+  assertSafeDatabase,
+  loadE2eEnv,
+} from './e2e/support/env';
 
 /**
  * E2E suite. Runs a production build on :4100 against the throwaway
@@ -9,6 +15,9 @@ import { assertNoApiUrlOverride, assertSafeDatabase, loadE2eEnv } from './e2e/su
 const env = loadE2eEnv();
 assertSafeDatabase(env);
 assertNoApiUrlOverride();
+// Here, not in globalSetup: Playwright starts the webServer (build + start) BEFORE globalSetup runs, so a
+// check there would come after a key had already fallen through from .env to the e2e server.
+assertEnvComplete(env, allTemplateKeys());
 const CI = !!process.env.CI;
 
 export default defineConfig({
