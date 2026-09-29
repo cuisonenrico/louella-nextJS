@@ -18,19 +18,21 @@ function draft(overrides: Partial<CutoffDraft> = {}): CutoffDraft {
         absenceDays: 1,
         daysWorked: 12,
         basicPay: 7200,
+        holidayPay: 1200,
         totalAdditions: 1000,
         totalDeductions: 450,
-        netPay: 7750,
+        netPay: 8950,
         totalEmployerShare: 950,
         lines: [
           { type: 'BASIC', label: 'Basic pay', quantity: 12, rate: 600, amount: 7200, sourceType: 'EmployeeRate', sourceId: 10 },
+          { type: 'HOLIDAY', label: 'Regular holiday — Sep 8 (worked)', quantity: 2, rate: 600, amount: 1200, sourceType: 'Holiday', sourceId: 90 },
           { type: 'ADDITION', label: 'Bonus', quantity: null, rate: null, amount: 1000, sourceType: 'PayrollAdjustment', sourceId: 5 },
         ],
         warnings: [],
         recurring: [],
       },
     ],
-    totals: { employeeCount: 1, netPay: 7750, employerShare: 950 },
+    totals: { employeeCount: 1, netPay: 8950, employerShare: 950 },
     hasBlocking: false,
     ...overrides,
   };
@@ -51,7 +53,7 @@ const runRow = (overrides: Record<string, unknown> = {}) => ({
 
 describe('PayrollRunsService', () => {
   let prisma: Record<string, any>;
-  let drafts: { build: jest.Mock };
+  let drafts: { build: jest.Mock; holidays: jest.Mock };
   let service: PayrollRunsService;
 
   beforeEach(() => {
@@ -69,7 +71,7 @@ describe('PayrollRunsService', () => {
       auditEvent: { createMany: jest.fn() },
       $transaction: jest.fn((fn: (tx: unknown) => unknown) => fn(prisma)),
     };
-    drafts = { build: jest.fn().mockResolvedValue(draft()) };
+    drafts = { build: jest.fn().mockResolvedValue(draft()), holidays: jest.fn().mockResolvedValue([]) };
     service = new PayrollRunsService(prisma as never, drafts as never);
   });
 
@@ -115,17 +117,19 @@ describe('PayrollRunsService', () => {
           periodEnd: at('2026-09-15'),
           status: 'FINALIZED',
           employeeCount: 1,
-          totalNetPay: 7750,
+          totalNetPay: 8950,
           totalEmployerShare: 950,
           finalizedById: 7,
         },
       });
       const payslip = prisma.payslip.create.mock.calls[0][0].data;
-      expect(payslip).toMatchObject({ runId: 3, employeeId: 1, employeeName: 'Ana Cruz', netPay: 7750, daysWorked: 12 });
+      expect(payslip).toMatchObject({ runId: 3, employeeId: 1, employeeName: 'Ana Cruz', netPay: 8950, holidayPay: 1200, daysWorked: 12 });
       expect(payslip.lines.create.map((l: { sortOrder: number; type: string }) => [l.sortOrder, l.type])).toEqual([
         [0, 'BASIC'],
-        [1, 'ADDITION'],
+        [1, 'HOLIDAY'],
+        [2, 'ADDITION'],
       ]);
+      expect(payslip.lines.create[1]).toMatchObject({ type: 'HOLIDAY', quantity: 2, rate: 600, amount: 1200, sourceType: 'Holiday', sourceId: 90 });
       expect(prisma.auditEvent.createMany).toHaveBeenCalled();
     });
   });
@@ -213,6 +217,23 @@ describe('PayrollRunsService', () => {
 
     it('rejects an absurd year', async () => {
       await expect(service.listCutoffs(1999)).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('getCutoff', () => {
+    it('returns the cutoff’s holidays with the draft', async () => {
+      drafts.holidays.mockResolvedValue([{ id: 90, date: '2026-09-08', name: 'A', type: 'REGULAR', isClosed: false, restDayEmployees: [] }]);
+      const view = await service.getCutoff('2026-09-01');
+      expect(view.status).toBe('OPEN');
+      expect(view.holidays).toHaveLength(1);
+    });
+
+    it('returns the holidays with a finalized run too', async () => {
+      prisma.payrollRun.findFirst.mockResolvedValue(runRow());
+      drafts.holidays.mockResolvedValue([{ id: 90, date: '2026-09-08', name: 'A', type: 'REGULAR', isClosed: false, restDayEmployees: [] }]);
+      const view = await service.getCutoff('2026-09-01');
+      expect(view.status).toBe('FINALIZED');
+      expect(view.holidays).toHaveLength(1);
     });
   });
 });

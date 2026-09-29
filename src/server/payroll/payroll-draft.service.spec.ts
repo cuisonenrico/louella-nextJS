@@ -30,7 +30,11 @@ describe('PayrollDraftService', () => {
   let service: PayrollDraftService;
 
   beforeEach(() => {
-    prisma = { employee: { findMany: jest.fn().mockResolvedValue([employee()]) } };
+    prisma = {
+      employee: { findMany: jest.fn().mockResolvedValue([employee()]) },
+      holiday: { findMany: jest.fn().mockResolvedValue([]) },
+      payrollSettings: { findUnique: jest.fn().mockResolvedValue({ id: 1, regularHolidayMultiplier: 2, specialHolidayMultiplier: 1.3 }) },
+    };
     service = new PayrollDraftService(prisma as never);
   });
 
@@ -93,5 +97,59 @@ describe('PayrollDraftService', () => {
     expect(draft.payslips[0].lines).toContainEqual(
       expect.objectContaining({ label: 'Vale — Main, Sep 3', amount: 500, sourceType: 'BranchVale', sourceId: 21 }),
     );
+  });
+
+  it('loads the cutoff’s live holidays with their live rest-day marks', async () => {
+    await service.build('2026-09-01');
+    expect(prisma.holiday.findMany).toHaveBeenCalledWith({
+      where: { deletedAt: null, date: { gte: at('2026-09-01'), lte: at('2026-09-15') } },
+      include: { restDayWork: { where: { deletedAt: null }, select: { id: true, employeeId: true } } },
+      orderBy: { date: 'asc' },
+    });
+  });
+
+  it('pays holidays with the stored multipliers and this employee’s marks only', async () => {
+    prisma.holiday.findMany.mockResolvedValue([
+      { id: 90, date: at('2026-09-08'), name: 'A', type: 'REGULAR', isClosed: false, restDayWork: [] },
+      { id: 91, date: at('2026-09-13'), name: 'B', type: 'SPECIAL', isClosed: false, restDayWork: [{ id: 5, employeeId: 1 }] },
+      { id: 92, date: at('2026-09-06'), name: 'C', type: 'SPECIAL', isClosed: false, restDayWork: [{ id: 6, employeeId: 2 }] },
+    ]);
+    prisma.payrollSettings.findUnique.mockResolvedValue({ id: 1, regularHolidayMultiplier: 2.5, specialHolidayMultiplier: 1.5 });
+    const draft = await service.build('2026-09-01');
+    const holiday = draft.payslips[0].lines.filter((l) => l.type === 'HOLIDAY').map((l) => [l.sourceId, l.quantity]);
+    // Sep 8 worked at 2.5; Sep 13 rest day marked → 1.5; Sep 6 rest day, marked for someone else → 1.00
+    expect(holiday).toEqual([[92, 1], [90, 2.5], [91, 1.5]]);
+  });
+
+  it('falls back to the default multipliers when the settings row is missing', async () => {
+    prisma.payrollSettings.findUnique.mockResolvedValue(null);
+    prisma.holiday.findMany.mockResolvedValue([
+      { id: 90, date: at('2026-09-08'), name: 'A', type: 'REGULAR', isClosed: false, restDayWork: [] },
+    ]);
+    const draft = await service.build('2026-09-01');
+    expect(draft.payslips[0].lines.find((l) => l.type === 'HOLIDAY')?.quantity).toBe(2);
+  });
+
+  it('lists each holiday with the employees on rest day that date', async () => {
+    prisma.employee.findMany.mockResolvedValue([
+      { id: 1, firstName: 'Ana', lastName: 'Cruz', restDays: [0], hiredOn: at('2026-01-05'), separatedOn: null },
+      { id: 2, firstName: 'Ben', lastName: 'Diaz', restDays: [2], hiredOn: at('2026-01-05'), separatedOn: null },
+      { id: 3, firstName: 'Cy', lastName: 'Eco', restDays: [0], hiredOn: at('2026-09-10'), separatedOn: null },
+    ]);
+    prisma.holiday.findMany.mockResolvedValue([
+      { id: 91, date: at('2026-09-06'), name: 'Sun holiday', type: 'SPECIAL', isClosed: false, restDayWork: [{ id: 5, employeeId: 1 }] },
+    ]);
+    const holidays = await service.holidays('2026-09-01');
+    expect(holidays).toEqual([
+      {
+        id: 91,
+        date: '2026-09-06',
+        name: 'Sun holiday',
+        type: 'SPECIAL',
+        isClosed: false,
+        // Ben rests on Tuesdays; Cy was hired after the holiday.
+        restDayEmployees: [{ employeeId: 1, employeeName: 'Ana Cruz', markId: 5 }],
+      },
+    ]);
   });
 });

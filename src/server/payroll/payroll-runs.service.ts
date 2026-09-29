@@ -34,17 +34,20 @@ export class PayrollRunsService {
     private readonly drafts: PayrollDraftService,
   ) {}
 
-  /** The active run for a cutoff, or its live draft. */
+  /** The active run for a cutoff, or its live draft, plus its holidays. */
   async getCutoff(periodStart: string) {
     const { periodEnd } = cutoffOf(periodStart);
-    const run = await this.prisma.payrollRun.findFirst({
-      where: { periodStart: toUtcDay(periodStart), status: { not: 'VOIDED' } },
-      include: RUN_INCLUDE,
-    });
+    const [run, holidays] = await Promise.all([
+      this.prisma.payrollRun.findFirst({
+        where: { periodStart: toUtcDay(periodStart), status: { not: 'VOIDED' } },
+        include: RUN_INCLUDE,
+      }),
+      this.drafts.holidays(periodStart),
+    ]);
     if (run) {
-      return { periodStart, periodEnd, status: run.status as 'FINALIZED' | 'PAID', run: toRunView(run), draft: null };
+      return { periodStart, periodEnd, status: run.status as 'FINALIZED' | 'PAID', run: toRunView(run), draft: null, holidays };
     }
-    return { periodStart, periodEnd, status: 'OPEN' as const, run: null, draft: await this.drafts.build(periodStart) };
+    return { periodStart, periodEnd, status: 'OPEN' as const, run: null, draft: await this.drafts.build(periodStart), holidays };
   }
 
   async listCutoffs(year: number) {
@@ -122,6 +125,7 @@ export class PayrollRunsService {
               absenceDays: p.absenceDays,
               daysWorked: p.daysWorked,
               basicPay: p.basicPay,
+              holidayPay: p.holidayPay,
               totalAdditions: p.totalAdditions,
               totalDeductions: p.totalDeductions,
               netPay: p.netPay,

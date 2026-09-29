@@ -1,11 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { cutoffOf } from '@/lib/payroll/cutoff';
+import { cutoffOf, weekdayOf } from '@/lib/payroll/cutoff';
 import { PrismaService } from '../prisma/prisma.service';
 import { centavos, num, pesos } from '../common/utils/decimal.util';
 import { toUtcDay } from '../common/utils/date-range.util';
-import { computePayslip, type ComputedPayslip } from './compute-payslip';
+import { computePayslip, type ComputedPayslip, type HolidayInput } from './compute-payslip';
 import { day } from './payroll-lock.util';
+import { readMultipliers } from './payroll-settings';
 
 export interface DraftPayslip extends ComputedPayslip {
   employeeName: string;
@@ -23,6 +24,30 @@ export interface CutoffDraft {
   hasBlocking: boolean;
 }
 
+export interface CutoffHoliday {
+  id: number;
+  date: string;
+  name: string;
+  type: 'REGULAR' | 'SPECIAL';
+  isClosed: boolean;
+  /** Employees employed that day whose rest day it is, with their mark if any. */
+  restDayEmployees: { employeeId: number; employeeName: string; markId: number | null }[];
+}
+
+function loadHolidays(db: Prisma.TransactionClient, start: Date, end: Date) {
+  return db.holiday.findMany({
+    where: { deletedAt: null, date: { gte: start, lte: end } },
+    include: { restDayWork: { where: { deletedAt: null }, select: { id: true, employeeId: true } } },
+    orderBy: { date: 'asc' },
+  });
+}
+
+const employedDuring = (start: Date, end: Date) => ({
+  deletedAt: null,
+  hiredOn: { lte: end },
+  OR: [{ separatedOn: null }, { separatedOn: { gte: start } }],
+});
+
 /**
  * The live, never-stored payroll for an open cutoff. Finalize calls this
  * inside its own transaction and freezes the result, so the admin finalizes
@@ -38,11 +63,7 @@ export class PayrollDraftService {
     const end = toUtcDay(cutoff.periodEnd);
 
     const employees = await db.employee.findMany({
-      where: {
-        deletedAt: null,
-        hiredOn: { lte: end },
-        OR: [{ separatedOn: null }, { separatedOn: { gte: start } }],
-      },
+      where: employedDuring(start, end),
       include: {
         jobRole: { select: { name: true } },
         branch: { select: { name: true } },
@@ -59,6 +80,15 @@ export class PayrollDraftService {
       },
       orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
     });
+
+    const [holidayRows, multipliers] = await Promise.all([loadHolidays(db, start, end), readMultipliers(db)]);
+    const holidays: HolidayInput[] = holidayRows.map((h) => ({
+      id: h.id,
+      date: day(h.date),
+      name: h.name,
+      type: h.type,
+      isClosed: h.isClosed,
+    }));
 
     const payslips: DraftPayslip[] = employees.map((e) => {
       const recurring = e.recurringDeductions.map((r) => ({
@@ -87,6 +117,11 @@ export class PayrollDraftService {
         recurring,
         skippedRecurringIds: e.skips.map((s) => s.recurringDeductionId),
         vale: e.vale.map((v) => ({ id: v.id, date: day(v.date), branchName: v.branch.name, amount: num(v.amount) })),
+        holidays,
+        restDayWorkHolidayIds: holidayRows
+          .filter((h) => h.restDayWork.some((m) => m.employeeId === e.id))
+          .map((h) => h.id),
+        multipliers,
       });
       const skipByDeduction = new Map(e.skips.map((s) => [s.recurringDeductionId, s.id]));
       return {
@@ -115,5 +150,39 @@ export class PayrollDraftService {
       totals: { employeeCount: payslips.length, netPay: pesos(net), employerShare: pesos(employer) },
       hasBlocking: payslips.some((p) => p.warnings.some((w) => w.blocking)),
     };
+  }
+
+  /** The cutoff's holidays and, for each, who had it as a rest day. */
+  async holidays(periodStart: string, db: Prisma.TransactionClient = this.prisma): Promise<CutoffHoliday[]> {
+    const cutoff = cutoffOf(periodStart);
+    const start = toUtcDay(cutoff.periodStart);
+    const end = toUtcDay(cutoff.periodEnd);
+    const rows = await loadHolidays(db, start, end);
+    if (rows.length === 0) return [];
+    const employees = await db.employee.findMany({
+      where: employedDuring(start, end),
+      select: { id: true, firstName: true, lastName: true, restDays: true, hiredOn: true, separatedOn: true },
+      orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
+    });
+    return rows.map((h) => {
+      const date = day(h.date);
+      const weekday = weekdayOf(date);
+      const markBy = new Map(h.restDayWork.map((m) => [m.employeeId, m.id]));
+      return {
+        id: h.id,
+        date,
+        name: h.name,
+        type: h.type,
+        isClosed: h.isClosed,
+        restDayEmployees: employees
+          .filter(
+            (e) =>
+              e.restDays.includes(weekday) &&
+              day(e.hiredOn) <= date &&
+              (e.separatedOn === null || day(e.separatedOn) >= date),
+          )
+          .map((e) => ({ employeeId: e.id, employeeName: `${e.firstName} ${e.lastName}`, markId: markBy.get(e.id) ?? null })),
+      };
+    });
   }
 }
