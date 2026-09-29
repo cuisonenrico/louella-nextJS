@@ -18,6 +18,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import QueryError from '@/components/QueryError';
 
 const TYPE_LABEL: Record<HolidayType, string> = { REGULAR: 'Regular', SPECIAL: 'Special' };
 
@@ -134,7 +135,7 @@ export function HolidaysCard() {
   const qc = useQueryClient();
   const [year, setYear] = useState(() => Number(manilaToday().slice(0, 4)));
   const [dialog, setDialog] = useState<{ holiday: PayrollHoliday | null } | null>(null);
-  const { data: rows = [], isLoading } = useQuery({
+  const { data: rows = [], isLoading, isError, error, refetch } = useQuery({
     queryKey: ['payroll', 'holidays', year],
     queryFn: () => payrollApi.holidays(year).then((r) => r.data),
   });
@@ -160,6 +161,8 @@ export function HolidaysCard() {
       </div>
       {isLoading ? (
         <p className="py-6 text-center text-sm text-muted-foreground">Loading…</p>
+      ) : isError ? (
+        <QueryError error={error} onRetry={() => refetch()} />
       ) : (
         <HolidaysTable
           rows={rows}

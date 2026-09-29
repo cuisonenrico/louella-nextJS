@@ -15,7 +15,7 @@ const CATEGORIES: Record<PayrollAdjustmentKind, { value: PayrollAdjustmentCatego
   ADDITION: [
     { value: 'OVERTIME', label: 'Overtime' },
     { value: 'BONUS', label: 'Bonus' },
-    { value: 'HOLIDAY', label: 'Holiday pay' },
+    { value: 'HOLIDAY', label: 'Holiday pay (one-off, not automatic)' },
     { value: 'ALLOWANCE', label: 'Allowance' },
     { value: 'OTHER', label: 'Other' },
   ],

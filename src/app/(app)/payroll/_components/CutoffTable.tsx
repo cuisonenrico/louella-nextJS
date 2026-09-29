@@ -213,7 +213,7 @@ export function CutoffTable({ rows, actions }: { rows: SlipRow[]; actions?: Cuto
                 <span>
                   <span className="block font-medium">{row.employeeName}</span>
                   <span className="block text-xs text-muted-foreground">
-                    {row.daysWorked} of {row.workingDays} days · {row.jobRoleName}
+                    {row.daysWorked} · {row.workingDays} scheduled · {row.jobRoleName}
                   </span>
                 </span>
                 <span className={cn('font-semibold tabular-nums', row.netPay < 0 && 'text-destructive')}>{peso(row.netPay)}</span>

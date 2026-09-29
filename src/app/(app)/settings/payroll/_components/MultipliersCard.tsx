@@ -11,6 +11,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
+import QueryError from '@/components/QueryError';
 
 /** Whole percent, 100–500: a multiplier of 1.00–5.00 with two decimals. */
 const PERCENT = /^\d{3}$/;
@@ -68,11 +69,12 @@ function MultipliersForm({ data }: { data: PayrollSettings }) {
 }
 
 export function MultipliersCard() {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['payroll', 'settings'],
     queryFn: () => payrollApi.settings().then((r) => r.data),
   });
 
+  if (isError) return <QueryError error={error} onRetry={() => refetch()} />;
   if (isLoading || !data) return <Skeleton className="h-48 w-full" />;
   return <MultipliersForm data={data} />;
 }

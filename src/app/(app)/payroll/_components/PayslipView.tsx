@@ -69,7 +69,7 @@ export function PayslipView({
         </div>
       </header>
       <p className="mb-3">
-        Days worked: {slip.daysWorked} of {slip.workingDays}
+        Days worked: {slip.daysWorked} · {slip.workingDays} scheduled
         {slip.absenceDays > 0 ? ` (${slip.absenceDays} absent)` : ''}
       </p>
       <Section title="Earnings" lines={earnings} total={(cents(slip.basicPay) + cents(slip.totalAdditions)) / 100} />
