@@ -18,13 +18,14 @@ import { ChangePasswordDto } from './dto/change-password.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/user.decorator';
 import { Public } from '../common/decorators/public.decorator';
+import { throttleLimit } from '../common/config/throttle-limits';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Public()
-  @Throttle({ default: { ttl: 60_000, limit: 5 } })
+  @Throttle({ default: { ttl: 60_000, limit: throttleLimit(5) } })
   @Post('login')
   async login(
     @Body() body: LoginDto,
@@ -43,7 +44,7 @@ export class AuthController {
   // surface — a caller must already hold a valid, unrevoked token — so the
   // limit only needs to bound load, not guessing.
   @Public()
-  @Throttle({ default: { ttl: 60_000, limit: 60 } })
+  @Throttle({ default: { ttl: 60_000, limit: throttleLimit(60) } })
   @Post('refresh')
   async refresh(
     @Body() body: RefreshDto,

@@ -1,4 +1,4 @@
-import { validateEnv } from './env.validation';
+import { isLocalDatabaseUrl, validateEnv } from './env.validation';
 
 const valid = {
   DATABASE_URL: 'postgresql://localhost:5432/db',
@@ -27,5 +27,50 @@ describe('validateEnv', () => {
     expect(() =>
       validateEnv({ ...valid, JWT_REFRESH_SECRET: 'changeme' }),
     ).toThrow(/too weak/);
+  });
+});
+
+describe('E2E_RELAX_THROTTLE guard', () => {
+  it('accepts the flag with a localhost database', () => {
+    expect(() =>
+      validateEnv({
+        ...valid,
+        DATABASE_URL: 'postgresql://u:p@localhost:54329/louella_e2e',
+        E2E_RELAX_THROTTLE: '1',
+      }),
+    ).not.toThrow();
+  });
+
+  it('refuses the flag with a remote database', () => {
+    expect(() =>
+      validateEnv({
+        ...valid,
+        DATABASE_URL:
+          'postgresql://u:p@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true',
+        E2E_RELAX_THROTTLE: '1',
+      }),
+    ).toThrow(/E2E_RELAX_THROTTLE/);
+  });
+
+  it('ignores a remote database when the flag is unset', () => {
+    expect(() =>
+      validateEnv({
+        ...valid,
+        DATABASE_URL: 'postgresql://u:p@db.example.com:5432/postgres',
+      }),
+    ).not.toThrow();
+  });
+});
+
+describe('isLocalDatabaseUrl', () => {
+  it.each([
+    ['postgresql://u:p@localhost:54329/louella_e2e', true],
+    ['postgresql://u:p@127.0.0.1:54329/louella_e2e', true],
+    ['postgresql://u:p@LOCALHOST:54329/louella_e2e', true],
+    ['postgresql://u:p@localhost.evil.com:5432/x', false],
+    ['postgresql://u:p@db.supabase.co:5432/postgres', false],
+    ['not a url', false],
+  ])('%s → %s', (url, expected) => {
+    expect(isLocalDatabaseUrl(url)).toBe(expected);
   });
 });

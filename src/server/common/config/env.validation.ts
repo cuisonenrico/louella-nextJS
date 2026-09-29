@@ -19,6 +19,17 @@ const FORBIDDEN_SECRET_VALUES = new Set([
   'your-secret-here',
 ]);
 
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1']);
+
+/** True only for a postgres URL whose host is exactly localhost or 127.0.0.1. */
+export function isLocalDatabaseUrl(url: string): boolean {
+  try {
+    return LOCAL_HOSTS.has(new URL(url).hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
 export function validateEnv(
   config: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -45,6 +56,18 @@ export function validateEnv(
         `${key} is too weak — use a random secret of at least 16 characters.`,
       );
     }
+  }
+
+  // The e2e suite relaxes rate limits. That must never reach a real
+  // deployment, so the flag is only accepted against a local database.
+  if (
+    config.E2E_RELAX_THROTTLE === '1' &&
+    !isLocalDatabaseUrl(String(config.DATABASE_URL))
+  ) {
+    throw new Error(
+      'E2E_RELAX_THROTTLE is set but DATABASE_URL is not a local database. ' +
+        'The flag is for the e2e suite only.',
+    );
   }
 
   return config;

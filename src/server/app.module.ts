@@ -37,6 +37,7 @@ import { PayrollModule } from './payroll/payroll.module';
 import { BranchCashModule } from './branch-cash/branch-cash.module';
 import { LandingModule } from './landing/landing.module';
 import { validateEnv } from './common/config/env.validation';
+import { throttleLimit } from './common/config/throttle-limits';
 import { CacheNamespaceModule } from './common/cache/cache-namespace.module';
 
 @Module({
@@ -47,7 +48,7 @@ import { CacheNamespaceModule } from './common/cache/cache-namespace.module';
     // No ScheduleModule: serverless functions do not stay alive between
     // requests, so an in-process scheduler would never fire. The autofill jobs
     // it used to drive now run on demand — see AutofillInterceptor below.
-    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 20 }]),
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: throttleLimit(20) }]),
     PrismaModule,
     UsersModule,
     AuthModule,
