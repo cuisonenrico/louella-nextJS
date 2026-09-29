@@ -1,30 +1,39 @@
 import { defineConfig, devices } from '@playwright/test';
+import { assertSafeDatabase, loadE2eEnv } from './e2e/support/env';
 
 /**
- * QA audit harness. Points at the already-running `npm run dev` on :4000
- * rather than starting its own server — the dev server holds the Prisma
- * engine DLL on Windows and two of them cannot coexist.
+ * E2E suite. Runs a production build on :4100 against the throwaway
+ * louella_e2e database (docker-compose.e2e.yml). Never against .env.
+ * Start the database first: npm run e2e:db
  */
+const env = loadE2eEnv();
+assertSafeDatabase(env);
+const CI = !!process.env.CI;
+
 export default defineConfig({
   testDir: './e2e',
-  timeout: 90_000,
+  globalSetup: './e2e/global-setup.ts',
+  fullyParallel: true,
+  workers: CI ? 2 : 4,
+  retries: CI ? 1 : 0,
+  reporter: CI ? [['line'], ['html', { open: 'never' }]] : 'line',
+  outputDir: 'e2e-results',
+  timeout: 60_000,
   expect: { timeout: 10_000 },
-  fullyParallel: false,
-  workers: 1,
-  reporter: [['list'], ['json', { outputFile: 'e2e-results/results.json' }]],
-  outputDir: 'e2e-results/artifacts',
   use: {
-    baseURL: 'http://localhost:4000',
-    trace: 'on',
+    baseURL: 'http://localhost:4100',
+    trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
-    video: 'off',
+    timezoneId: 'Asia/Manila',
   },
-  projects: [
-    { name: 'setup', testMatch: /auth\.setup\.ts/ },
-    {
-      name: 'chromium',
-      use: { ...devices['Desktop Chrome'], storageState: 'e2e/.auth/admin.json' },
-      dependencies: ['setup'],
-    },
-  ],
+  webServer: {
+    command: 'npm run build && npx next start -p 4100',
+    url: 'http://localhost:4100/login',
+    env: { ...(process.env as Record<string, string>), ...env },
+    reuseExistingServer: !CI,
+    timeout: 300_000,
+    stdout: 'ignore',
+    stderr: 'pipe',
+  },
+  projects: [{ name: 'desktop-chromium', use: { ...devices['Desktop Chrome'] } }],
 });

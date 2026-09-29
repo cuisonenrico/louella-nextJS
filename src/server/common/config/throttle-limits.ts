@@ -10,7 +10,7 @@ export const RELAXED_THROTTLE_LIMIT = 10_000;
 
 export function throttleLimit(
   defaultLimit: number,
-  env: NodeJS.ProcessEnv = process.env,
+  env: Record<string, string | undefined> = process.env,
 ): number {
   return env.E2E_RELAX_THROTTLE === '1' ? RELAXED_THROTTLE_LIMIT : defaultLimit;
 }
