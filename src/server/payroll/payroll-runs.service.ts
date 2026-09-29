@@ -7,7 +7,7 @@ import { num } from '../common/utils/decimal.util';
 import { toUtcDay } from '../common/utils/date-range.util';
 import { recordChanges } from '../common/utils/audit.util';
 import { PayrollDraftService } from './payroll-draft.service';
-import { day, lockCutoff } from './payroll-lock.util';
+import { day, lockCutoff, lockEmployeeInputs } from './payroll-lock.util';
 
 const RUN_INCLUDE = {
   payslips: {
@@ -87,6 +87,8 @@ export class PayrollRunsService {
         // Lock first: absences/adjustments/skips take the same lock, so none
         // can land between the recompute below and the insert.
         await lockCutoff(tx, periodStart);
+        // Rates, schedules and deductions cannot change while the draft is read.
+        await lockEmployeeInputs(tx, 'shared');
         const existing = await tx.payrollRun.findFirst({
           where: { periodStart: toUtcDay(periodStart), status: { not: 'VOIDED' } },
           select: { id: true },
@@ -113,38 +115,43 @@ export class PayrollRunsService {
           },
         });
 
-        for (const p of draft.payslips) {
-          await tx.payslip.create({
-            data: {
-              runId: run.id,
-              employeeId: p.employeeId,
-              employeeName: p.employeeName,
-              jobRoleName: p.jobRoleName,
-              branchName: p.branchName,
-              workingDays: p.workingDays,
-              absenceDays: p.absenceDays,
-              daysWorked: p.daysWorked,
-              basicPay: p.basicPay,
-              holidayPay: p.holidayPay,
-              totalAdditions: p.totalAdditions,
-              totalDeductions: p.totalDeductions,
-              netPay: p.netPay,
-              totalEmployerShare: p.totalEmployerShare,
-              lines: {
-                create: p.lines.map((l, i) => ({
-                  sortOrder: i,
-                  type: l.type,
-                  label: l.label,
-                  quantity: l.quantity,
-                  rate: l.rate,
-                  amount: l.amount,
-                  sourceType: l.sourceType,
-                  sourceId: l.sourceId,
-                })),
-              },
-            },
-          });
-        }
+        // Two inserts for the whole run, not one per employee: the payslips,
+        // then every line keyed to its payslip.
+        const slips = await tx.payslip.createManyAndReturn({
+          data: draft.payslips.map((p) => ({
+            runId: run.id,
+            employeeId: p.employeeId,
+            employeeName: p.employeeName,
+            jobRoleName: p.jobRoleName,
+            branchName: p.branchName,
+            workingDays: p.workingDays,
+            absenceDays: p.absenceDays,
+            daysWorked: p.daysWorked,
+            basicPay: p.basicPay,
+            holidayPay: p.holidayPay,
+            totalAdditions: p.totalAdditions,
+            totalDeductions: p.totalDeductions,
+            netPay: p.netPay,
+            totalEmployerShare: p.totalEmployerShare,
+          })),
+          select: { id: true, employeeId: true },
+        });
+        const slipIdByEmployee = new Map(slips.map((s) => [s.employeeId, s.id]));
+        await tx.payslipLine.createMany({
+          data: draft.payslips.flatMap((p) =>
+            p.lines.map((l, i) => ({
+              payslipId: slipIdByEmployee.get(p.employeeId)!,
+              sortOrder: i,
+              type: l.type,
+              label: l.label,
+              quantity: l.quantity,
+              rate: l.rate,
+              amount: l.amount,
+              sourceType: l.sourceType,
+              sourceId: l.sourceId,
+            })),
+          ),
+        });
 
         await recordChanges(tx, [{ entity: 'PayrollRun', entityId: run.id, before: null, after: run }], userId);
         return toRunView(await tx.payrollRun.findUniqueOrThrow({ where: { id: run.id }, include: RUN_INCLUDE }));

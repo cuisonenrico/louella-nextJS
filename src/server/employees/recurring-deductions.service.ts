@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { num } from '../common/utils/decimal.util';
 import { recordChanges } from '../common/utils/audit.util';
+import { lockEmployeeInputs } from '../payroll/payroll-lock.util';
 import { EmployeesService } from './employees.service';
 import { CreateRecurringDeductionDto, UpdateRecurringDeductionDto } from './dto/recurring-deduction.dto';
 
@@ -37,6 +38,7 @@ export class RecurringDeductionsService {
 
   create(employeeId: number, dto: CreateRecurringDeductionDto, userId: number) {
     return this.prisma.$transaction(async (tx) => {
+      await lockEmployeeInputs(tx, 'exclusive');
       await this.employees.requireEmployee(employeeId, tx);
       const created = await tx.recurringDeduction.create({
         data: {
@@ -53,6 +55,7 @@ export class RecurringDeductionsService {
 
   update(employeeId: number, id: number, dto: UpdateRecurringDeductionDto, userId: number) {
     return this.prisma.$transaction(async (tx) => {
+      await lockEmployeeInputs(tx, 'exclusive');
       const before = await tx.recurringDeduction.findFirst({ where: { id, employeeId } });
       if (!before) throw new NotFoundException('Recurring deduction not found');
       const after = await tx.recurringDeduction.update({

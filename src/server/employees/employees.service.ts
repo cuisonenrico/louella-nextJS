@@ -1,11 +1,17 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { manilaToday } from '@/lib/manilaDate';
+import { addDays, manilaToday } from '@/lib/manilaDate';
+import { weekdayOf } from '@/lib/payroll/cutoff';
 import { PrismaService } from '../prisma/prisma.service';
 import { num } from '../common/utils/decimal.util';
 import { toUtcDay } from '../common/utils/date-range.util';
 import { recordChanges } from '../common/utils/audit.util';
-import { day, employeeLockedThrough } from '../payroll/payroll-lock.util';
+import {
+  assertNoFinalizedRunBetween,
+  day,
+  employeeLockedThrough,
+  lockEmployeeInputs,
+} from '../payroll/payroll-lock.util';
 import { CreateEmployeeDto, CreateRateDto, ListEmployeesQuery, UpdateEmployeeDto } from './dto/employee.dto';
 import { assertValeWithinEmployment } from './vale-window.util';
 
@@ -102,6 +108,7 @@ export class EmployeesService {
 
   update(id: number, dto: UpdateEmployeeDto, userId: number) {
     return this.prisma.$transaction(async (tx) => {
+      await lockEmployeeInputs(tx, 'exclusive');
       const before = await this.requireEmployee(id, tx);
       if (dto.jobRoleId !== undefined && dto.jobRoleId !== before.jobRoleId) {
         await this.assertActiveJobRole(tx, dto.jobRoleId);
@@ -110,12 +117,19 @@ export class EmployeesService {
         throw new BadRequestException('The hire date cannot be after the separation date');
       }
       if (dto.hiredOn !== undefined && dto.hiredOn !== day(before.hiredOn)) {
+        // Days between the old and new hire date change from paid to unpaid
+        // (or back); a finalized cutoff among them has already been paid.
+        const [earlier, later] = [dto.hiredOn, day(before.hiredOn)].sort();
+        await assertNoFinalizedRunBetween(tx, earlier, addDays(later, -1), 'Moving the hire date');
         await assertValeWithinEmployment(
           tx,
           id,
           dto.hiredOn,
           before.separatedOn ? day(before.separatedOn) : null,
         );
+      }
+      if (dto.restDays !== undefined) {
+        await this.assertNoAbsenceOnNewRestDays(tx, id, before.restDays, normalizeRestDays(dto.restDays));
       }
       const after = await tx.employee.update({
         where: { id },
@@ -141,9 +155,19 @@ export class EmployeesService {
 
   setSeparation(id: number, separatedOn: string | null, userId: number) {
     return this.prisma.$transaction(async (tx) => {
+      await lockEmployeeInputs(tx, 'exclusive');
       const before = await this.requireEmployee(id, tx);
       if (separatedOn !== null && separatedOn < day(before.hiredOn)) {
         throw new BadRequestException('The separation date cannot be before the hire date');
+      }
+      const previous = before.separatedOn ? day(before.separatedOn) : null;
+      if (separatedOn !== previous) {
+        // Employed days are those on or before the separation date; the days
+        // after the earlier of the two dates change status.
+        const bounds = [separatedOn, previous].filter((d): d is string => d !== null).sort();
+        const from = addDays(bounds[0], 1);
+        const to = separatedOn !== null && previous !== null ? bounds[1] : null;
+        await assertNoFinalizedRunBetween(tx, from, to, 'Changing the separation date');
       }
       await assertValeWithinEmployment(tx, id, day(before.hiredOn), separatedOn);
       const after = await tx.employee.update({
@@ -167,6 +191,7 @@ export class EmployeesService {
 
   addRate(id: number, dto: CreateRateDto, userId: number) {
     return this.prisma.$transaction(async (tx) => {
+      await lockEmployeeInputs(tx, 'exclusive');
       await this.requireEmployee(id, tx);
       await this.assertRateDateOpen(tx, id, dto.effectiveOn);
       const created = await tx.employeeRate.create({
@@ -179,6 +204,7 @@ export class EmployeesService {
 
   removeRate(id: number, rateId: number, userId: number) {
     return this.prisma.$transaction(async (tx) => {
+      await lockEmployeeInputs(tx, 'exclusive');
       const rate = await tx.employeeRate.findFirst({ where: { id: rateId, employeeId: id, deletedAt: null } });
       if (!rate) throw new NotFoundException('Rate not found');
       await this.assertRateDateOpen(tx, id, day(rate.effectiveOn));
@@ -186,6 +212,38 @@ export class EmployeesService {
       await recordChanges(tx, [{ entity: 'EmployeeRate', entityId: rateId, before: rate, after, action: 'delete' }], userId);
       return { id: rateId };
     });
+  }
+
+  /**
+   * Rest days are not dated history: a change applies to every open cutoff.
+   * An absence recorded on a day that becomes a rest day would silently stop
+   * counting, so the change is refused until it is removed. Finalized days
+   * are frozen in their runs and not checked.
+   */
+  private async assertNoAbsenceOnNewRestDays(
+    tx: Prisma.TransactionClient,
+    employeeId: number,
+    oldRestDays: number[],
+    newRestDays: number[],
+  ) {
+    const added = newRestDays.filter((d) => !oldRestDays.includes(d));
+    if (added.length === 0) return;
+    const lockedThrough = await employeeLockedThrough(tx, employeeId);
+    const absences = await tx.absence.findMany({
+      where: {
+        employeeId,
+        deletedAt: null,
+        ...(lockedThrough !== null ? { date: { gt: toUtcDay(lockedThrough) } } : {}),
+      },
+      select: { date: true },
+      orderBy: { date: 'asc' },
+    });
+    const clashing = absences.map((a) => day(a.date)).filter((d) => added.includes(weekdayOf(d)));
+    if (clashing.length > 0) {
+      throw new ConflictException(
+        `This employee has absences on ${clashing.join(', ')}, which would become rest days and stop counting. Remove those absences first.`,
+      );
+    }
   }
 
   private async assertActiveJobRole(tx: Prisma.TransactionClient, jobRoleId: number) {

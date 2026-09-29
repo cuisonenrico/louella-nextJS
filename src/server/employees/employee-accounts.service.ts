@@ -25,7 +25,15 @@ export class EmployeeAccountsService {
       { email: dto.email, password: dto.password, role: dto.role, branchId: dto.branchId, mustChangePassword: true },
       adminId,
     );
-    await this.attach(employeeId, user.id, adminId);
+    try {
+      await this.attach(employeeId, user.id, adminId);
+    } catch (err) {
+      // The login was created by its own service and transaction. If the link
+      // fails (another admin linked one meanwhile), disable it rather than
+      // leave a working login attached to nobody.
+      await this.users.setActive(user.id, false, adminId);
+      throw err;
+    }
     return { userId: user.id, email: user.email, role: user.role, isActive: user.isActive };
   }
 
@@ -53,12 +61,23 @@ export class EmployeeAccountsService {
     return { userId: employee.userId, email: employee.user.email, role: employee.user.role, isActive: false };
   }
 
-  private async attach(employeeId: number, userId: number, adminId: number) {
-    await this.prisma.employee.update({ where: { id: employeeId }, data: { userId } });
-    await recordChanges(
-      this.prisma,
-      [{ entity: 'Employee', entityId: employeeId, before: { userId: null }, after: { userId }, action: 'update' }],
-      adminId,
-    );
+  /**
+   * Link in one transaction, and only if the employee still has no login: two
+   * admins linking at once used to both pass the check above and the second
+   * silently replaced the first.
+   */
+  private attach(employeeId: number, userId: number, adminId: number) {
+    return this.prisma.$transaction(async (tx) => {
+      const linked = await tx.employee.updateMany({
+        where: { id: employeeId, userId: null, deletedAt: null },
+        data: { userId },
+      });
+      if (linked.count !== 1) throw new ConflictException('This employee already has a login');
+      await recordChanges(
+        tx,
+        [{ entity: 'Employee', entityId: employeeId, before: { userId: null }, after: { userId }, action: 'update' }],
+        adminId,
+      );
+    });
   }
 }

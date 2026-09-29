@@ -16,6 +16,7 @@ describe('RecurringDeductionsService', () => {
       },
       auditEvent: { createMany: jest.fn() },
       $transaction: jest.fn((fn: (tx: unknown) => unknown) => fn(prisma)),
+      $executeRaw: jest.fn().mockResolvedValue(1),
     };
     employees = { requireEmployee: jest.fn().mockResolvedValue({ id: 1 }) };
     service = new RecurringDeductionsService(prisma as never, employees as never);

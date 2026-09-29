@@ -90,7 +90,8 @@ export type PayslipWarning =
   | { code: 'MISSING_RATE'; blocking: true; dates: string[] }
   | { code: 'IGNORED_REST_DAY_MARK'; blocking: false; dates: string[] }
   | { code: 'NEGATIVE_NET'; blocking: false }
-  | { code: 'NO_DAYS_WORKED'; blocking: false };
+  | { code: 'NO_DAYS_WORKED'; blocking: false }
+  | { code: 'PARTIAL_CUTOFF'; blocking: false; start: string; end: string };
 
 export interface ComputedPayslip {
   employeeId: number;
@@ -141,16 +142,17 @@ function rateOn(rates: RateInput[], date: string): RateInput | null {
 export function computePayslip(input: PayslipInput): ComputedPayslip {
   const { employee, cutoff } = input;
 
-  // 1–3. Working days, absences, days worked. A closed holiday is a scheduled
-  // day nobody worked, so it counts like an absence.
+  // 1–3. Working days, absences, days worked. A closed holiday is not a
+  // working day at all: nobody worked it, and it is not the employee's
+  // absence (the payslip used to count it as one).
   const window = employmentWindow(employee, cutoff);
   const restDays = new Set(employee.restDays);
   const isRestDay = (d: string) => restDays.has(weekdayOf(d));
   const holidayOn = new Map(input.holidays.map((h) => [h.date, h]));
   const allDates = window ? eachDate(window.start, window.end) : [];
-  const workingDates = allDates.filter((d) => !isRestDay(d));
+  const workingDates = allDates.filter((d) => !isRestDay(d) && !holidayOn.get(d)?.isClosed);
   const absent = new Set(input.absences);
-  const worked = workingDates.filter((d) => !absent.has(d) && !holidayOn.get(d)?.isClosed);
+  const worked = workingDates.filter((d) => !absent.has(d));
   const workedSet = new Set(worked);
 
   // Holidays: worked → the type's multiplier; rest day not worked → 1.00;
@@ -309,6 +311,15 @@ export function computePayslip(input: PayslipInput): ComputedPayslip {
   if (ignoredMarks.length > 0) warnings.push({ code: 'IGNORED_REST_DAY_MARK', blocking: false, dates: ignoredMarks });
   if (net < 0) warnings.push({ code: 'NEGATIVE_NET', blocking: false });
   if (daysWorked === 0 && recurringApplied > 0) warnings.push({ code: 'NO_DAYS_WORKED', blocking: false });
+  // Monthly contributions are taken in full; flag a partial cutoff (a hire or
+  // separation inside it) so the admin can decide whether to skip them.
+  else if (
+    recurringApplied > 0 &&
+    window &&
+    (window.start > cutoff.periodStart || window.end < cutoff.periodEnd)
+  ) {
+    warnings.push({ code: 'PARTIAL_CUTOFF', blocking: false, start: window.start, end: window.end });
+  }
 
   return {
     employeeId: employee.id,

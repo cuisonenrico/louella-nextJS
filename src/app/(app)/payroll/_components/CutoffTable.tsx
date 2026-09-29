@@ -53,6 +53,14 @@ function WarningBadges({ row }: { row: SlipRow }) {
           <Badge key={w.code} variant="destructive">Net pay below zero</Badge>
         ) : w.code === 'IGNORED_REST_DAY_MARK' ? (
           <Badge key={w.code} variant="secondary">Rest-day mark ignored ({w.dates.length})</Badge>
+        ) : w.code === 'PARTIAL_CUTOFF' ? (
+          <Badge
+            key={w.code}
+            variant="secondary"
+            title={`Employed ${w.start} to ${w.end} only, but full monthly deductions apply. Skip them if they should not.`}
+          >
+            Partial cutoff · full deductions
+          </Badge>
         ) : (
           <Badge key={w.code} variant="secondary">No days worked</Badge>
         ),

@@ -103,6 +103,9 @@ export class PayrollInputsService {
         where: { id: dto.recurringDeductionId, employeeId: dto.employeeId },
       });
       if (!deduction) throw new NotFoundException('Recurring deduction not found for this employee');
+      if (!deduction.isActive) {
+        throw new BadRequestException('This deduction is inactive, so there is nothing to skip');
+      }
       const created = await tx.recurringDeductionSkip.create({
         data: {
           employeeId: dto.employeeId,

@@ -67,7 +67,11 @@ describe('PayrollRunsService', () => {
         create: jest.fn().mockResolvedValue(runRow()),
         update: jest.fn().mockImplementation(({ data }) => Promise.resolve(runRow(data))),
       },
-      payslip: { create: jest.fn().mockResolvedValue({ id: 20 }), findUnique: jest.fn() },
+      payslip: {
+        createManyAndReturn: jest.fn().mockResolvedValue([{ id: 20, employeeId: 1 }]),
+        findUnique: jest.fn(),
+      },
+      payslipLine: { createMany: jest.fn() },
       auditEvent: { createMany: jest.fn() },
       $transaction: jest.fn((fn: (tx: unknown) => unknown) => fn(prisma)),
     };
@@ -81,6 +85,13 @@ describe('PayrollRunsService', () => {
       expect(prisma.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(
         prisma.payrollRun.findFirst.mock.invocationCallOrder[0],
       );
+    });
+
+    it('holds employee inputs (rates, schedules, deductions) shared while it reads the draft', async () => {
+      await service.finalize('2026-09-01', 7);
+      const statements = prisma.$executeRaw.mock.calls.map((c: [TemplateStringsArray]) => c[0].join('?'));
+      expect(statements[1]).toContain('pg_advisory_xact_lock_shared');
+      expect(prisma.$executeRaw.mock.invocationCallOrder[1]).toBeLessThan(drafts.build.mock.invocationCallOrder[0]);
     });
 
     it('refuses a cutoff whose last day has not come yet (Manila)', async () => {
@@ -122,14 +133,15 @@ describe('PayrollRunsService', () => {
           finalizedById: 7,
         },
       });
-      const payslip = prisma.payslip.create.mock.calls[0][0].data;
+      const [payslip] = prisma.payslip.createManyAndReturn.mock.calls[0][0].data;
       expect(payslip).toMatchObject({ runId: 3, employeeId: 1, employeeName: 'Ana Cruz', netPay: 8950, holidayPay: 1200, daysWorked: 12 });
-      expect(payslip.lines.create.map((l: { sortOrder: number; type: string }) => [l.sortOrder, l.type])).toEqual([
-        [0, 'BASIC'],
-        [1, 'HOLIDAY'],
-        [2, 'ADDITION'],
+      const lines = prisma.payslipLine.createMany.mock.calls[0][0].data;
+      expect(lines.map((l: { payslipId: number; sortOrder: number; type: string }) => [l.payslipId, l.sortOrder, l.type])).toEqual([
+        [20, 0, 'BASIC'],
+        [20, 1, 'HOLIDAY'],
+        [20, 2, 'ADDITION'],
       ]);
-      expect(payslip.lines.create[1]).toMatchObject({ type: 'HOLIDAY', quantity: 2, rate: 600, amount: 1200, sourceType: 'Holiday', sourceId: 90 });
+      expect(lines[1]).toMatchObject({ type: 'HOLIDAY', quantity: 2, rate: 600, amount: 1200, sourceType: 'Holiday', sourceId: 90 });
       expect(prisma.auditEvent.createMany).toHaveBeenCalled();
     });
   });

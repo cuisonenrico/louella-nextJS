@@ -932,7 +932,9 @@ export type PayslipWarning =
   | { code: 'MISSING_RATE'; blocking: true; dates: string[] }
   | { code: 'NEGATIVE_NET'; blocking: false }
   | { code: 'NO_DAYS_WORKED'; blocking: false }
-  | { code: 'IGNORED_REST_DAY_MARK'; blocking: false; dates: string[] };
+  | { code: 'IGNORED_REST_DAY_MARK'; blocking: false; dates: string[] }
+  /** Employed for only part of a 1–15 cutoff, yet the full monthly deductions apply. */
+  | { code: 'PARTIAL_CUTOFF'; blocking: false; start: string; end: string };
 
 export interface DraftPayslip {
   employeeId: number;

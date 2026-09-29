@@ -27,7 +27,7 @@ describe('PayrollInputsService', () => {
         create: jest.fn().mockResolvedValue({ id: 5, employeeId: 1, periodStart: at('2026-09-01'), kind: 'ADDITION', category: 'BONUS', description: 'Mid-year bonus', amount: 1000 }),
         update: jest.fn().mockResolvedValue({ id: 5 }),
       },
-      recurringDeduction: { findFirst: jest.fn().mockResolvedValue({ id: 31, employeeId: 1 }) },
+      recurringDeduction: { findFirst: jest.fn().mockResolvedValue({ id: 31, employeeId: 1, isActive: true }) },
       recurringDeductionSkip: {
         findFirst: jest.fn().mockResolvedValue({ id: 77, periodStart: at('2026-09-01'), deletedAt: null }),
         create: jest.fn().mockResolvedValue({ id: 77 }),
@@ -78,6 +78,14 @@ describe('PayrollInputsService', () => {
     expect(prisma.recurringDeductionSkip.create).toHaveBeenCalledWith({
       data: { employeeId: 1, recurringDeductionId: 31, periodStart: at('2026-09-01'), createdById: 7 },
     });
+  });
+
+  it('refuses to skip an inactive deduction', async () => {
+    prisma.recurringDeduction.findFirst.mockResolvedValue({ id: 31, employeeId: 1, isActive: false });
+    await expect(service.createSkip('2026-09-01', { employeeId: 1, recurringDeductionId: 31 }, 7)).rejects.toThrow(
+      'inactive',
+    );
+    expect(prisma.recurringDeductionSkip.create).not.toHaveBeenCalled();
   });
 
   it('refuses to skip another employee’s deduction', async () => {

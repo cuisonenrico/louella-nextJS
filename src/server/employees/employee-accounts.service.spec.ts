@@ -9,8 +9,13 @@ describe('EmployeeAccountsService', () => {
 
   beforeEach(() => {
     prisma = {
-      employee: { findFirst: jest.fn().mockResolvedValue(null), update: jest.fn() },
+      employee: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        update: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
       auditEvent: { createMany: jest.fn() },
+      $transaction: jest.fn((fn: (tx: unknown) => unknown) => fn(prisma)),
     };
     users = {
       createByAdmin: jest.fn().mockResolvedValue({ id: 40, email: 'ana@louella.ph', role: 'MANAGER', isActive: true }),
@@ -27,7 +32,10 @@ describe('EmployeeAccountsService', () => {
       { email: 'ana@louella.ph', password: 'temporary1', role: 'MANAGER', branchId: 3, mustChangePassword: true },
       7,
     );
-    expect(prisma.employee.update).toHaveBeenCalledWith({ where: { id: 1 }, data: { userId: 40 } });
+    expect(prisma.employee.updateMany).toHaveBeenCalledWith({
+      where: { id: 1, userId: null, deletedAt: null },
+      data: { userId: 40 },
+    });
     expect(account).toEqual({ userId: 40, email: 'ana@louella.ph', role: 'MANAGER', isActive: true });
   });
 
@@ -39,7 +47,19 @@ describe('EmployeeAccountsService', () => {
 
   it('links an existing login that no other employee holds', async () => {
     await service.link(1, 41, 7);
-    expect(prisma.employee.update).toHaveBeenCalledWith({ where: { id: 1 }, data: { userId: 41 } });
+    expect(prisma.employee.updateMany).toHaveBeenCalledWith({
+      where: { id: 1, userId: null, deletedAt: null },
+      data: { userId: 41 },
+    });
+  });
+
+  it('disables a just-created login if another admin linked one first', async () => {
+    prisma.employee.updateMany.mockResolvedValue({ count: 0 });
+    await expect(
+      service.create(1, { email: 'ana@louella.ph', password: 'temporary1', role: 'MANAGER' }, 7),
+    ).rejects.toThrow(ConflictException);
+    expect(users.setActive).toHaveBeenCalledWith(40, false, 7);
+    expect(prisma.auditEvent.createMany).not.toHaveBeenCalled();
   });
 
   it('refuses a login already linked elsewhere', async () => {

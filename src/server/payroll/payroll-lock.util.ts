@@ -1,5 +1,6 @@
 import { ConflictException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { formatCutoff } from '@/lib/payroll/cutoff';
 import { toUtcDay } from '../common/utils/date-range.util';
 
 type Tx = Prisma.TransactionClient;
@@ -21,6 +22,49 @@ export function day(value: Date): string {
 
 export async function lockCutoff(tx: Tx, periodStart: string): Promise<void> {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(${PAYROLL_LOCK_NS}::int, hashtext(${periodStart}))`;
+}
+
+/**
+ * Employee records that feed every cutoff at once — rates, rest days, hire
+ * and separation dates, recurring deductions — are not dated to one cutoff,
+ * so the cutoff lock cannot guard them. Finalize takes this lock shared (so
+ * finalizes never wait on each other) and their writers take it exclusive:
+ * a rate saved while finalize reads the draft now waits for it, instead of
+ * landing inside the period just frozen.
+ */
+export async function lockEmployeeInputs(tx: Tx, mode: 'shared' | 'exclusive'): Promise<void> {
+  if (mode === 'shared') {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock_shared(${PAYROLL_LOCK_NS}::int, hashtext('employee-inputs'))`;
+  } else {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(${PAYROLL_LOCK_NS}::int, hashtext('employee-inputs'))`;
+  }
+}
+
+/**
+ * Throws if a finalized (non-voided) run covers any day from `from` to `to`
+ * (open-ended when null). Used before a change that would alter pay on those
+ * days — a hire or separation date moving across them.
+ */
+export async function assertNoFinalizedRunBetween(
+  tx: Tx,
+  from: string,
+  to: string | null,
+  what: string,
+): Promise<void> {
+  if (to !== null && to < from) return;
+  const run = await tx.payrollRun.findFirst({
+    where: {
+      status: { not: 'VOIDED' },
+      periodEnd: { gte: toUtcDay(from) },
+      ...(to !== null ? { periodStart: { lte: toUtcDay(to) } } : {}),
+    },
+    orderBy: { periodStart: 'asc' },
+    select: { periodStart: true, periodEnd: true },
+  });
+  if (run) {
+    const cutoff = formatCutoff({ periodStart: day(run.periodStart), periodEnd: day(run.periodEnd) });
+    throw new ConflictException(`${what} would change pay for ${cutoff}, which is finalized. Void that payroll run first.`);
+  }
 }
 
 /** Locks the cutoff and throws if it already has a non-voided run. */

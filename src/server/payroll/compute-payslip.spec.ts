@@ -130,6 +130,25 @@ describe('computePayslip', () => {
     ]);
   });
 
+  it('warns when full monthly deductions fall on a partly employed cutoff', () => {
+    const hired = computePayslip(
+      input({ employee: { id: 1, restDays: [0], hiredOn: '2026-09-14', separatedOn: null }, recurring: [SSS] }),
+    );
+    expect(hired.totalDeductions).toBe(450); // still taken in full
+    expect(hired.warnings).toEqual([{ code: 'PARTIAL_CUTOFF', blocking: false, start: '2026-09-14', end: '2026-09-15' }]);
+
+    expect(computePayslip(input({ recurring: [SSS] })).warnings).toEqual([]);
+    // Nothing deducted, nothing to flag.
+    const skipped = computePayslip(
+      input({
+        employee: { id: 1, restDays: [0], hiredOn: '2026-09-14', separatedOn: null },
+        recurring: [SSS],
+        skippedRecurringIds: [SSS.id],
+      }),
+    );
+    expect(skipped.warnings).toEqual([]);
+  });
+
   it('warns when recurring deductions fall on a cutoff with no days worked', () => {
     const allAbsent = ['01', '02', '03', '04', '05', '07', '08', '09', '10', '11', '12', '14', '15'].map((d) => `2026-09-${d}`);
     const slip = computePayslip(input({ absences: allAbsent, recurring: [SSS] }));
@@ -216,10 +235,11 @@ describe('holidays', () => {
     expect(slip).toMatchObject({ absenceDays: 1, daysWorked: 12, basicPay: 7200, holidayPay: 0, netPay: 7200 });
   });
 
-  it('pays nothing for a closed holiday on a scheduled day, and counts it absent', () => {
+  it('pays nothing for a closed holiday on a scheduled day, and does not call it an absence', () => {
     const slip = computePayslip(input({ holidays: [regular('2026-09-08', { isClosed: true })] }));
     expect(holidayLines(slip)).toEqual([]);
-    expect(slip).toMatchObject({ absenceDays: 1, daysWorked: 12, netPay: 7200 });
+    // The bakery was closed: one fewer working day, not an absent one.
+    expect(slip).toMatchObject({ workingDays: 12, absenceDays: 0, daysWorked: 12, netPay: 7200 });
   });
 
   it('pays 100% for a holiday on an unmarked rest day, either type', () => {
