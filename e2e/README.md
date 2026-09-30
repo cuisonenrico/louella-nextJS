@@ -94,13 +94,15 @@ uses its own material; and **a payroll run covers everyone in the cutoff**, so `
 | **`GET /branches` is an open catalog read**; only *data* is branch-scoped (`BranchGuard`). | Test scoping with a data route (own branch 200, other branch 403), not by counting branches in the picker. |
 | **`RouteGuard` sends a denied page to the user's first permitted route**; `/no-access` is only for accounts with none. | Assert the redirect target, not `/no-access`. |
 | **Autofill can't be asserted deterministically**: it keys off the newest inventory row across all branches with a 5-minute memo. | Test the explicit *Initialize* button instead. |
+| **Autofill can also interfere with a test.** With no inventory row dated today anywhere, the first sheet read tops up EVERY branch with an uncounted placeholder for EVERY product ("39 products have no leftover count yet"), so a branch-cash day the test just counted becomes unverifiable — intermittently, depending on which test read a sheet first. | The base seed writes one row for today (`seed/base.ts`), so autofill sees the day as current for the whole run. |
+| **React hydrates the login form after you type into it** and resets the controlled inputs; on WebKit under load the Email box came back empty and the browser's `required` check silently swallowed the click (18% of runs in a concurrent stress). | `LoginPage.login()` counts an attempt only once the page left `/login` or the error showed, and repeats fill + click otherwise. Use it; don't fill the form by hand. |
 
-## A second production bug this suite found (open): managers can't send transfers
+## A second production bug this suite found (fixed): managers couldn't send transfers
 
-The adjustments dialog finds a transfer's destination row by reading the *other* branch's daily sheet, which
-`BranchGuard` answers 403 for a branch-confined manager — so a manager cannot send from the UI (the server intends
-them to). `full/transfers.spec.ts` drives the sender as admin and has a `test.fail` for the manager case; when
-the bug is fixed that test goes red — remove its `test.fail`. See spec §6.7a.
+The adjustments dialog used to find a transfer's destination row by reading the *other* branch's daily sheet, which
+`BranchGuard` answers 403 for a branch-confined manager — so a manager could not send from the UI (the server intends
+them to). A transfer now names the destination **branch** and the server resolves (or opens) that branch's row; see
+spec §6.7a. `full/transfers.spec.ts` runs both sides as the branches' real managers.
 
 ## A production bug this suite found (fixed)
 

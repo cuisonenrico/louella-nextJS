@@ -411,24 +411,32 @@ text, no response ≥ 500 from `/api/v1`, and the page's main heading is visible
 ### 6.7 Transfers — `full/transfers.spec.ts` (@stress)
 
 Two isolated branches that track the same product today (`twoBranches()`): the
-sender starts with stock delivered; the receiver has an empty row. Rows are set
-up through the API. **The sending side is driven as admin, the receiving side
-as that branch's real manager**, each on their own `/inventory/details` sheet
-(the adjustments dialog to send, the "Transfers awaiting confirmation" card to
-answer).
+sender starts with stock delivered; the receiver has an empty row (or none, for
+the "not opened yet" case). Rows are set up through the API. **Both sides are
+the branches' real managers**, each on their own `/inventory/details` sheet (the
+adjustments dialog to send, the "Transfers awaiting confirmation" card to
+answer). A transfer names the destination **branch**; the server resolves (or
+opens) that branch's row.
 
 - **Send → accept.** Sending books the sender's PULL_OUT at once (its Total
   Stock drops by the quantity, the card reads *Sent*); the receiver has **no**
   PULL_IN yet and sees *Incoming* with unchanged stock. Accepting books the
   PULL_IN; both legs read ACCEPTED, are linked to each other and carry the same
   quantity.
+- **Receiver has not opened the day.** The transfer still goes through: the
+  server opens an empty, uncounted placeholder for the receiver (same as
+  Initialize), nothing is credited, and the receiver then sees and accepts it
+  like any other.
 - **Send → reject.** The receiver rejects: the sender's stock returns to what it
   was, the pull-out is soft-deleted (kept on record), and the receiver is never
   credited.
 - **Cap.** With stock 20 and a counted leftover of 15, only 5 are available:
-  sending 6 is a 400 that says "only 5 are available" and books nothing; sending
-  5 goes through as a PENDING PULL_OUT. The expected limit is computed from the
-  rule (`on hand − rejects − counted leftover`).
+  sending 6 is a 400 that says "only 5 are available", books nothing, and does
+  **not** open the receiving branch's day as a side effect; sending 5 goes
+  through as a PENDING PULL_OUT. The expected limit is computed from the rule
+  (`on hand − rejects − counted leftover`).
+- **The destination is named exactly one way:** neither → 400; both a row and a
+  branch → 400; the sender's own branch → 400; an unknown branch → 404.
 - **Rules at API level, with real managers:** only the receiving branch may
   answer (the sender's manager gets 403 on accept and reject); an accepted
   transfer cannot be edited or deleted from either leg (409, checked as admin so
@@ -436,19 +444,26 @@ answer).
   transfer back, which the original sender accepts, and the balances follow
   `stock − sent + returned` / `sent − returned`.
 
-### 6.7a A second production bug found here (open)
+### 6.7a A second production bug found here (fixed)
 
-A branch manager **cannot send a transfer from the UI**. The server intends it
+A branch manager could **not send a transfer from the UI**. The server intends it
 (`transfer()`: "a branch manager pushes their own stock out"), but the
-adjustments dialog finds the destination row by reading the *other* branch's
+adjustments dialog found the destination row by reading the *other* branch's
 daily sheet — `GET /inventory/branch/<receiver>/date` — which `BranchGuard`
-answers 403 for a branch-confined manager; the dialog then wrongly says
+answers 403 for a branch-confined manager; the dialog then wrongly said
 "Destination branch has no inventory record". Likely exposed by the same Express 5
-fix as §6.2a. It needs a design decision (a destination-lookup route open to
-transfer senders, or resolving the destination server-side from `toBranchId`),
-so it is documented, not fixed: `transfers.spec.ts` has a `test.fail` that
-asserts the manager's lookup returns 200 and passes while the bug exists — it
-turns red the moment it is fixed, at which point remove `test.fail`.
+fix as §6.2a.
+
+Fixed by having the transfer name the destination **branch**
+(`POST /inventory-adjustments/transfer { fromInventoryId, toBranchId, value }`;
+`toInventoryId` still works for callers that have it — exactly one of the two).
+The server validates the branch (exists, active, not the sender's), locks both
+stock chains in one call (sorted, so opposite-direction transfers cannot
+deadlock), applies the cap first, and only then finds — or opens, as an empty
+uncounted placeholder, or restores empty if soft-deleted — the receiver's row, all
+in one transaction, so a refused transfer leaves nothing behind. Tests:
+`inventory-adjustments.transfer-destination.spec.ts` (11), `create-transfer.dto.spec.ts` (5)
+and the e2e cases above.
 
 ## 7. Writing rules (copied into `e2e/README.md`)
 
