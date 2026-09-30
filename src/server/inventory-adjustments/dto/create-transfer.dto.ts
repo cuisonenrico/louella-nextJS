@@ -6,6 +6,7 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateIf,
 } from 'class-validator';
 import {
   MAX_NOTES_LENGTH,
@@ -22,13 +23,27 @@ export class CreateTransferDto {
   @Min(1)
   fromInventoryId: number;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: 2,
-    description: 'Destination inventory record ID (branch receiving stock)',
+    description:
+      'Destination inventory record ID (branch receiving stock). Give this OR toBranchId, not both.',
   })
+  @ValidateIf((o: CreateTransferDto) => o.toBranchId === undefined)
   @IsInt()
   @Min(1)
-  toInventoryId: number;
+  toInventoryId?: number;
+
+  @ApiPropertyOptional({
+    example: 2,
+    description:
+      'Destination branch ID. The server finds that branch\'s row for the same product and day, creating an ' +
+      'empty placeholder if it has none. This is what a branch manager sends: they cannot read another ' +
+      'branch\'s sheet to look the row up. Give this OR toInventoryId, not both.',
+  })
+  @ValidateIf((o: CreateTransferDto) => o.toInventoryId === undefined)
+  @IsInt()
+  @Min(1)
+  toBranchId?: number;
 
   @ApiProperty({
     example: 50,

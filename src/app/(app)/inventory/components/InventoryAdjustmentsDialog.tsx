@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Trash2, Plus, Loader2 } from 'lucide-react';
 import { inventoryAdjustmentsApi, inventoryApi } from '@/lib/apiServices';
 import { getAdjSum } from '../hooks/useInventoryColumns';
@@ -70,16 +70,6 @@ export default function InventoryAdjustmentsDialog({ inventory, productName, bra
   const [formError, setFormError] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<number | null>(null);
 
-  // All hooks must be called unconditionally before any early return.
-  const destInventoryQuery = useQuery<Inventory[]>({
-    queryKey: ['inventory-dest', form.toBranchId, inventory?.productId, inventory?.date],
-    queryFn: () =>
-      inventoryApi
-        .byBranchDate(parseInt(form.toBranchId), inventory!.date.slice(0, 10))
-        .then((r) => r.data as Inventory[]),
-    enabled: form.type === 'PULL_OUT' && !!form.toBranchId && !!inventory,
-  });
-
   // Creating, transferring and deleting are three separate grants on the
   // server; the dialog offered all three to anyone who could open it.
   const canCreate = useCan('inventory-adjustments:create');
@@ -99,7 +89,7 @@ export default function InventoryAdjustmentsDialog({ inventory, productName, bra
   });
 
   const transferMutation = useMutation({
-    mutationFn: (data: { fromInventoryId: number; toInventoryId: number; value: number; notes?: string }) =>
+    mutationFn: (data: { fromInventoryId: number; toBranchId: number; value: number; notes?: string }) =>
       inventoryAdjustmentsApi.transfer(data, submitKey),
     onSuccess: () => {
       renewSubmitKey();
@@ -131,7 +121,7 @@ export default function InventoryAdjustmentsDialog({ inventory, productName, bra
   // them raw showed a pull-out of 10 as a green +10 — the opposite of what the
   // row behind the dialog shows. getAdjSum is the same helper the sheet uses.
   const adjSum = getAdjSum(inventory);
-  const destInventory = destInventoryQuery.data?.find((r) => r.productId === inventory.productId) ?? null;
+  const destBranchName = branches.find((b) => b.id === parseInt(form.toBranchId))?.name ?? 'The receiving branch';
 
   const isPending = createMutation.isPending || transferMutation.isPending;
   const isTransfer = form.type === 'PULL_OUT' && !!form.toBranchId;
@@ -144,15 +134,10 @@ export default function InventoryAdjustmentsDialog({ inventory, productName, bra
       return;
     }
     if (isTransfer) {
-      if (!destInventory) {
-        setFormError(
-          `${branches.find((b) => b.id === parseInt(form.toBranchId))?.name ?? 'Destination branch'} has no inventory record for ${productName} on ${inventory.date.slice(0, 10)}. Create it first.`,
-        );
-        return;
-      }
+      // The server finds (or opens) the receiving branch's row; a manager cannot read it from here.
       transferMutation.mutate({
         fromInventoryId: inventory.id,
-        toInventoryId: destInventory.id,
+        toBranchId: parseInt(form.toBranchId),
         value: parsedValue,
         notes: form.notes || undefined,
       });
@@ -243,15 +228,11 @@ export default function InventoryAdjustmentsDialog({ inventory, productName, bra
             )}
 
             {isTransfer && (
-              destInventoryQuery.isLoading ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Checking destination…
-                </div>
-              ) : destInventory ? (
-                <Alert><AlertDescription>Destination found — current stock: {destInventory.quantity + destInventory.delivery} pcs</AlertDescription></Alert>
-              ) : (
-                <Alert variant="destructive"><AlertDescription>Destination branch has no inventory record for {productName} on this date.</AlertDescription></Alert>
-              )
+              <Alert>
+                <AlertDescription>
+                  The stock leaves this branch now. {destBranchName} counts it only after they accept.
+                </AlertDescription>
+              </Alert>
             )}
 
             <div className="space-y-1">
@@ -273,7 +254,7 @@ export default function InventoryAdjustmentsDialog({ inventory, productName, bra
         <ResponsiveDialogFooter>
           <Button variant="outline" onClick={onClose}>Close</Button>
           {(isTransfer ? canTransfer : canCreate) && (
-            <Button onClick={handleAdd} disabled={isPending || (isTransfer && !destInventory)}>
+            <Button onClick={handleAdd} disabled={isPending}>
               {isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
               {isTransfer ? 'Transfer' : 'Add'}
             </Button>

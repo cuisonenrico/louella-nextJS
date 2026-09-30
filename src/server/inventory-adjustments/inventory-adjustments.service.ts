@@ -309,40 +309,66 @@ export class InventoryAdjustmentsService {
    * stock arrived.
    */
   async transfer(dto: CreateTransferDto, user?: RequestUser) {
+    // The destination is named by its row OR by its branch — never both, never neither.
+    const toBranchId = dto.toBranchId ?? null;
+    const viaBranch = toBranchId !== null;
+    if (viaBranch === (dto.toInventoryId != null)) {
+      throw new BadRequestException(
+        'Give either the destination row (toInventoryId) or the destination branch (toBranchId), not both and not neither.',
+      );
+    }
+
     const [from, to] = await Promise.all([
       this.prisma.inventory.findFirst({
         where: { id: dto.fromInventoryId, deletedAt: null },
       }),
-      this.prisma.inventory.findFirst({
-        where: { id: dto.toInventoryId, deletedAt: null },
-      }),
+      viaBranch
+        ? null
+        : this.prisma.inventory.findFirst({
+            where: { id: dto.toInventoryId, deletedAt: null },
+          }),
     ]);
 
     if (!from)
       throw new NotFoundException(
         `Source inventory record ${dto.fromInventoryId} not found`,
       );
-    if (!to)
-      throw new NotFoundException(
-        `Destination inventory record ${dto.toInventoryId} not found`,
-      );
 
-    if (from.productId !== to.productId) {
-      throw new BadRequestException(
-        `Source (productId=${from.productId}) and destination (productId=${to.productId}) must track the same product.`,
-      );
-    }
+    if (viaBranch) {
+      if (from.branchId === toBranchId) {
+        throw new BadRequestException(
+          'Source and destination must be different branches.',
+        );
+      }
+      const branch = await this.prisma.branch.findFirst({
+        where: { id: toBranchId, deletedAt: null },
+        select: { id: true, isActive: true },
+      });
+      if (!branch) throw new NotFoundException(`Destination branch ${toBranchId} not found`);
+      if (!branch.isActive) throw new BadRequestException('The destination branch is not active.');
+    } else {
+      if (!to)
+        throw new NotFoundException(
+          `Destination inventory record ${dto.toInventoryId} not found`,
+        );
 
-    if (from.branchId === to.branchId) {
-      throw new BadRequestException(
-        'Source and destination must be different branches.',
-      );
-    }
+      if (from.productId !== to.productId) {
+        throw new BadRequestException(
+          `Source (productId=${from.productId}) and destination (productId=${to.productId}) must track the same product.`,
+        );
+      }
 
-    if (from.date.getTime() !== to.date.getTime()) {
-      throw new BadRequestException(
-        'Source and destination must be the same day. Stock cannot move between dates.',
-      );
+      if (from.branchId === to.branchId) {
+        throw new BadRequestException(
+          'Source and destination must be different branches.',
+        );
+      }
+
+      if (from.date.getTime() !== to.date.getTime()) {
+        throw new BadRequestException(
+          'Source and destination must be the same day. Stock cannot move between dates.',
+        );
+      }
     }
 
     // Scoped on the source: a branch manager pushes their own stock out. The
@@ -350,8 +376,25 @@ export class InventoryAdjustmentsService {
     this.assertBranchAccess(user, from.branchId);
 
     const pullOut = await this.prisma.$transaction(async (tx) => {
+      if (viaBranch) {
+        // Both chains in ONE call: the helper acquires in sorted order, so two
+        // transfers going opposite ways between the same branches cannot deadlock.
+        await lockInventoryChains(tx, [
+          { branchId: from.branchId, productId: from.productId },
+          { branchId: toBranchId, productId: from.productId },
+        ]);
+      }
       await this.lockRows(tx, [dto.fromInventoryId]);
       await this.assertStockAvailable(tx, dto.fromInventoryId, dto.value);
+      // Resolved only after the cap check passes, and in the same transaction: a refused
+      // transfer leaves no placeholder behind in the other branch.
+      const toInventoryId = viaBranch
+        ? await this.ensureDestinationRow(
+            tx,
+            { branchId: toBranchId, productId: from.productId, date: from.date },
+            user?.id,
+          )
+        : to!.id;
       const out = await tx.inventoryAdjustment.create({
         data: {
           inventoryId: dto.fromInventoryId,
@@ -360,7 +403,7 @@ export class InventoryAdjustmentsService {
           notes: dto.notes ?? null,
           createdById: user?.id ?? null,
           transferStatus: 'PENDING',
-          transferToInventoryId: dto.toInventoryId,
+          transferToInventoryId: toInventoryId,
         },
       });
       await recordChanges(
@@ -373,6 +416,51 @@ export class InventoryAdjustmentsService {
     }, WRITE_TX_OPTIONS);
 
     return { pullOut, pullIn: null, status: 'PENDING' as const };
+  }
+
+  /**
+   * The receiving branch's row for the product and day, made ready to be the target of a transfer.
+   *
+   * A branch manager sends by naming the destination BRANCH, because they cannot read another
+   * branch's sheet to find its row. So the server finds it here — and, when the receiver has not
+   * opened that day yet, creates the same empty placeholder autofill or the sheet's Initialize would
+   * (uncounted, so it sells nothing; it opens on the previous close through the stock chain). A
+   * soft-deleted row is restored empty rather than resurrecting what was typed before.
+   *
+   * Runs inside the caller's transaction, after the chain locks are held.
+   */
+  private async ensureDestinationRow(
+    tx: Prisma.TransactionClient,
+    key: { branchId: number; productId: number; date: Date },
+    userId?: number,
+  ): Promise<number> {
+    const where = {
+      branchId_productId_date: { branchId: key.branchId, productId: key.productId, date: key.date },
+    };
+    const before = await tx.inventory.findUnique({ where });
+    if (before && before.deletedAt === null) return before.id;
+
+    const empty = {
+      quantity: 0,
+      delivery: 0,
+      reject: 0,
+      leftover: 0,
+      leftoverCountedAt: null,
+      isAutoGenerated: true,
+      notes: 'Opened by an incoming transfer',
+    };
+    const after = await tx.inventory.upsert({
+      where,
+      update: { ...empty, deletedAt: null, updatedById: userId ?? null },
+      create: { ...key, ...empty, createdById: userId ?? null },
+    });
+    await recordChanges(
+      tx,
+      [{ entity: 'Inventory', entityId: after.id, before, after, action: before ? 'restore' : 'create' }],
+      userId,
+    );
+    await reconcileInventoryChains(tx, [{ ...key, fromDate: key.date }], { userId });
+    return after.id;
   }
 
   /** Load a pending transfer and check the caller may answer for its destination. */

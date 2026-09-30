@@ -246,7 +246,9 @@ export const inventoryAdjustmentsApi = {
     idempotencyKey?: string,
   ) => api.post<InventoryAdjustment>('/inventory-adjustments', data, idempotencyHeader(idempotencyKey)),
   transfer: (
-    data: { fromInventoryId: number; toInventoryId: number; value: number; notes?: string },
+    // Name the destination BRANCH: a branch manager cannot read another branch's sheet to find its row,
+    // so the server resolves (or opens) that row. `toInventoryId` remains for callers that already have it.
+    data: { fromInventoryId: number; toBranchId: number; value: number; notes?: string },
     idempotencyKey?: string,
   ) => api.post<TransferResult>('/inventory-adjustments/transfer', data, idempotencyHeader(idempotencyKey)),
   pendingTransfers: (branchId?: number) =>

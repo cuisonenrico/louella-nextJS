@@ -141,8 +141,8 @@ export class InventorySheet {
     await this.page.getByRole('option', { name: /^Pull Out/ }).click();
     await dialog.getByLabel('Transfer to Branch (optional)').click();
     await this.page.getByRole('option', { name: toBranchName, exact: true }).click();
-    // The dialog looks the destination row up first; wait for it so the button can act.
-    await expect(dialog.getByText(/Destination found/)).toBeVisible();
+    // The dialog now just names the branch (the server finds or opens its row) and says what happens next.
+    await expect(dialog.getByText(/counts it only after they accept/)).toBeVisible();
     await dialog.getByLabel('Value', { exact: true }).fill(String(value));
     const answered = this.page.waitForResponse(
       (r) => r.request().method() === 'POST' && r.url().includes('/api/v1/inventory-adjustments/transfer'),
