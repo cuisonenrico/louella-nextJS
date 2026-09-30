@@ -48,12 +48,12 @@ export default function MaterialsPage() {
 
   const createMut = useMutation({
     mutationFn: (data: Partial<Material>) => materialsApi.create(data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['materials'] }); setDialogOpen(false); toast.success('Material saved'); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['materials'] }); qc.invalidateQueries({ queryKey: ['materialPriceHistory'] }); setDialogOpen(false); toast.success('Material saved'); },
     onError: (err) => { const text = extractError(err); setFormError(text); toast.error(text); },
   });
   const updateMut = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<Material> }) => materialsApi.update(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['materials'] }); setDialogOpen(false); toast.success('Material saved'); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['materials'] }); qc.invalidateQueries({ queryKey: ['materialPriceHistory'] }); setDialogOpen(false); toast.success('Material saved'); },
     onError: (err) => { const text = extractError(err); setFormError(text); toast.error(text); },
   });
   const deleteMut = useMutation({

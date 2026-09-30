@@ -95,9 +95,10 @@ export class ProductsService {
     );
   }
 
-  findAll() {
+  /** Active products only, unless the catalog screen asks for the inactive ones too. */
+  findAll(includeInactive = false) {
     return this.prisma.product.findMany({
-      where: { deletedAt: null, isActive: true },
+      where: includeInactive ? { deletedAt: null } : { deletedAt: null, isActive: true },
       orderBy: [{ type: 'asc' }, { sortOrder: 'asc' }, { name: 'asc' }],
     });
   }
@@ -115,7 +116,7 @@ export class ProductsService {
 
   async findOne(id: number) {
     const product = await this.prisma.product.findFirst({
-      where: { id, deletedAt: null, isActive: true },
+      where: { id, deletedAt: null },
       include: { priceHistory: { orderBy: { effectiveAt: 'desc' } } },
     });
     if (!product) {

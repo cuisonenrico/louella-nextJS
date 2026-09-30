@@ -113,7 +113,8 @@ export const suppliersApi = {
 
 // ─── Products ────────────────────────────────────────────────────
 export const productsApi = {
-  list: () => api.get<Product[]>('/products'),
+  list: (opts?: { includeInactive?: boolean }) =>
+    api.get<Product[]>('/products', opts?.includeInactive ? { params: { includeInactive: true } } : undefined),
   search: (q: string) => api.get<Product[]>('/products/search', { params: { q } }),
   get: (id: number) => api.get<Product>(`/products/${id}`),
   create: (data: Partial<Product>) => api.post<Product>('/products', data),

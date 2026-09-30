@@ -129,13 +129,6 @@ deploy, work on branches/PRs or enable Vercel's "wait for checks".
 Any task that changes what a user can see or do adds or updates its e2e test in the same change — load the
 `adding-e2e-coverage` skill. New route → add it to `routes.ts`. Update the row in the spec's §8 table.
 
-## Known app bugs pinned by `test.fail` (catalog)
+## Catalog bugs the suite found (all fixed)
 
-These tests assert the *correct* behaviour and are marked `test.fail`, so they stay green while the bug exists and turn red the moment it is fixed — then delete the `test.fail` line.
-
-| Where | Bug |
-| --- | --- |
-| `catalog-products` double-click | Save has no idempotency key; two rapid clicks create two products |
-| `catalog-products` list refresh | `GET /products` (and `/recipes`, `/unit-conversions`) send `Cache-Control: private, max-age=60`, so the refetch after a save/delete is served stale |
-| `catalog-products` inactive | `GET /products` lists active products only and `findOne` ignores inactive ones, so an Inactive product vanishes and PATCH 404s |
-| `catalog-materials` price history | the dialog history query is not invalidated after a save |
+Double-click Save created two products; `GET /products` (and `/recipes`, `/unit-conversions`) were browser-cached for 60 s so lists were stale after a change (now `private, no-cache`); Inactive products vanished and could not be re-activated (`GET /products?includeInactive=true` for the catalog screen, `findOne` finds inactive); the Price History dialogs were not refreshed after a save. Regression tests: `full/catalog-*.spec.ts`.

@@ -522,8 +522,8 @@ marked "sweep v1" is covered by the route sweep only.
 | `/production-efficiency` | production | sweep v1; v2 | Renders for the world branch; figures match API |
 | `/material-inventory` | material-inventory | sweep v1; v2 | Opening = yesterday's close; consumption from §6.3 visible |
 | `/material-inventory/gaps` | material-inventory, jobs | sweep v1; v2 | Missing day shown as gap |
-| `/materials` | materials, material-adjustments | sweep v1; catalog CRUD **done** (`full/catalog-materials.spec.ts`); v2 for material adjustments | CRUD; price change dated to Manila today; unit locked once used (409); soft delete. Known bug pinned with `test.fail`: Price History tab stale after a save |
-| `/products` | products | sweep v1; **done** (`full/catalog-products.spec.ts`) | CRUD with validation; price change creates history from today; soft delete. Known bugs pinned with `test.fail`: double-submit creates two; list stale after a change (60 s HTTP cache); Inactive product vanishes and cannot be re-activated |
+| `/materials` | materials, material-adjustments | sweep v1; catalog CRUD **done** (`full/catalog-materials.spec.ts`); v2 for material adjustments | CRUD; price change dated to Manila today; unit locked once used (409); soft delete. Price History refreshes after a save |
+| `/products` | products | sweep v1; **done** (`full/catalog-products.spec.ts`) | CRUD with validation; price change creates history from today; soft delete. Double-submit creates one; list fresh after a change; Inactive stays listed and can be re-activated |
 | `/recipes` | recipes | sweep v1; catalog CRUD **done** (`full/catalog-recipes.spec.ts`) | Create/edit/delete/revive, one per product (409), missing unit conversion (422), cost rule. Not covered: versioning ("past days keep the old recipe") — no API reads versions |
 | `/branches` | branches | sweep v1; v2 | Create/edit branch; inactive branch hidden from pickers |
 | `/suppliers` | suppliers | sweep v1; v2 | CRUD |

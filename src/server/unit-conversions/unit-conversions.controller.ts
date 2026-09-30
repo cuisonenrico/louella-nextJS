@@ -48,7 +48,7 @@ export class UnitConversionsController {
   }
 
   @Get()
-  @Header('Cache-Control', 'private, max-age=60')
+  @Header('Cache-Control', 'private, no-cache')
   findAll() {
     return this.unitConversionsService.findAll();
   }
