@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { previousCutoff, today, workingDays, yesterday } from '../../e2e/fixtures/dates';
+import { cutoffBefore, previousCutoff, today, workingDays, yesterday } from '../../e2e/fixtures/dates';
 
 afterEach(() => vi.useRealTimers());
 
@@ -21,6 +21,13 @@ describe('e2e dates', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-10-03T02:00:00Z'));
     expect(previousCutoff()).toMatchObject({ periodStart: '2026-09-16', periodEnd: '2026-09-30', half: 2 });
+  });
+
+  it('cutoffBefore steps back one cutoff, so two ended cutoffs are always one of each half', () => {
+    const second = { periodStart: '2026-09-16', periodEnd: '2026-09-30', half: 2 as const };
+    expect(cutoffBefore(second)).toMatchObject({ periodStart: '2026-09-01', periodEnd: '2026-09-15', half: 1 });
+    const first = { periodStart: '2026-09-01', periodEnd: '2026-09-15', half: 1 as const };
+    expect(cutoffBefore(first)).toMatchObject({ periodStart: '2026-08-16', periodEnd: '2026-08-31', half: 2 });
   });
 
   it('workingDays drops rest days', () => {
