@@ -95,6 +95,13 @@ uses its own material; and **a payroll run covers everyone in the cutoff**, so `
 | **`RouteGuard` sends a denied page to the user's first permitted route**; `/no-access` is only for accounts with none. | Assert the redirect target, not `/no-access`. |
 | **Autofill can't be asserted deterministically**: it keys off the newest inventory row across all branches with a 5-minute memo. | Test the explicit *Initialize* button instead. |
 
+## A second production bug this suite found (open): managers can't send transfers
+
+The adjustments dialog finds a transfer's destination row by reading the *other* branch's daily sheet, which
+`BranchGuard` answers 403 for a branch-confined manager — so a manager cannot send from the UI (the server intends
+them to). `full/transfers.spec.ts` drives the sender as admin and has a `test.fail` for the manager case; when
+the bug is fixed that test goes red — remove its `test.fail`. See spec §6.7a.
+
 ## A production bug this suite found (fixed)
 
 A branch **manager** could not load their own branch's daily sheet: `GET /inventory/branch/:id/date` and

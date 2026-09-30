@@ -116,6 +116,7 @@ export async function managerPage(browser: Browser, world: World): Promise<Page>
   const context = await browser.newContext();
   const res = await context.request.post('/api/v1/auth/login', {
     data: { email: world.manager.email, password: world.manager.password },
+    maxRetries: 3, // ECONNRESET only (keep-alive race); a login is safe to repeat
   });
   if (!res.ok()) throw new Error(`manager login → ${res.status()}`);
   // The response set refresh_token (HttpOnly) + has_session on this context;
