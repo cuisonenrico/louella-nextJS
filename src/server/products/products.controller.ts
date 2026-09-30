@@ -45,9 +45,9 @@ export class ProductsController {
   }
 
   @Get()
-  @Header('Cache-Control', 'private, max-age=60')
-  findAll() {
-    return this.productsService.findAll();
+  @Header('Cache-Control', 'private, no-cache')
+  findAll(@Query('includeInactive') includeInactive?: string) {
+    return this.productsService.findAll(includeInactive === 'true');
   }
 
   @Get('search')

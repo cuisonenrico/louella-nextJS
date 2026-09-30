@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { usePageHeader } from '@/components/layout/usePageHeader';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 import dayjs from 'dayjs';
 import { Plus, Pencil, Trash2, Search, Loader2 } from 'lucide-react';
@@ -74,6 +74,7 @@ function ProductPriceHistoryTab({ productId }: { productId: number }) {
 export default function ProductsPage() {
   usePageHeader({ title: 'Products' });
   const qc = useQueryClient();
+  const submitting = useRef(false);
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Product | null>(null);
@@ -83,13 +84,13 @@ export default function ProductsPage() {
   const [activeTab, setActiveTab] = useState('details');
 
   const { data: products = [], isLoading, isError, error, refetch } = useQuery<Product[]>({
-    queryKey: ['products'],
-    queryFn: () => productsApi.list().then((r) => r.data),
+    queryKey: ['products', 'all'],
+    queryFn: () => productsApi.list({ includeInactive: true }).then((r) => r.data),
   });
 
   const createMutation = useMutation({
     mutationFn: (data: Partial<Product>) => productsApi.create(data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['products'] }); setDialogOpen(false); toast.success('Product saved'); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['products'] }); qc.invalidateQueries({ queryKey: ['product-price-history'] }); setDialogOpen(false); toast.success('Product saved'); },
     onError: (err: unknown) => {
       const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
       const text = Array.isArray(msg) ? msg.join(', ') : (msg ?? 'Failed to save.');
@@ -100,7 +101,7 @@ export default function ProductsPage() {
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<Product> }) => productsApi.update(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['products'] }); setDialogOpen(false); toast.success('Product saved'); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['products'] }); qc.invalidateQueries({ queryKey: ['product-price-history'] }); setDialogOpen(false); toast.success('Product saved'); },
     onError: (err: unknown) => {
       const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
       const text = Array.isArray(msg) ? msg.join(', ') : (msg ?? 'Failed to save.');
@@ -111,7 +112,7 @@ export default function ProductsPage() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => productsApi.delete(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['products'] }); toast.success('Product deleted'); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['products'] }); qc.invalidateQueries({ queryKey: ['product-price-history'] }); toast.success('Product deleted'); },
     onError: () => toast.error('Failed to delete product'),
   });
 
@@ -138,6 +139,7 @@ export default function ProductsPage() {
   };
 
   const handleSave = () => {
+    if (submitting.current) return;
     setFormError('');
     if (!form.name.trim()) { setFormError('Product name is required.'); return; }
     const payload: Partial<Product> = {
@@ -147,10 +149,13 @@ export default function ProductsPage() {
       isActive: form.isActive,
       date: form.date,
     };
+    // A fast double click sends two requests before the button disables: one save per press.
+    submitting.current = true;
+    const release = { onSettled: () => { submitting.current = false; } };
     if (editTarget) {
-      updateMutation.mutate({ id: editTarget.id, data: payload });
+      updateMutation.mutate({ id: editTarget.id, data: payload }, release);
     } else {
-      createMutation.mutate(payload);
+      createMutation.mutate(payload, release);
     }
   };
 

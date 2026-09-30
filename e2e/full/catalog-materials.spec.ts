@@ -85,11 +85,8 @@ test.describe('catalog: materials @stress', () => {
     expect(added.effectiveAt.slice(0, 10)).toBe(today());
   });
 
-  // BUG. Saving a material only invalidates ['materials']; the dialog's price-history query is left as it
-  // was, so reopening Edit → Price History right after a price change still shows the old list (until the
-  // query's staleTime lapses or the page reloads).
+  // Saving refreshes the dialog's price history too.
   test('the Price History tab shows a new price straight after it is saved', async ({ api, page }) => {
-    test.fail(true, 'materials page: price-history query is not invalidated after a save');
     const name = uniqueName('Salt');
     await api.post<Material>('/materials', { name, unit: 'KG', pricePerUnit: 20 });
     const materials = new MaterialsPage(page);

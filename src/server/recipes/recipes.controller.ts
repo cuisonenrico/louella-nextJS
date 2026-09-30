@@ -30,7 +30,7 @@ export class RecipesController {
   }
 
   @Get()
-  @Header('Cache-Control', 'private, max-age=60')
+  @Header('Cache-Control', 'private, no-cache')
   findAll() {
     return this.recipesService.findAll();
   }

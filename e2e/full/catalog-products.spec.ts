@@ -19,10 +19,7 @@ interface PriceRow {
 const fmt = (isoDay: string) => dayjs(isoDay).format('MMM D, YYYY');
 
 /**
- * Products (src/app/(app)/products). Setup goes through the API; the checks that do not depend on the
- * three known bugs at the bottom read the API or fresh dialogs, so they stay meaningful while those
- * bugs exist. Each bug has its own `test.fail`: it passes while the bug is there and turns red the
- * moment it is fixed — remove its `test.fail` then.
+ * Products (src/app/(app)/products). Setup goes through the API; outcomes are read back from it.
  */
 test.describe('catalog: products @stress', () => {
   test('create: the row appears, and the launch price is recorded from the launch day', async ({ api, page }) => {
@@ -127,12 +124,10 @@ test.describe('catalog: products @stress', () => {
     expect((await api.get<Product[]>('/products')).some((p) => p.id === made.id)).toBe(false);
   });
 
-  // ── Known bugs, each with its own expected-to-fail test ─────────────────────────────────────
+  // Regression tests for bugs this suite found: double-submit, the browser-cached list, inactive products.
 
-  // BUG 1. Save is not guarded against a double click: two POSTs go out before the button disables,
-  // and there is no idempotency key (the production-order dialog has one for exactly this).
+  // Save is guarded against a double click: one product, not two.
   test('a double-click on Save creates one product, not two', async ({ api, page }) => {
-    test.fail(true, 'products dialog: no idempotency key, so a double click creates a duplicate');
     const name = uniqueName('Once');
     const products = new ProductsPage(page);
     await products.open();
@@ -150,11 +145,9 @@ test.describe('catalog: products @stress', () => {
     expect((await api.get<Product[]>('/products')).filter((p) => p.name === name)).toHaveLength(1);
   });
 
-  // BUG 2. GET /products is sent with `Cache-Control: private, max-age=60`, so after any add / edit /
   // delete the app's own refetch is answered from the browser cache and the page shows stale data for up
   // to a minute (and the Edit form, filled from that stale row, would send the OLD price back).
   test('the list is up to date straight after a change, without reloading', async ({ api, page }) => {
-    test.fail(true, 'GET /products is browser-cached for 60 s, so the refetch after a save/delete is stale');
     const name = uniqueName('Fresh');
     await api.post<Product>('/products', { name, type: 'BREAD', price: 12, date: addDays(today(), -1) });
     const products = new ProductsPage(page);
@@ -170,11 +163,9 @@ test.describe('catalog: products @stress', () => {
     await expect(products.row(name)).toHaveCount(0);
   });
 
-  // BUG 3. "Inactive" is a one-way door: GET /products lists only ACTIVE products (so the row vanishes
   // from the page that has an "Inactive" badge for it) and findOne() only finds active ones (so an inactive
   // product cannot be edited — PATCH 404s — and can therefore never be switched back).
   test('a product set to Inactive stays listed as Inactive, and can be switched back', async ({ api, page }) => {
-    test.fail(true, 'inactive products disappear from /products and PATCH /products/:id 404s for them');
     const name = uniqueName('Retired');
     const made = await api.post<Product>('/products', { name, type: 'BREAD', price: 9, date: addDays(today(), -1) });
     const products = new ProductsPage(page);

@@ -20,7 +20,7 @@ export class ProductsPage {
 
   async open() {
     const loaded = this.page.waitForResponse(
-      (r) => r.request().method() === 'GET' && /\/api\/v1\/products$/.test(r.url()),
+      (r) => r.request().method() === 'GET' && /\/api\/v1\/products(\?.*)?$/.test(r.url()),
     );
     await this.page.goto('/products');
     expect((await loaded).ok()).toBe(true);
