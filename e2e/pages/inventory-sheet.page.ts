@@ -122,12 +122,46 @@ export class InventorySheet {
     return this.cell(productName, 'Leftover');
   }
 
-  /** Add a PULL_IN (the dialog's default type) through the row's adjustments dialog. */
-  async addPullIn(productName: string, value: number) {
-    // The gear button has no accessible name (tooltip only) — it is the only button in the cell.
+  /** Open the row's adjustments dialog (the gear button has no accessible name — it is the only button in the cell). */
+  async openAdjustments(productName: string): Promise<Locator> {
     await this.cell(productName, 'Adjustments').getByRole('button').click();
     const dialog = this.page.getByRole('dialog');
     await expect(dialog.getByText(`Adjustments — ${productName}`)).toBeVisible();
+    return dialog;
+  }
+
+  /**
+   * Try to send `value` units to another branch (a PULL_OUT with a destination) and wait for the
+   * server's answer, whatever it is. The dialog stays open; a refusal is shown inside it.
+   * Returns the dialog and the response so a test can assert either outcome.
+   */
+  async attemptTransfer(productName: string, toBranchName: string, value: number) {
+    const dialog = await this.openAdjustments(productName);
+    await dialog.getByLabel('Type', { exact: true }).click();
+    await this.page.getByRole('option', { name: /^Pull Out/ }).click();
+    await dialog.getByLabel('Transfer to Branch (optional)').click();
+    await this.page.getByRole('option', { name: toBranchName, exact: true }).click();
+    // The dialog looks the destination row up first; wait for it so the button can act.
+    await expect(dialog.getByText(/Destination found/)).toBeVisible();
+    await dialog.getByLabel('Value', { exact: true }).fill(String(value));
+    const answered = this.page.waitForResponse(
+      (r) => r.request().method() === 'POST' && r.url().includes('/api/v1/inventory-adjustments/transfer'),
+    );
+    await dialog.getByRole('button', { name: 'Transfer', exact: true }).click();
+    return { dialog, response: await answered };
+  }
+
+  /** Send stock to another branch; the sender's PULL_OUT is booked at once, pending the receiver's answer. */
+  async sendTransfer(productName: string, toBranchName: string, value: number) {
+    const { response } = await this.attemptTransfer(productName, toBranchName, value);
+    expect(response.ok()).toBe(true);
+    await this.page.keyboard.press('Escape');
+    await expect(this.page.getByRole('dialog')).toHaveCount(0);
+  }
+
+  /** Add a PULL_IN (the dialog's default type) through the row's adjustments dialog. */
+  async addPullIn(productName: string, value: number) {
+    const dialog = await this.openAdjustments(productName);
     await dialog.getByLabel('Value', { exact: true }).fill(String(value));
     const created = this.page.waitForResponse(
       (r) => r.url().includes('/api/v1/inventory-adjustments') && r.request().method() === 'POST',

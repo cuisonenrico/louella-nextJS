@@ -408,6 +408,48 @@ As admin, visit every route in `routes.ts` (dynamic routes resolved to an id
 the base seed or a world provides). For each: no Next.js error overlay/boundary
 text, no response ≥ 500 from `/api/v1`, and the page's main heading is visible.
 
+### 6.7 Transfers — `full/transfers.spec.ts` (@stress)
+
+Two isolated branches that track the same product today (`twoBranches()`): the
+sender starts with stock delivered; the receiver has an empty row. Rows are set
+up through the API. **The sending side is driven as admin, the receiving side
+as that branch's real manager**, each on their own `/inventory/details` sheet
+(the adjustments dialog to send, the "Transfers awaiting confirmation" card to
+answer).
+
+- **Send → accept.** Sending books the sender's PULL_OUT at once (its Total
+  Stock drops by the quantity, the card reads *Sent*); the receiver has **no**
+  PULL_IN yet and sees *Incoming* with unchanged stock. Accepting books the
+  PULL_IN; both legs read ACCEPTED, are linked to each other and carry the same
+  quantity.
+- **Send → reject.** The receiver rejects: the sender's stock returns to what it
+  was, the pull-out is soft-deleted (kept on record), and the receiver is never
+  credited.
+- **Cap.** With stock 20 and a counted leftover of 15, only 5 are available:
+  sending 6 is a 400 that says "only 5 are available" and books nothing; sending
+  5 goes through as a PENDING PULL_OUT. The expected limit is computed from the
+  rule (`on hand − rejects − counted leftover`).
+- **Rules at API level, with real managers:** only the receiving branch may
+  answer (the sender's manager gets 403 on accept and reject); an accepted
+  transfer cannot be edited or deleted from either leg (409, checked as admin so
+  it is the transfer rule refusing, not a missing permission); a correction is a
+  transfer back, which the original sender accepts, and the balances follow
+  `stock − sent + returned` / `sent − returned`.
+
+### 6.7a A second production bug found here (open)
+
+A branch manager **cannot send a transfer from the UI**. The server intends it
+(`transfer()`: "a branch manager pushes their own stock out"), but the
+adjustments dialog finds the destination row by reading the *other* branch's
+daily sheet — `GET /inventory/branch/<receiver>/date` — which `BranchGuard`
+answers 403 for a branch-confined manager; the dialog then wrongly says
+"Destination branch has no inventory record". Likely exposed by the same Express 5
+fix as §6.2a. It needs a design decision (a destination-lookup route open to
+transfer senders, or resolving the destination server-side from `toBranchId`),
+so it is documented, not fixed: `transfers.spec.ts` has a `test.fail` that
+asserts the manager's lookup returns 200 and passes while the bug exists — it
+turns red the moment it is fixed, at which point remove `test.fail`.
+
 ## 7. Writing rules (copied into `e2e/README.md`)
 
 1. No `page.waitForTimeout`. Use web-first assertions and `waitForResponse`.
@@ -455,7 +497,7 @@ marked "sweep v1" is covered by the route sweep only.
 | `/inventory/details` | inventory, branch-cash | v1 | §6.2, §6.4 |
 | `/inventory/gaps` | inventory, jobs | sweep v1; v2 | A missing day appears as a gap; autofill-range closes it |
 | `/inventory/rejections` | inventory | sweep v1; v2 | Rejects entered in §6.2 appear by product |
-| `/inventory-adjustments` | inventory-adjustments | sweep v1; v2 | Transfer send → receiver accept; pull-out cap; accepted transfer immutable; ANOMALY adjustment |
+| `/inventory-adjustments` | inventory-adjustments | sweep v1; transfers **done** (§6.7, exercised on `/inventory/details`); v2 for this page itself | The page itself and ANOMALY adjustments; transfers (send → accept/reject, cap, immutability) are covered in §6.7 |
 | `/inventory-import` | inventory-import | sweep v1; v2 | Import a fixture XLSX; rows written; same file re-import refused (hash) |
 | `/inventory-import/history` | inventory-import | sweep v1; v2 | Import appears with file name, no download |
 | `/production` | production | sweep v1; v2 | Kitchen yield per product/day equals finalized orders (links §6.3) |
@@ -497,7 +539,7 @@ marked "sweep v1" is covered by the route sweep only.
 | branches | fixture, v2 `/branches` |
 | products | fixture, v2 `/products`, `/config/product-order` |
 | inventory | §6.2 |
-| inventory-adjustments | §6.2 (PULL_IN), v2 transfers |
+| inventory-adjustments | §6.2 (PULL_IN), §6.7 (transfers) |
 | inventory-import | v2 |
 | production | §6.3 (yield), v2 `/production` |
 | production-orders | §6.3 |

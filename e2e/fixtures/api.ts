@@ -16,7 +16,8 @@ export class Api {
   }
 
   private static async fetchToken(request: APIRequestContext, creds: { email: string; password: string }) {
-    const res = await request.post(`${BASE}/auth/login`, { data: creds });
+    // maxRetries retries only ECONNRESET (the keep-alive race); a login is safe to repeat.
+    const res = await request.post(`${BASE}/auth/login`, { data: creds, maxRetries: 3 });
     if (!res.ok()) throw new Error(`login ${creds.email} → ${res.status()}: ${await res.text()}`);
     return ((await res.json()) as { accessToken: string }).accessToken;
   }

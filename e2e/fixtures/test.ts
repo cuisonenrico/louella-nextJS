@@ -28,7 +28,8 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
    */
   context: async ({ context, asAdmin }, provide) => {
     if (asAdmin) {
-      const res = await context.request.post('/api/v1/auth/login', { data: ADMIN });
+      // maxRetries retries only ECONNRESET (the keep-alive race). Safe for a login: it just mints another token.
+      const res = await context.request.post('/api/v1/auth/login', { data: ADMIN, maxRetries: 3 });
       if (!res.ok()) throw new Error(`admin login → ${res.status()}: ${await res.text()}`);
     }
     await provide(context);
