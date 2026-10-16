@@ -227,6 +227,14 @@ export const FEATURES = [
         description: 'Download the sales spreadsheet for a period',
         sensitivity: 'sensitive',
       },
+      // Branch managers get the sheet without revenue: they need what they
+      // count and what it is worth, not what the branch earned.
+      {
+        id: 'revenue',
+        label: 'Revenue figures',
+        description: 'Revenue column and revenue cards on the inventory sheet',
+        sensitivity: 'presentation',
+      },
     ],
   },
   {
@@ -1016,6 +1024,7 @@ export const ROLE_DEFAULTS: Record<RoleName, readonly PermissionKey[]> = {
     'dashboard:low-stock',
     'dashboard:rejections',
     'analytics',
+    'inventory-history:revenue',
     'all-branches',
   ],
   INVENTORY: [
@@ -1032,6 +1041,7 @@ export const ROLE_DEFAULTS: Record<RoleName, readonly PermissionKey[]> = {
     'inventory-history:delete',
     'inventory-history:recascade',
     'inventory-history:gaps',
+    'inventory-history:revenue',
     'inventory-adjustments',
     'inventory-adjustments:create',
     'inventory-adjustments:transfer',

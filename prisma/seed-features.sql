@@ -53,6 +53,7 @@ INSERT INTO "Feature" (key, label, description, "createdAt") VALUES
   ('inventory-history:recascade',     'Recascade',                  'Recompute carried-forward stock across subsequent days', NOW()),
   ('inventory-history:gaps',          'Gap analysis',               'Days with missing inventory entries', NOW()),
   ('inventory-history:export-sales',  'Sales export',               'Download the sales spreadsheet for a period', NOW()),
+  ('inventory-history:revenue',       'Revenue figures',            'Revenue column and revenue cards on the inventory sheet', NOW()),
   -- inventory-adjustments
   ('inventory-adjustments',           'Inventory Adjustments',      'Pull-ins, pull-outs, transfers and anomaly corrections', NOW()),
   ('inventory-adjustments:create',    'Create adjustment',          'Record a pull-in or pull-out', NOW()),
