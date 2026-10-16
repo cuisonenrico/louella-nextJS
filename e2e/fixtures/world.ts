@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import type { Browser, Page } from '@playwright/test';
+import type { Browser, BrowserContextOptions, Page } from '@playwright/test';
 import type { Api } from './api';
 import { addDays, today } from './dates';
 import { loadE2eEnv } from '../support/env';
@@ -112,8 +112,9 @@ export async function buildWorld(api: Api, opts: WorldOptions = {}): Promise<Wor
 }
 
 /** A browser page signed in as the world's manager, via the API cookie flow (no UI). */
-export async function managerPage(browser: Browser, world: World): Promise<Page> {
-  const context = await browser.newContext();
+export async function managerPage(browser: Browser, world: World, options?: BrowserContextOptions): Promise<Page> {
+  // `browser.newContext` does not inherit the project's `use`, so a phone spec passes its device here.
+  const context = await browser.newContext(options);
   const res = await context.request.post('/api/v1/auth/login', {
     data: { email: world.manager.email, password: world.manager.password },
     maxRetries: 3, // ECONNRESET only (keep-alive race); a login is safe to repeat

@@ -48,7 +48,7 @@ export default defineConfig({
   // No shared storageState / setup project: each test signs in on its own
   // (fixtures/test.ts), because a refresh token cannot be shared across tests.
   projects: [
-    { name: 'desktop-chromium', use: { ...devices['Desktop Chrome'] } },
+    { name: 'desktop-chromium', use: { ...devices['Desktop Chrome'] }, testIgnore: '**/full/phone/**' },
     {
       name: 'tablet-webkit',
       use: { ...devices['iPad (gen 7) landscape'] },
@@ -59,7 +59,10 @@ export default defineConfig({
       // Payroll finalizes shared cutoffs, so two projects running it at once would collide. It is
       // desktop-only (its rules don't depend on the browser), which lets the two projects run side
       // by side — and a desktop failure no longer hides the tablet result as "did not run".
-      testIgnore: /payroll\.spec\.ts/,
+      testIgnore: [/payroll\.spec\.ts/, '**/full/phone/**'],
     },
+    // The branch manager's phone (Android, ~412px). Runs only the phone-layout specs; the rules
+    // themselves are covered by the desktop and tablet projects.
+    { name: 'phone-chromium', use: { ...devices['Pixel 7'] }, testMatch: '**/full/phone/*.spec.ts' },
   ],
 });

@@ -5,6 +5,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import dayjs from 'dayjs';
 import { toast } from 'sonner';
 import { useCan } from '@/lib/rbac/useHasFeature';
+import { useAuth } from '@/contexts/AuthContext';
 import { branchesApi, inventoryApi, productsApi } from '@/lib/apiServices';
 import type { Branch, Inventory, InventorySummaryData, Product, ProductType } from '@/types';
 import { extractError } from '@/lib/errors';
@@ -25,7 +26,8 @@ const NO_ROWS: Inventory[] = [];
  * filters, queries, staged edits and the writes. The desktop grid and the
  * phone count view both render from this, so the rules live in one place.
  */
-export function useInventoryDay() {
+export function useInventoryDay({ requireBranch = false }: { requireBranch?: boolean } = {}) {
+  const { user } = useAuth();
   const qc = useQueryClient();
   // Gate on the same keys the endpoints enforce, not on the role.
   //
@@ -46,13 +48,9 @@ export function useInventoryDay() {
   const [draftTo, setDraftTo] = useState(today);
   const [filterDateFrom, setFilterDateFrom] = useState(today);
   const [filterDateTo, setFilterDateTo] = useState(today);
-  const [filterBranch, setFilterBranch] = useState('');
+  const [chosenBranch, setFilterBranch] = useState('');
 
   const isRange = filterDateFrom !== filterDateTo;
-  const selectedBranchId = useMemo(() => {
-    const parsed = Number.parseInt(filterBranch, 10);
-    return Number.isFinite(parsed) ? parsed : null;
-  }, [filterBranch]);
 
   // Pending edits
   const [pendingUpdates, setPendingUpdates] = useState<Map<number, Partial<Inventory>>>(new Map());
@@ -65,6 +63,21 @@ export function useInventoryDay() {
   const { data: branches = [] } = useQuery<Branch[]>({ queryKey: ['branches'], queryFn: () => branchesApi.list().then((r) => r.data) });
   const { data: products = [] } = useQuery<Product[]>({ queryKey: ['products'], queryFn: () => productsApi.list().then((r) => r.data) });
   const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
+
+  // The phone views always show one branch. Until someone picks one, that is
+  // the account's own branch (a scoped manager) or the first active branch —
+  // derived, so viewing never writes state the desktop "All" view would lose.
+  const defaultBranch = useMemo(() => {
+    if (!requireBranch) return '';
+    const own = branches.find((b) => b.id === user?.branchId);
+    const first = own ?? branches.find((b) => b.isActive) ?? branches[0];
+    return first ? String(first.id) : '';
+  }, [requireBranch, branches, user?.branchId]);
+  const filterBranch = chosenBranch !== '' ? chosenBranch : defaultBranch;
+  const selectedBranchId = useMemo(() => {
+    const parsed = Number.parseInt(filterBranch, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  }, [filterBranch]);
 
   const invQuery = useQuery<Inventory[]>({
     queryKey: ['inventory', filterDateFrom, filterDateTo, filterBranch],

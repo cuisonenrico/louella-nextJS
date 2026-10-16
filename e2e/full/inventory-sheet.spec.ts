@@ -130,4 +130,10 @@ test.describe('inventory sheet @stress', () => {
     await expect(page.getByText(/Revenue/)).toHaveCount(0);
     await page.context().close();
   });
+
+  test('wide screens get no phone tab bar', async ({ page }) => {
+    await page.goto('/inventory/details');
+    await expect(page.locator('input[type="date"]').first()).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Phone navigation' })).toBeHidden();
+  });
 });

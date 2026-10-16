@@ -10,6 +10,15 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push, replace: vi.fn() }),
 }));
 
+// PhoneTabBar has its own spec; here only its hand-off to the drawer matters.
+vi.mock('@/components/mobile/PhoneTabBar', () => ({
+  PhoneTabBar: ({ onOpenMore }: { onOpenMore: () => void }) => (
+    <button type="button" onClick={onOpenMore}>
+      Phone tab bar More
+    </button>
+  ),
+}));
+
 vi.mock('next/image', () => ({
   default: (props: Record<string, unknown>) => <span>{String(props.alt ?? '')}</span>,
 }));
@@ -43,6 +52,14 @@ describe('app shell below the breakpoint', () => {
     const aside = screen.getByTestId('sidebar-aside');
     expect(aside.className).toContain('hidden');
     expect(aside.className).toContain('md:flex');
+  });
+
+  it("opens the drawer from the phone tab bar's More", async () => {
+    render(<AppShell>page</AppShell>);
+    const navCount = () => document.querySelectorAll('nav[aria-label="Main"]').length;
+    const before = navCount();
+    await userEvent.click(screen.getByRole('button', { name: 'Phone tab bar More' }));
+    expect(navCount()).toBe(before + 1);
   });
 
   it('offers a menu trigger that is hidden from md up', () => {
