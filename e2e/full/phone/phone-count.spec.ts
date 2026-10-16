@@ -91,6 +91,10 @@ test.describe('phone count', () => {
     await count.saveAndNext();
     await count.expectSaved();
     await expect.poll(async () => (await rowFor(api, world, p.id)).delivery).toBe(22);
+    // Reopened, the read-only block already says how it differs.
+    await page.keyboard.press('Escape');
+    const again = await count.openProduct(p.name);
+    await expect(again.getByText('Ordered 24 · 2 short')).toBeVisible();
     await page.context().close();
   });
 
@@ -212,6 +216,52 @@ test.describe('phone count', () => {
     await page.unroute(DAY);
     await count.expectSaved();
     await expect.poll(async () => (await rowFor(api, world, p.id)).leftover).toBe(4);
+    await page.context().close();
+  });
+
+  test('Initialize is never offered while the day is still loading', async ({ api, browser }) => {
+    const { world, page, count } = await setup(api, browser, 1);
+    const p = world.products[0];
+    // Slow the day's rows down: until they arrive, nothing is known to be missing.
+    await page.route('**/api/v1/inventory/branch/*/date*', async (route) => {
+      await new Promise((r) => setTimeout(r, 4000));
+      await route.continue();
+    });
+    const products = page.waitForResponse((r) => /\/api\/v1\/products(\?|$)/.test(r.url()));
+    await page.reload();
+    await products;
+    // Products are in, the day's rows are not. Sample several times: an auto-retrying
+    // assertion would simply wait for the button to go away.
+    for (let i = 0; i < 6; i++) {
+      await page.waitForTimeout(300);
+      expect(await count.initializeButton().count(), 'Initialize offered before the rows arrived').toBe(0);
+    }
+    await expect(count.row(p.name)).toBeVisible();
+    await page.context().close();
+  });
+
+  test('the sheet close button does not cover the corner text', async ({ api, browser }) => {
+    const { world, page, count } = await setup(api, browser, 1);
+    const sheet = await count.openProduct(world.products[0].name);
+    const close = (await sheet.getByRole('button', { name: 'Close' }).first().boundingBox())!;
+    const corner = (await sheet.getByText(/^\d+ of \d+$/).boundingBox())!;
+    const overlap =
+      close.x < corner.x + corner.width && corner.x < close.x + close.width &&
+      close.y < corner.y + corner.height && corner.y < close.y + close.height;
+    expect(overlap).toBe(false);
+    await page.context().close();
+  });
+
+  test('the phone asks only for its own branch-day, never every branch', async ({ api, browser }) => {
+    const world = await buildWorld(api, { products: 1 });
+    const page = await managerPage(browser, world, PHONE);
+    const allBranches: string[] = [];
+    page.on('request', (r) => {
+      if (/\/api\/v1\/inventory\/date\?/.test(r.url())) allBranches.push(r.url());
+    });
+    const count = new PhoneCount(page);
+    await count.open();
+    expect(allBranches).toEqual([]);
     await page.context().close();
   });
 });

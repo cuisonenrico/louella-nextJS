@@ -168,4 +168,14 @@ test.describe('phone Branch Orders', () => {
     expect(overlap).toBe(false);
     await page.context().close();
   });
+
+  test('without sales history the form says why there are no suggestions', async ({ api, browser }) => {
+    const world = await buildWorld(api, { products: 1 });
+    const page = await managerPage(browser, world, PHONE);
+    await openOrders(page);
+    await page.getByRole('button', { name: /New order/ }).click();
+    await expect(form(page).getByText('No sales in this period to suggest from.')).toBeVisible();
+    await expect(form(page).getByRole('button', { name: 'Fill all from suggestions' })).toBeDisabled();
+    await page.context().close();
+  });
 });

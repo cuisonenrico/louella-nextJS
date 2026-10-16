@@ -33,6 +33,11 @@ export default function DeliveryBlock({ value, ordered, editing, editable, onEdi
             <span className="text-lg font-semibold tabular-nums">{value}</span>
             {status.kind === 'match' ? <Badge variant="secondary">✓ matches order</Badge> : null}
           </span>
+          {status.kind === 'short' || status.kind === 'over' ? (
+            <span className="text-xs font-medium text-amber-700">
+              Ordered {ordered} · {status.by} {status.kind}
+            </span>
+          ) : null}
         </div>
         {editable ? (
           <Button variant="link" className="h-11 px-0" onClick={onEdit}>

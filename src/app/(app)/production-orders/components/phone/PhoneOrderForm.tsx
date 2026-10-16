@@ -193,6 +193,9 @@ export default function PhoneOrderForm({
             Fill all from suggestions
           </Button>
         </div>
+        {form.suggestionsQuery.isSuccess && form.suggestionByProduct.size === 0 ? (
+          <p className="text-xs text-muted-foreground">No sales in this period to suggest from.</p>
+        ) : null}
         {form.suggestionsQuery.isError ? (
           <p role="alert" className="text-xs text-destructive">
             Could not load suggestions — you can still enter quantities.
