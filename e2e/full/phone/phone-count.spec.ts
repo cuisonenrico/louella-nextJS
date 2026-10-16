@@ -172,4 +172,25 @@ test.describe('phone count', () => {
     expect((await rowFor(api, world, p.id)).leftoverCountedAt).toBeNull();
     await page.context().close();
   });
+
+  test('logging out with counts still queued asks first', async ({ api, browser }) => {
+    const { world, page, count } = await setup(api, browser, 1);
+    const p = world.products[0];
+
+    await page.context().setOffline(true);
+    await count.openProduct(p.name);
+    await count.set('Leftover', 2);
+    await count.saveAndNext();
+    await page.keyboard.press('Escape');
+    await expect(count.sync()).toContainText('1 waiting for signal');
+
+    await page.getByRole('button', { name: 'Account menu' }).click();
+    await page.getByRole('menuitem', { name: 'Logout' }).click();
+    const ask = page.getByRole('alertdialog');
+    await expect(ask).toContainText("1 count hasn't reached the server yet");
+    await ask.getByRole('button', { name: 'Stay' }).click();
+    await expect(page).toHaveURL(/\/inventory\/details/);
+    await expect(count.sync()).toContainText('1 waiting for signal');
+    await page.context().close();
+  });
 });
