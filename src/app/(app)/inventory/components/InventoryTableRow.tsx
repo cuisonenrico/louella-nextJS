@@ -19,6 +19,7 @@ interface InventoryTableRowProps {
   isRange: boolean;
   hasBranchFilter: boolean;
   canAdjust: boolean;
+  showRevenue: boolean;
   productById: Map<number, Product>;
   onAdjustmentsOpen: (inventory: Inventory) => void;
   onCellChange: (invId: number, field: EditableField, value: number) => void;
@@ -37,6 +38,7 @@ export function InventoryTableRow({
   isRange,
   hasBranchFilter,
   canAdjust,
+  showRevenue,
   onAdjustmentsOpen,
   onCellChange,
   getInputId,
@@ -47,7 +49,7 @@ export function InventoryTableRow({
   // the stock on hand and books nothing as sold, so the sheet does the same
   // while a delivery or reject is being typed. Typing a leftover counts it.
   const f = rowFigures(inv, pending, product);
-  const { uncounted, adjSum, totalStock, sold, revenue } = f;
+  const { uncounted, adjSum, totalStock, sold, revenue, stockValue } = f;
   const effectiveInv = { ...inv, ...pending, leftover: f.leftover, reject: f.reject, delivery: f.delivery };
   const hasPending = !!pending;
 
@@ -123,6 +125,9 @@ export function InventoryTableRow({
           {totalStock}
         </TableCell>
       )}
+      {!isRange && (
+        <TableCell className={cn(CELL, 'px-2 text-right tabular-nums')}>₱{stockValue.toLocaleString()}</TableCell>
+      )}
       {numberCell('leftover')}
       {numberCell('reject')}
       <TableCell className={cn(CELL, 'px-2 text-center')}>
@@ -130,11 +135,13 @@ export function InventoryTableRow({
           {sold}
         </Badge>
       </TableCell>
-      <TableCell className={cn(CELL, 'px-2 text-right')}>
-        <span className={cn('font-semibold tabular-nums', revenue > 0 ? 'text-green-600' : 'text-muted-foreground')}>
-          ₱{revenue.toLocaleString()}
-        </span>
-      </TableCell>
+      {showRevenue && (
+        <TableCell className={cn(CELL, 'px-2 text-right')}>
+          <span className={cn('font-semibold tabular-nums', revenue > 0 ? 'text-green-600' : 'text-muted-foreground')}>
+            ₱{revenue.toLocaleString()}
+          </span>
+        </TableCell>
+      )}
     </TableRow>
   );
 }

@@ -14,6 +14,8 @@ interface InventorySummaryPanelProps {
   isLoading?: boolean;
   filterDateFrom: string;
   filterDateTo: string;
+  /** Without `inventory-history:revenue` the revenue cards and the top product's ₱ are hidden. */
+  showRevenue: boolean;
 }
 
 export default function InventorySummaryPanel({
@@ -21,6 +23,7 @@ export default function InventorySummaryPanel({
   isLoading = false,
   filterDateFrom,
   filterDateTo,
+  showRevenue,
 }: InventorySummaryPanelProps) {
   const [open, setOpen] = useState(false);
 
@@ -67,16 +70,18 @@ export default function InventorySummaryPanel({
       </CollapsibleTrigger>
       <CollapsibleContent className="px-4 pb-4">
         {/* Revenue cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mb-4">
-          {revenueCards.map(({ label, value, color, big }) => (
-            <Card key={label} className="shadow-none">
-              <CardContent className="p-3">
-                <p className="text-[10px] font-semibold text-muted-foreground tracking-wider uppercase">{label}</p>
-                <p className={`${big ? 'text-xl' : 'text-lg'} font-bold ${color ?? ''} mt-0.5`}>{value}</p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        {showRevenue && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mb-4">
+            {revenueCards.map(({ label, value, color, big }) => (
+              <Card key={label} className="shadow-none">
+                <CardContent className="p-3">
+                  <p className="text-[10px] font-semibold text-muted-foreground tracking-wider uppercase">{label}</p>
+                  <p className={`${big ? 'text-xl' : 'text-lg'} font-bold ${color ?? ''} mt-0.5`}>{value}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
 
         {/* Unit stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
@@ -97,7 +102,7 @@ export default function InventorySummaryPanel({
               <CardContent className="p-3">
                 <p className="text-[10px] font-semibold text-muted-foreground tracking-wider">TOP PRODUCT</p>
                 <p className="font-bold mt-0.5">{summary.topProduct.name}</p>
-                <p className="text-sm text-green-600">₱{summary.topProduct.revenue.toLocaleString()} — {summary.topProduct.sold} sold</p>
+                <p className="text-sm text-green-600">{showRevenue ? `₱${summary.topProduct.revenue.toLocaleString()} — ` : ''}{summary.topProduct.sold} sold</p>
               </CardContent>
             </Card>
           )}

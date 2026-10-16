@@ -25,6 +25,7 @@ const COLUMNS = [
   'Delivery',
   'Adjustments',
   'Total Stock',
+  'Stock ₱',
   'Leftover',
   'Reject',
   'Sold',
@@ -176,6 +177,9 @@ export class InventorySheet {
     const headers = (await this.page.locator('thead').first().getByRole('columnheader').allInnerTexts()).map((h) =>
       h.trim(),
     );
-    expect(headers, 'sheet column order changed — update COLUMNS in inventory-sheet.page.ts').toEqual([...COLUMNS]);
+    // Revenue is the last column and is hidden from roles without inventory-history:revenue
+    // (branch managers by default), so it may be absent; every other column must be in order.
+    const expected = headers.includes('Revenue') ? [...COLUMNS] : COLUMNS.filter((c) => c !== 'Revenue');
+    expect(headers, 'sheet column order changed — update COLUMNS in inventory-sheet.page.ts').toEqual(expected);
   }
 }

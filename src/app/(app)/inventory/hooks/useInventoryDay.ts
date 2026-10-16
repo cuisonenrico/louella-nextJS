@@ -37,6 +37,7 @@ export function useInventoryDay() {
   const canCreateInventory = useCan('inventory-history:create');
   const canImport = useCan('inventory-import:import');
   const canSeeCash = useCan('branch-cash');
+  const canSeeRevenue = useCan('inventory-history:revenue');
   const today = dayjs().format('YYYY-MM-DD');
 
   // Filter state
@@ -225,7 +226,7 @@ export function useInventoryDay() {
     today, dateMode, draftFrom, draftTo, filterDateFrom, filterDateTo, filterBranch, selectedBranchId, isRange,
     branches, products, productById, invQuery, summaryQuery, rows, displayRows, rowsByType, uninitializedCount,
     bulkCreateMutation, pendingUpdates, handleCellChange, discardPending, savePendingMutation, totalPending,
-    isEditable, canAdjust, canEditInventory, canCreateInventory, canImport, canSeeCash,
+    isEditable, canAdjust, canEditInventory, canCreateInventory, canImport, canSeeCash, canSeeRevenue,
     commitDates, changeBranch, stepDate, handleDateModeChange, setDraftFrom, setDraftTo,
     adjRow, setAdjRow, discardDialog, confirmDiscard,
   };

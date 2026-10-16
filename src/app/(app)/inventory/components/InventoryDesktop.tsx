@@ -25,7 +25,7 @@ export default function InventoryDesktop({ day }: { day: InventoryDay }) {
     today, dateMode, draftFrom, draftTo, filterDateFrom, filterDateTo, filterBranch, selectedBranchId, isRange,
     branches, productById, invQuery, summaryQuery, rows, displayRows, rowsByType, uninitializedCount,
     bulkCreateMutation, pendingUpdates, handleCellChange, discardPending, savePendingMutation, totalPending,
-    isEditable, canAdjust, canCreateInventory, canImport, canSeeCash,
+    isEditable, canAdjust, canCreateInventory, canImport, canSeeCash, canSeeRevenue,
     commitDates, changeBranch, stepDate, handleDateModeChange, setDraftFrom, setDraftTo,
     adjRow, setAdjRow, discardDialog, confirmDiscard,
   } = day;
@@ -57,6 +57,7 @@ export default function InventoryDesktop({ day }: { day: InventoryDay }) {
             isLoading={summaryQuery.isLoading || summaryQuery.isFetching}
             filterDateFrom={filterDateFrom}
             filterDateTo={filterDateTo}
+            showRevenue={canSeeRevenue}
           />
 
           {/* Reject products card temporarily removed to keep the page focused on the table.
@@ -125,6 +126,7 @@ export default function InventoryDesktop({ day }: { day: InventoryDay }) {
               isEditable={isEditable}
               hasBranchFilter={filterBranch !== ''}
               canAdjust={canAdjust}
+              showRevenue={canSeeRevenue}
               onAdjustmentsOpen={setAdjRow}
               onCellChange={handleCellChange}
             />
