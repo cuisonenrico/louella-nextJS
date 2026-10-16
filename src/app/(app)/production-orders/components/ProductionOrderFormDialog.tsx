@@ -1,13 +1,10 @@
 'use client';
 
-import { Fragment, useCallback, useMemo, useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
+import { Fragment, useCallback, useMemo } from 'react';
 import { Loader2, Sparkles } from 'lucide-react';
-import type { Branch, Product, ProductionOrder, ProductionSuggestion, ProductType, SuggestionPeriod } from '@/types';
+import type { Branch, Product, ProductionOrder, ProductType, SuggestionPeriod } from '@/types';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { applyAllSuggestions } from '../lib/applySuggestions';
-import { productionOrdersApi } from '@/lib/apiServices';
+import { PRODUCT_TYPE_ORDER, useOrderForm } from '../hooks/useOrderForm';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -25,10 +22,7 @@ import { SheetInput } from '@/components/sheet/SheetInput';
 import { useSheetNavigation } from '@/components/sheet/useSheetNavigation';
 import { SHEET_BANNER, SHEET_CELL, SHEET_HEAD, SHEET_TABLE } from '@/components/sheet/styles';
 import { cn } from '@/lib/utils';
-import { extractError } from '@/lib/errors';
-import { useIdempotencyKey } from '@/lib/useIdempotencyKey';
 
-const PRODUCT_TYPE_ORDER: ProductType[] = ['BREAD', 'CAKE', 'SPECIAL', 'MISCELLANEOUS'];
 const TYPE_LABELS: Record<ProductType, string> = { BREAD: 'Bread', CAKE: 'Cake', SPECIAL: 'Special', MISCELLANEOUS: 'Miscellaneous' };
 /** The sheet has a single editable column; named so the nav hook can index it. */
 const YIELD_COLS = ['yield'] as const;
@@ -54,90 +48,13 @@ export function ProductionOrderFormDialog({
   onSaved,
   onClose,
 }: ProductionOrderFormDialogProps) {
-  const qc = useQueryClient();
-  const [formNotes, setFormNotes] = useState('');
-  const [formBranchId, setFormBranchId] = useState<number | null>(null);
-  const [formItems, setFormItems] = useState<Map<number, number>>(new Map());
-  const [formError, setFormError] = useState('');
-  const [suggestPeriod, setSuggestPeriod] = useState<SuggestionPeriod>('7d');
-
-  const suggestionsQuery = useQuery({
-    queryKey: ['production-suggestions', formBranchId, suggestPeriod, filterDate],
-    queryFn: () =>
-      productionOrdersApi
-        .suggestions(formBranchId!, suggestPeriod, filterDate)
-        .then((r) => r.data),
-    enabled: open && formBranchId != null,
-  });
-
-  const suggestionByProduct = useMemo(() => {
-    const map = new Map<number, ProductionSuggestion>();
-    for (const s of suggestionsQuery.data?.suggestions ?? []) {
-      map.set(s.productId, s);
-    }
-    return map;
-  }, [suggestionsQuery.data]);
-
-  const handleApplyAll = useCallback(() => {
-    const qtyMap = new Map<number, number>();
-    for (const [productId, s] of suggestionByProduct) {
-      qtyMap.set(productId, s.suggestedQty);
-    }
-    setFormItems((prev) => applyAllSuggestions(prev, qtyMap));
-  }, [suggestionByProduct]);
-
-  // Reset the form whenever the dialog opens. Done as a render-time state
-  // adjustment (React's "adjust state when props change" pattern) rather than
-  // an effect, so it doesn't trigger a cascading second render.
-  const [wasOpen, setWasOpen] = useState(open);
-  if (open !== wasOpen) {
-    setWasOpen(open);
-    if (open) {
-      const items = new Map<number, number>();
-      activeProducts.forEach((p) => items.set(p.id, 0));
-      if (editTarget) {
-        editTarget.items.forEach((i) => items.set(i.productId, i.yield));
-        setFormNotes(editTarget.notes ?? '');
-        setFormBranchId(editTarget.branchId ?? activeBranchId);
-      } else {
-        setFormNotes('');
-        setFormBranchId(activeBranchId);
-      }
-      setFormItems(items);
-      setFormError('');
-    }
-  }
-
-  const invalidate = useCallback(() => {
-    qc.invalidateQueries({ queryKey: ['production-orders'] });
-    qc.invalidateQueries({ queryKey: ['planned-yield'] });
-    qc.invalidateQueries({ queryKey: ['production'] });
-  }, [qc]);
-
-  // One key per new order, so a double click on Save creates one order.
-  const [createKey, renewCreateKey] = useIdempotencyKey();
-  const createMutation = useMutation({
-    mutationFn: (data: { branchId: number; date: string; notes?: string; items: { productId: number; yield: number }[] }) =>
-      productionOrdersApi.create(data, createKey),
-    onSuccess: () => { renewCreateKey(); invalidate(); onSaved(); onClose(); toast.success('Order saved'); },
-    onError: (err) => { const text = extractError(err); setFormError(text); toast.error(text); },
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: { branchId?: number; notes?: string; items?: { productId: number; yield: number }[] } }) =>
-      productionOrdersApi.update(id, data),
-    onSuccess: () => { invalidate(); onSaved(); onClose(); toast.success('Order saved'); },
-    onError: (err) => { const text = extractError(err); setFormError(text); toast.error(text); },
-  });
-
-  const saving = createMutation.isPending || updateMutation.isPending;
-
-  const productsByType = useMemo(() => {
-    const map = new Map<ProductType, Product[]>(PRODUCT_TYPE_ORDER.map((t) => [t, []]));
-    activeProducts.forEach((p) => map.get(p.type)?.push(p));
-    map.forEach((prods) => prods.sort((a, b) => a.sortOrder !== b.sortOrder ? a.sortOrder - b.sortOrder : a.name.localeCompare(b.name)));
-    return map;
-  }, [activeProducts]);
+  const form = useOrderForm({ open, editTarget, filterDate, activeBranchId, activeProducts });
+  const {
+    items: formItems, replaceItems: setFormItems, notes: formNotes, setNotes: setFormNotes,
+    branchId: formBranchId, setBranchId: setFormBranchId, error: formError,
+    suggestPeriod, setSuggestPeriod, suggestionsQuery, suggestionByProduct, applyAll: handleApplyAll,
+    productsByType, saving, total: totalFormYield,
+  } = form;
 
   const orderedProducts = useMemo(() => {
     const list: Product[] = [];
@@ -151,18 +68,10 @@ export function ProductionOrderFormDialog({
   const getInputId = useCallback((productId: number) => `order-yield-${productId}`, []);
   const { moveInColumn, moveLinear } = useSheetNavigation(orderedProductIds, YIELD_COLS, getInputId);
 
-  const handleSave = useCallback(() => {
-    setFormError('');
-    if (!formBranchId) { setFormError('Select a branch before saving.'); return; }
-    const items = Array.from(formItems.entries()).map(([productId, yieldVal]) => ({ productId, yield: yieldVal }));
-    if (editTarget) {
-      updateMutation.mutate({ id: editTarget.id, data: { branchId: formBranchId, notes: formNotes || undefined, items } });
-    } else {
-      createMutation.mutate({ branchId: formBranchId, date: filterDate, notes: formNotes || undefined, items });
-    }
-  }, [formItems, formNotes, formBranchId, filterDate, editTarget, createMutation, updateMutation]);
+  const handleSave = useCallback(async () => {
+    if (await form.save()) { onSaved(); onClose(); }
+  }, [form, onSaved, onClose]);
 
-  const totalFormYield = useMemo(() => Array.from(formItems.values()).reduce((a, b) => a + b, 0), [formItems]);
 
   return (
     <ResponsiveDialog open={open} onOpenChange={() => onClose()}>

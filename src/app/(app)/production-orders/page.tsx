@@ -26,6 +26,9 @@ import ProductionTabNav from '@/app/(app)/production/components/ProductionTabNav
 import { extractError } from '@/lib/errors';
 import { TableSkeleton } from '@/components/loading/Skeletons';
 import QueryError from '@/components/QueryError';
+import { useIsMobile } from '@/lib/useIsMobile';
+import { manilaToday } from '@/lib/manilaDate';
+import OrdersPhone from './components/phone/OrdersPhone';
 
 const PRODUCT_TYPE_ORDER: ProductType[] = ['BREAD', 'CAKE', 'SPECIAL', 'MISCELLANEOUS'];
 
@@ -36,10 +39,12 @@ const STATUS_BADGE: Record<ProductionOrderStatus, { label: string; variant: 'def
 };
 
 export default function ProductionOrdersPage() {
-  usePageHeader({ title: 'Production Orders' });
+  const isMobile = useIsMobile();
+  usePageHeader({ title: isMobile ? 'Branch Orders' : 'Production Orders' });
+  const [phoneForm, setPhoneForm] = useState<ProductionOrder | 'new' | null>(null);
   const { user } = useAuth();
   const qc = useQueryClient();
-  const [filterDate, setFilterDate] = useState(dayjs().format('YYYY-MM-DD'));
+  const [filterDate, setFilterDate] = useState(manilaToday);
   const [selectedBranchId, setSelectedBranchId] = useState<number | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<ProductionOrder | null>(null);
@@ -67,7 +72,10 @@ export default function ProductionOrdersPage() {
   });
 
   const activeBranches = useMemo(() => branches.filter((b) => b.isActive), [branches]);
-  const activeBranchId = selectedBranchId ?? activeBranches[0]?.id ?? null;
+  // A branch-scoped manager starts on their own branch: the first branch in the
+  // list is refused for them ("Access to this branch is not permitted").
+  const ownBranchId = activeBranches.some((b) => b.id === user?.branchId) ? user!.branchId : null;
+  const activeBranchId = selectedBranchId ?? ownBranchId ?? activeBranches[0]?.id ?? null;
   const activeBranch = useMemo(
     () => activeBranches.find((b) => b.id === activeBranchId) ?? null,
     [activeBranches, activeBranchId],
@@ -121,7 +129,7 @@ export default function ProductionOrdersPage() {
 
   // ── Date nav ──
   const goDate = (days: number) => setFilterDate(dayjs(filterDate).add(days, 'day').format('YYYY-MM-DD'));
-  const today = dayjs().format('YYYY-MM-DD');
+  const today = manilaToday();
 
   // ── Aggregated planned yield for the day ──
   const plannedByProduct = useMemo(() => {
@@ -163,6 +171,107 @@ export default function ProductionOrdersPage() {
         return orderDiff !== 0 ? orderDiff : pA.name.localeCompare(pB.name);
       });
   }, [plannedByProduct, productById]);
+
+  // The three confirmations, shared by the desktop list and the phone cards.
+  const confirmDialogs = (
+    <>
+          {/* ── Finalize Confirm ── */}
+          <AlertDialog open={!!finalizeTarget} onOpenChange={() => setFinalizeTarget(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Finalize PO #{finalizeTarget?.id}?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will record the production yield and automatically add the quantities as{' '}
+                  <strong>delivery</strong> to{' '}
+                  <strong>{finalizeTarget?.branch?.name ?? 'the destination branch'}</strong>
+                  &apos;s inventory. This cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => finalizeTarget && statusMutation.mutate({ id: finalizeTarget.id, status: 'FINALIZED' })}
+                  disabled={statusMutation.isPending}
+                >
+                  {statusMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
+                  Finalize
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          {/* ── Cancel Confirm ── */}
+          <AlertDialog open={!!cancelTarget} onOpenChange={() => setCancelTarget(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Cancel PO #{cancelTarget?.id}?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This marks the order as cancelled. Its planned yield will no longer count toward the daily total.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Keep</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  onClick={() => cancelTarget && statusMutation.mutate({ id: cancelTarget.id, status: 'CANCELLED' })}
+                  disabled={statusMutation.isPending}
+                >
+                  {statusMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
+                  Cancel Order
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          {/* ── Delete Confirm ── */}
+          <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete PO #{deleteTarget?.id}?</AlertDialogTitle>
+                <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+                >
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+    </>
+  );
+
+  if (isMobile) {
+    return (
+      <TooltipProvider>
+        <OrdersPhone
+          today={today}
+          filterDate={filterDate}
+          onDateChange={setFilterDate}
+          isAdmin={isAdmin}
+          activeBranches={activeBranches}
+          activeBranchId={activeBranchId}
+          onBranchChange={setSelectedBranchId}
+          activeProducts={activeProducts}
+          orders={orders}
+          isLoading={isLoading}
+          error={isError ? error : null}
+          onRetry={() => refetch()}
+          stats={{ ...orderStats, total: totalPlannedYield }}
+          form={phoneForm}
+          onFormChange={setPhoneForm}
+          onSaved={invalidateProductionViews}
+          onFinalize={setFinalizeTarget}
+          onCancel={setCancelTarget}
+          onDelete={setDeleteTarget}
+        />
+        {confirmDialogs}
+      </TooltipProvider>
+    );
+  }
 
   return (
     <>
@@ -405,72 +514,7 @@ export default function ProductionOrdersPage() {
             onClose={() => setDialogOpen(false)}
           />
 
-          {/* ── Finalize Confirm ── */}
-          <AlertDialog open={!!finalizeTarget} onOpenChange={() => setFinalizeTarget(null)}>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Finalize PO #{finalizeTarget?.id}?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This will record the production yield and automatically add the quantities as{' '}
-                  <strong>delivery</strong> to{' '}
-                  <strong>{finalizeTarget?.branch?.name ?? 'the destination branch'}</strong>
-                  &apos;s inventory. This cannot be undone.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={() => finalizeTarget && statusMutation.mutate({ id: finalizeTarget.id, status: 'FINALIZED' })}
-                  disabled={statusMutation.isPending}
-                >
-                  {statusMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
-                  Finalize
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-
-          {/* ── Cancel Confirm ── */}
-          <AlertDialog open={!!cancelTarget} onOpenChange={() => setCancelTarget(null)}>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Cancel PO #{cancelTarget?.id}?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This marks the order as cancelled. Its planned yield will no longer count toward the daily total.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Keep</AlertDialogCancel>
-                <AlertDialogAction
-                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                  onClick={() => cancelTarget && statusMutation.mutate({ id: cancelTarget.id, status: 'CANCELLED' })}
-                  disabled={statusMutation.isPending}
-                >
-                  {statusMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
-                  Cancel Order
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-
-          {/* ── Delete Confirm ── */}
-          <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Delete PO #{deleteTarget?.id}?</AlertDialogTitle>
-                <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                  onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
-                >
-                  Delete
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+          {confirmDialogs}
 
         </TooltipProvider>
       </>

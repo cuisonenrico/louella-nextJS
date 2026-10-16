@@ -1077,6 +1077,9 @@ export const ROLE_DEFAULTS: Record<RoleName, readonly PermissionKey[]> = {
     'production-orders',
     'production-orders:create',
     'production-orders:edit',
+    // The phone order form's "Fill all from suggestions". BranchGuard keeps the
+    // averages to the manager's own branch.
+    'production-orders:suggestions',
     'material-stock',
     'material-stock:create',
     'material-stock:edit',

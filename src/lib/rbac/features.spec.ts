@@ -275,5 +275,11 @@ describe('RBAC manifest', () => {
     it('is not granted to MANAGER', () => {
       expect(ROLE_DEFAULTS.MANAGER).not.toContain('inventory-history:revenue');
     });
+
+    // The phone order form is built around "Fill all from suggestions"; BranchGuard keeps a
+    // manager's suggestions to their own branch.
+    it('lets MANAGER see order suggestions', () => {
+      expect(ROLE_DEFAULTS.MANAGER).toContain('production-orders:suggestions');
+    });
   });
 });

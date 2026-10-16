@@ -1,7 +1,7 @@
 import { test, expect } from '../fixtures/test';
 import type { Api } from '../fixtures/api';
 import { today } from '../fixtures/dates';
-import { buildWorld } from '../fixtures/world';
+import { buildWorld, managerPage } from '../fixtures/world';
 import { ProductionOrdersPage } from '../pages/production-orders.page';
 import { KITCHEN_BRANCH_ID } from '../support/credentials';
 import type { SalesDay } from '../support/types';
@@ -82,5 +82,18 @@ test.describe('production orders @stress', () => {
 
     expect(await branchDelivery(api, world.branch.id, product.id, date)).toBe(deliveryBefore);
     expect(await kitchenYield(api, product.id, date)).toBe(yieldBefore);
+  });
+
+  // Regression: the page defaulted to the first branch in the list, which a branch-scoped manager
+  // is refused ("Access to this branch is not permitted"), instead of the manager's own branch.
+  test("a branch manager opens on their own branch's orders", async ({ api, browser }) => {
+    const world = await buildWorld(api, { products: 1 });
+    // A newer branch, so the manager's own is not the first one the list returns.
+    await buildWorld(api, { products: 0 });
+    const page = await managerPage(browser, world);
+    await page.goto('/production/orders');
+    await expect(page.getByText(`Branch view: ${world.branch.name}`)).toBeVisible();
+    await expect(page.getByText('Access to this branch is not permitted')).toHaveCount(0);
+    await page.context().close();
   });
 });
