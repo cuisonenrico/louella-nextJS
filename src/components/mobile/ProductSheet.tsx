@@ -17,7 +17,8 @@ export function ProductSheet({ open, onOpenChange, title, subtitle, children, fo
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" className="max-h-[90dvh] gap-0 overflow-y-auto rounded-t-2xl p-0">
-        <SheetHeader className="flex-row items-baseline justify-between gap-2 px-4 pb-2 pt-4 text-left">
+        {/* pr-14 keeps the corner text clear of the sheet's close button. */}
+        <SheetHeader className="flex-row items-baseline justify-between gap-2 px-4 pb-2 pr-14 pt-4 text-left">
           <SheetTitle className="text-lg">{title}</SheetTitle>
           {subtitle ? (
             <SheetDescription className="shrink-0 text-xs">{subtitle}</SheetDescription>

@@ -93,6 +93,8 @@ export function useInventoryDay({ requireBranch = false }: { requireBranch?: boo
       return inventoryApi.byDateRange(filterDateFrom, filterDateTo).then((r) => r.data);
     },
     placeholderData: keepPreviousData,
+    // A one-branch view waits for its branch rather than asking for every branch first.
+    enabled: !requireBranch || filterBranch !== '',
   });
 
   const summaryQuery = useQuery<InventorySummaryData>({
@@ -118,11 +120,15 @@ export function useInventoryDay({ requireBranch = false }: { requireBranch?: boo
   }, [displayRows, productById]);
 
   // Uninitialized products count
+  // Nothing is missing until the day's own rows have arrived: while they load (or
+  // another day's are still shown as placeholder) every product would look new,
+  // and Initialize would be offered for rows that already exist.
+  const rowsAreTheDays = invQuery.data !== undefined && !invQuery.isPlaceholderData;
   const uninitializedCount = useMemo(() => {
-    if (isRange || filterBranch === '') return 0;
+    if (isRange || filterBranch === '' || !rowsAreTheDays) return 0;
     const existingProductIds = new Set(rows.map((r) => r.productId));
     return products.filter((p) => p.isActive && !existingProductIds.has(p.id)).length;
-  }, [isRange, filterBranch, rows, products]);
+  }, [isRange, filterBranch, rowsAreTheDays, rows, products]);
 
   // Reset pending edits when the filters change. Done as a render-time state
   // adjustment (React's "adjust state when props change" pattern) rather than
