@@ -2,6 +2,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   ADMIN_LOCKED_KEYS,
+  FEATURES,
   FEATURE_LIST,
   MOBILE_CONTRACT_KEYS,
   PERMISSION_KEYS,
@@ -238,6 +239,7 @@ describe('RBAC manifest', () => {
       '20260925110000_payroll_feature_keys',
       '20261001110000_branch_cash_feature_keys',
       '20261002100000_landing_page',
+      '20261016100000_inventory_revenue_panel_key',
     ]
       .map((dir) =>
         readFileSync(join(REPO_ROOT, 'prisma', 'migrations', dir, 'migration.sql'), 'utf-8'),
@@ -257,6 +259,29 @@ describe('RBAC manifest', () => {
     it('agrees with the standalone seed script', () => {
       const seed = readFileSync(join(REPO_ROOT, 'prisma', 'seed-features.sql'), 'utf-8');
       for (const p of PERMISSION_LIST) expect(seed).toContain(`('${p.key}',`);
+    });
+  });
+
+  describe('inventory revenue panel', () => {
+    it('is a presentation panel of inventory-history', () => {
+      const f = FEATURES.find((x) => x.key === 'inventory-history')!;
+      expect(f.panels).toContainEqual(expect.objectContaining({ id: 'revenue', sensitivity: 'presentation' }));
+    });
+
+    // Every role that has the sheet, except MANAGER. VIEWER has no inventory sheet, and a child
+    // key without its parent is stripped at resolution (enforceParentRule).
+    it.each(['INVENTORY', 'ADMIN'] as const)('is granted to %s', (role) => {
+      expect(ROLE_DEFAULTS[role]).toContain('inventory-history:revenue');
+    });
+
+    it('is not granted to MANAGER', () => {
+      expect(ROLE_DEFAULTS.MANAGER).not.toContain('inventory-history:revenue');
+    });
+
+    // The phone order form is built around "Fill all from suggestions"; BranchGuard keeps a
+    // manager's suggestions to their own branch.
+    it('lets MANAGER see order suggestions', () => {
+      expect(ROLE_DEFAULTS.MANAGER).toContain('production-orders:suggestions');
     });
   });
 });

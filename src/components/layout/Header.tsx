@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePageHeaderStore } from '@/lib/pageHeaderStore';
@@ -14,6 +15,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { createCountStore } from '@/lib/mobile/countQueue';
 
 export default function Header({ onOpenNav }: { onOpenNav?: () => void }) {
   const { user, logout } = useAuth();
@@ -22,11 +34,22 @@ export default function Header({ onOpenNav }: { onOpenNav?: () => void }) {
   const headerContent = usePageHeaderStore((s) => s.content);
   const headerActions = usePageHeaderStore((s) => s.actions);
 
-  const handleLogout = () => {
+  const [unsent, setUnsent] = useState(0);
+
+  const doLogout = () => {
     guardNavigation(async () => {
       await logout();
       router.replace('/login');
     });
+  };
+
+  // Counts typed on a phone wait in a queue until they reach the server. Signing
+  // out keeps them on this device (they send at the next sign-in as this user),
+  // but nobody should find that out after the fact.
+  const handleLogout = () => {
+    const waiting = user ? createCountStore(user.id).read().length : 0;
+    if (waiting > 0) setUnsent(waiting);
+    else doLogout();
   };
 
   const initials = user?.email?.slice(0, 2).toUpperCase() ?? '??';
@@ -70,6 +93,22 @@ export default function Header({ onOpenNav }: { onOpenNav?: () => void }) {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <AlertDialog open={unsent > 0} onOpenChange={(open) => !open && setUnsent(0)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Log out?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {unsent === 1 ? "1 count hasn't" : `${unsent} counts haven't`} reached the server yet. They stay on this
+              phone and send when you sign in again.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Stay</AlertDialogCancel>
+            <AlertDialogAction onClick={doLogout}>Log out anyway</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </header>
   );
 }

@@ -13,7 +13,7 @@ doing anything** unless both database URLs are exactly that. It also refuses to 
 ```bash
 npm run e2e:db          # start the throwaway Postgres (Docker) — tmpfs, so every start is empty
 npm run e2e:smoke       # the CI gate (desktop Chromium, @smoke only)
-npm run e2e             # everything: desktop Chromium + iPad WebKit side by side (payroll is desktop-only)
+npm run e2e             # everything: desktop Chromium + iPad WebKit + phone Chromium (payroll is desktop-only)
 npm run e2e:stress      # @stress tests ×10 across 4 workers — the flake detector
 npm run e2e:ui          # Playwright UI mode, for writing tests
 npm run e2e:db:down
@@ -37,6 +37,12 @@ Payroll (`full/payroll.spec.ts`) tests the two most recent ended cutoffs every r
 print page. It is desktop-only: the iPad project ignores it, so the projects can run in parallel, and the iPad
 project has a 120 s test timeout (it is slower, and the sheet tests re-open the page several times).
 
+**Phone** (`phone-chromium`, Pixel 7) runs only `full/phone/*.spec.ts` — the phone layouts of the count, Branch
+Orders and the tab bar — and the desktop and iPad projects ignore that folder. Phone specs drive the world's
+manager through `managerPage(browser, world, devices['Pixel 7'])`: a context opened from `browser` does not
+inherit the project's `use`, so the device must be passed. Offline behaviour is tested with
+`context.setOffline()` and `page.route()`.
+
 ## Layout
 
 ```
@@ -51,6 +57,7 @@ e2e/
   pages/                 one page object per screen
   smoke/                 @smoke — the CI gate
   full/                  everything else
+  full/phone/            phone layouts — only the phone-chromium project runs these
   support/               env guards, credentials, the app's own peso() formatter, response types
   routes.ts              every route in src/app (kept in sync with spec §8.1)
 ```

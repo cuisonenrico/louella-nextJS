@@ -99,4 +99,41 @@ test.describe('inventory sheet @stress', () => {
     expect(failed).toEqual([]);
     await page.context().close();
   });
+
+  test('admin sees the stock value and the revenue figures', async ({ api, page }) => {
+    const world = await buildWorld(api, { products: 1 });
+    const p = world.products[0];
+    const sheet = new InventorySheet(page);
+
+    await sheet.open(world.branch.name, today(), [p.name]);
+    await sheet.enter(p.name, { delivery: 10, leftover: 2 });
+    // Stock value = on hand × that day's price; a new branch opens at 0, so on hand = delivery.
+    await expect(sheet.cell(p.name, 'Stock ₱')).toHaveText(`₱${(10 * p.price).toLocaleString()}`);
+    await expect(page.getByRole('columnheader', { name: 'Revenue', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: /Day Summary/ }).click();
+    await expect(page.getByText('Total Revenue')).toBeVisible();
+  });
+
+  test('a branch manager sees the stock value but no revenue', async ({ api, browser }) => {
+    const world = await buildWorld(api, { products: 1 });
+    const p = world.products[0];
+    const page = await managerPage(browser, world);
+    const sheet = new InventorySheet(page);
+
+    await sheet.open(world.branch.name, today(), [p.name]);
+    await sheet.enter(p.name, { delivery: 10, leftover: 2 });
+    await expect(sheet.cell(p.name, 'Stock ₱')).toHaveText(`₱${(10 * p.price).toLocaleString()}`);
+    await sheet.expectNumber(p.name, 'Sold', 8);
+    await expect(page.getByRole('columnheader', { name: 'Revenue', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: /Day Summary/ }).click();
+    await expect(page.getByText('Units Sold')).toBeVisible();
+    await expect(page.getByText(/Revenue/)).toHaveCount(0);
+    await page.context().close();
+  });
+
+  test('wide screens get no phone tab bar', async ({ page }) => {
+    await page.goto('/inventory/details');
+    await expect(page.locator('input[type="date"]').first()).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Phone navigation' })).toBeHidden();
+  });
 });

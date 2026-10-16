@@ -30,7 +30,11 @@ export const PENDING_TRANSFERS_KEY = ['pending-transfers'] as const;
  * sender sees it is still awaiting an answer. Renders nothing when nothing is
  * pending, or when the caller cannot see adjustments.
  */
-export default function PendingTransfersPanel({ branchId }: { branchId?: number | null }) {
+/**
+ * The pending-transfer query and its accept/reject writes, shared by this panel
+ * and the phone count's incoming cards.
+ */
+export function usePendingTransfers(branchId?: number | null) {
   const qc = useQueryClient();
   const canSee = useCan('inventory-adjustments');
   const canAnswer = useCan('inventory-adjustments:transfer');
@@ -59,6 +63,12 @@ export default function PendingTransfersPanel({ branchId }: { branchId?: number 
     onError: (err) => toast.error(extractError(err)),
   });
   const busy = acceptMutation.isPending || rejectMutation.isPending;
+
+  return { canSee, canAnswer, pending, acceptMutation, rejectMutation, busy };
+}
+
+export default function PendingTransfersPanel({ branchId }: { branchId?: number | null }) {
+  const { canSee, canAnswer, pending, acceptMutation, rejectMutation, busy } = usePendingTransfers(branchId);
 
   if (!canSee || pending.length === 0) return null;
 

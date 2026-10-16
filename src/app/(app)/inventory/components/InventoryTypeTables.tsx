@@ -24,6 +24,8 @@ interface InventoryTypeTablesProps {
   isEditable: boolean;
   hasBranchFilter: boolean;
   canAdjust: boolean;
+  /** `inventory-history:revenue` — branch managers do not get it by default. */
+  showRevenue: boolean;
   onAdjustmentsOpen: (inventory: Inventory) => void;
   onCellChange: (invId: number, field: 'delivery' | 'leftover' | 'reject', value: number) => void;
 }
@@ -36,6 +38,7 @@ export default function InventoryTypeTables({
   isEditable,
   hasBranchFilter,
   canAdjust,
+  showRevenue,
   onAdjustmentsOpen,
   onCellChange,
 }: InventoryTypeTablesProps) {
@@ -58,11 +61,11 @@ export default function InventoryTypeTables({
     (!isRange ? 1 : 0) + // Prev. Leftover
     1 + // Delivery
     (hasBranchFilter ? 1 : 0) + // Adjustments
-    (!isRange ? 1 : 0) + // Total Stock
+    (!isRange ? 2 : 0) + // Total Stock, Stock ₱
     1 + // Leftover
     1 + // Reject
     1 + // Sold
-    1; // Revenue
+    (showRevenue ? 1 : 0); // Revenue
 
   return (
     <Table containerClassName={SHEET_CONTAINER} className={SHEET_TABLE}>
@@ -73,10 +76,11 @@ export default function InventoryTypeTables({
           <TableHead className={cn(SHEET_HEAD, 'text-right w-[90px]')}>Delivery</TableHead>
           {hasBranchFilter && <TableHead className={cn(SHEET_HEAD, 'text-center w-[110px]')}>Adjustments</TableHead>}
           {!isRange && <TableHead className={cn(SHEET_HEAD, 'text-right w-[100px]')}>Total Stock</TableHead>}
+          {!isRange && <TableHead className={cn(SHEET_HEAD, 'text-right w-[100px]')}>Stock ₱</TableHead>}
           <TableHead className={cn(SHEET_HEAD, 'text-right w-[90px]')}>Leftover</TableHead>
           <TableHead className={cn(SHEET_HEAD, 'text-right w-[80px]')}>Reject</TableHead>
           <TableHead className={cn(SHEET_HEAD, 'text-center w-[80px]')}>Sold</TableHead>
-          <TableHead className={cn(SHEET_HEAD, 'text-right w-[110px]')}>Revenue</TableHead>
+          {showRevenue && <TableHead className={cn(SHEET_HEAD, 'text-right w-[110px]')}>Revenue</TableHead>}
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -101,6 +105,7 @@ export default function InventoryTypeTables({
                   isRange={isRange}
                   hasBranchFilter={hasBranchFilter}
                   canAdjust={canAdjust}
+                  showRevenue={showRevenue}
                   productById={productById}
                   onAdjustmentsOpen={onAdjustmentsOpen}
                   onCellChange={onCellChange}

@@ -227,6 +227,14 @@ export const FEATURES = [
         description: 'Download the sales spreadsheet for a period',
         sensitivity: 'sensitive',
       },
+      // Branch managers get the sheet without revenue: they need what they
+      // count and what it is worth, not what the branch earned.
+      {
+        id: 'revenue',
+        label: 'Revenue figures',
+        description: 'Revenue column and revenue cards on the inventory sheet',
+        sensitivity: 'presentation',
+      },
     ],
   },
   {
@@ -1032,6 +1040,7 @@ export const ROLE_DEFAULTS: Record<RoleName, readonly PermissionKey[]> = {
     'inventory-history:delete',
     'inventory-history:recascade',
     'inventory-history:gaps',
+    'inventory-history:revenue',
     'inventory-adjustments',
     'inventory-adjustments:create',
     'inventory-adjustments:transfer',
@@ -1067,6 +1076,9 @@ export const ROLE_DEFAULTS: Record<RoleName, readonly PermissionKey[]> = {
     'production-orders',
     'production-orders:create',
     'production-orders:edit',
+    // The phone order form's "Fill all from suggestions". BranchGuard keeps the
+    // averages to the manager's own branch.
+    'production-orders:suggestions',
     'material-stock',
     'material-stock:create',
     'material-stock:edit',

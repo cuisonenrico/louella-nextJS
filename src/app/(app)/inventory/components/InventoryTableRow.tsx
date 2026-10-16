@@ -7,7 +7,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils';
 import { SheetInput } from '@/components/sheet/SheetInput';
 import { SHEET_CELL as CELL } from '@/components/sheet/styles';
-import { getAdjSum, getRevenue, getSold, getTotalStock } from '../hooks/useInventoryColumns';
+import { rowFigures } from '@/lib/inventory/rowFigures';
 
 type EditableField = 'delivery' | 'leftover' | 'reject';
 
@@ -19,6 +19,7 @@ interface InventoryTableRowProps {
   isRange: boolean;
   hasBranchFilter: boolean;
   canAdjust: boolean;
+  showRevenue: boolean;
   productById: Map<number, Product>;
   onAdjustmentsOpen: (inventory: Inventory) => void;
   onCellChange: (invId: number, field: EditableField, value: number) => void;
@@ -37,25 +38,19 @@ export function InventoryTableRow({
   isRange,
   hasBranchFilter,
   canAdjust,
-  productById,
+  showRevenue,
   onAdjustmentsOpen,
   onCellChange,
   getInputId,
   onMoveInColumn,
   onMoveLinear,
 }: InventoryTableRowProps) {
-  const merged = pending ? { ...inv, ...pending } : inv;
   // Nobody has counted this day's leftover: the server derives the close from
   // the stock on hand and books nothing as sold, so the sheet does the same
   // while a delivery or reject is being typed. Typing a leftover counts it.
-  const uncounted = inv.leftoverCountedAt === null && pending?.leftover === undefined;
-  const effectiveInv = uncounted
-    ? { ...merged, leftover: getTotalStock(merged) - (merged.reject ?? 0) }
-    : merged;
-  const adjSum = getAdjSum(effectiveInv);
-  const totalStock = getTotalStock(effectiveInv);
-  const sold = getSold(effectiveInv, productById);
-  const revenue = getRevenue(effectiveInv, productById);
+  const f = rowFigures(inv, pending, product);
+  const { uncounted, adjSum, totalStock, sold, revenue, stockValue } = f;
+  const effectiveInv = { ...inv, ...pending, leftover: f.leftover, reject: f.reject, delivery: f.delivery };
   const hasPending = !!pending;
 
   const editCell = (field: EditableField) => (
@@ -130,6 +125,9 @@ export function InventoryTableRow({
           {totalStock}
         </TableCell>
       )}
+      {!isRange && (
+        <TableCell className={cn(CELL, 'px-2 text-right tabular-nums')}>₱{stockValue.toLocaleString()}</TableCell>
+      )}
       {numberCell('leftover')}
       {numberCell('reject')}
       <TableCell className={cn(CELL, 'px-2 text-center')}>
@@ -137,11 +135,13 @@ export function InventoryTableRow({
           {sold}
         </Badge>
       </TableCell>
-      <TableCell className={cn(CELL, 'px-2 text-right')}>
-        <span className={cn('font-semibold tabular-nums', revenue > 0 ? 'text-green-600' : 'text-muted-foreground')}>
-          ₱{revenue.toLocaleString()}
-        </span>
-      </TableCell>
+      {showRevenue && (
+        <TableCell className={cn(CELL, 'px-2 text-right')}>
+          <span className={cn('font-semibold tabular-nums', revenue > 0 ? 'text-green-600' : 'text-muted-foreground')}>
+            ₱{revenue.toLocaleString()}
+          </span>
+        </TableCell>
+      )}
     </TableRow>
   );
 }

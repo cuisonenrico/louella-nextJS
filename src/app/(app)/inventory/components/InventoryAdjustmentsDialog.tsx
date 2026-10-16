@@ -56,63 +56,80 @@ interface InventoryAdjustmentsDialogProps {
   onClose: () => void;
 }
 
-export default function InventoryAdjustmentsDialog({ inventory, productName, branches, onClose }: InventoryAdjustmentsDialogProps) {
+/**
+ * Adjustment and transfer writes for one inventory row, shared by the desktop
+ * dialog and the phone's adjust sheet. Creating, transferring and deleting are
+ * three separate grants on the server, so each is exposed with its own flag.
+ */
+export function useInventoryAdjustments(branches: Branch[]) {
   const qc = useQueryClient();
   // One key per submission: resending the same adjustment or transfer (a
   // double click, a retry after a lost response) books it once.
   const [submitKey, renewSubmitKey] = useIdempotencyKey();
-  const [form, setForm] = useState<{ type: AdjustmentType; value: string; notes: string; toBranchId: string }>({
-    type: 'PULL_IN',
-    value: '',
-    notes: '',
-    toBranchId: '',
-  });
-  const [formError, setFormError] = useState('');
-  const [deleteTarget, setDeleteTarget] = useState<number | null>(null);
+  const [error, setError] = useState('');
 
-  // Creating, transferring and deleting are three separate grants on the
-  // server; the dialog offered all three to anyone who could open it.
   const canCreate = useCan('inventory-adjustments:create');
   const canTransfer = useCan('inventory-adjustments:transfer');
   const canDelete = useCan('inventory-adjustments:delete');
 
-  const createMutation = useMutation({
+  const create = useMutation({
     mutationFn: (data: { inventoryId: number; type: AdjustmentType; value: number; notes?: string }) =>
       inventoryAdjustmentsApi.create(data, submitKey),
     onSuccess: () => {
       renewSubmitKey();
       qc.invalidateQueries({ queryKey: ['inventory'] });
-      setForm((f) => ({ ...f, value: '', notes: '', toBranchId: '' }));
-      setFormError('');
+      setError('');
     },
-    onError: (err) => setFormError(extractError(err)),
+    onError: (err) => setError(extractError(err)),
   });
 
-  const transferMutation = useMutation({
+  const transfer = useMutation({
     mutationFn: (data: { fromInventoryId: number; toBranchId: number; value: number; notes?: string }) =>
       inventoryAdjustmentsApi.transfer(data, submitKey),
-    onSuccess: () => {
+    onSuccess: (_r, vars) => {
       renewSubmitKey();
-      const toName = branches.find((b) => b.id === parseInt(form.toBranchId))?.name ?? 'the receiving branch';
+      const toName = branches.find((b) => b.id === vars.toBranchId)?.name ?? 'the receiving branch';
       qc.invalidateQueries({ queryKey: ['inventory'] });
       qc.invalidateQueries({ queryKey: PENDING_TRANSFERS_KEY });
       // The stock has left this branch; the other side counts it once it accepts.
       toast.success(`Sent — waiting for ${toName} to accept`);
-      setForm((f) => ({ ...f, value: '', notes: '', toBranchId: '' }));
-      setFormError('');
+      setError('');
     },
-    onError: (err) => setFormError(extractError(err)),
+    onError: (err) => setError(extractError(err)),
   });
 
-  const deleteMutation = useMutation({
+  const remove = useMutation({
     mutationFn: (id: number) => inventoryAdjustmentsApi.delete(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['inventory'] });
       // Deleting a pending transfer cancels it.
       qc.invalidateQueries({ queryKey: PENDING_TRANSFERS_KEY });
     },
-    onError: (err) => setFormError(extractError(err)),
+    onError: (err) => setError(extractError(err)),
   });
+
+  return { create, transfer, remove, error, setError, canCreate, canTransfer, canDelete };
+}
+
+export default function InventoryAdjustmentsDialog({ inventory, productName, branches, onClose }: InventoryAdjustmentsDialogProps) {
+  const [form, setForm] = useState<{ type: AdjustmentType; value: string; notes: string; toBranchId: string }>({
+    type: 'PULL_IN',
+    value: '',
+    notes: '',
+    toBranchId: '',
+  });
+  const [deleteTarget, setDeleteTarget] = useState<number | null>(null);
+  const {
+    create: createMutation,
+    transfer: transferMutation,
+    remove: deleteMutation,
+    error: formError,
+    setError: setFormError,
+    canCreate,
+    canTransfer,
+    canDelete,
+  } = useInventoryAdjustments(branches);
+  const resetForm = () => setForm((f) => ({ ...f, value: '', notes: '', toBranchId: '' }));
 
   if (!inventory) return null;
 
@@ -140,14 +157,14 @@ export default function InventoryAdjustmentsDialog({ inventory, productName, bra
         toBranchId: parseInt(form.toBranchId),
         value: parsedValue,
         notes: form.notes || undefined,
-      });
+      }, { onSuccess: resetForm });
     } else {
       createMutation.mutate({
         inventoryId: inventory.id,
         type: form.type,
         value: parsedValue,
         notes: form.notes || undefined,
-      });
+      }, { onSuccess: resetForm });
     }
   };
 

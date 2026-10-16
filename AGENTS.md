@@ -256,6 +256,14 @@ UI: shadcn/ui components in `src/components/ui/`. Layout shell in
 `src/components/layout/`. Editable tables use the shared spreadsheet module in
 `src/components/sheet` + `src/lib/sheet`.
 
+Phones (below `md`) get their own views of `/inventory/details` (count list +
+product sheet) and `/production/orders` (cards + order form), plus a bottom tab
+bar. Spec: `docs/superpowers/specs/2026-10-16-mobile-count-and-orders-design.md`.
+Both views of a page share one data hook (`useInventoryDay`, `useOrderForm`) and
+the row figures in `src/lib/inventory/rowFigures.ts`. Phone count saves go
+through a per-user `localStorage` queue (`src/lib/mobile/countQueue.ts`) so a
+dropped signal never loses a count; order drafts are kept the same way.
+
 Route structure mirrors backend modules (`/inventory`, `/production`,
 `/materials`, …).
 

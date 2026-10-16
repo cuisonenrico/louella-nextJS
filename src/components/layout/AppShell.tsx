@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import RouteGuard from '@/components/layout/RouteGuard';
 import Sidebar from '@/components/layout/Sidebar';
 import SidebarContent from '@/components/layout/SidebarContent';
 import Header from '@/components/layout/Header';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
+import { PhoneTabBar } from '@/components/mobile/PhoneTabBar';
 
 /**
  * The authenticated shell: an ordinary flex row.
@@ -67,10 +68,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <div className="contents print:hidden">
           <Header onOpenNav={() => setDrawerOpen(true)} />
         </div>
-        <main className="flex-1 bg-background p-4 md:p-6 print:bg-white print:p-0">
+        {/* pb-24 below md keeps the phone tab bar from covering the end of a page. */}
+        <main className="flex-1 bg-background p-4 pb-24 md:p-6 print:bg-white print:p-0">
           <RouteGuard>{children}</RouteGuard>
         </main>
       </div>
+
+      {/* Suspense: the bar reads the search params, which must not block prerendering. */}
+      <Suspense>
+        <PhoneTabBar onOpenMore={() => setDrawerOpen(true)} />
+      </Suspense>
     </div>
   );
 }

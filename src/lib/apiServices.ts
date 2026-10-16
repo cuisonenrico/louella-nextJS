@@ -172,8 +172,8 @@ export const inventoryApi = {
   // One request for a whole sheet save. Sending one PATCH per row hits the
   // global 20/min throttle on any real sheet, and a partial save is worse than
   // a slow one.
-  updateBulk: (data: InventoryBulkUpdateItem[]) =>
-    api.patch<InventoryBulkUpdateResult>('/inventory/bulk', data),
+  updateBulk: (data: InventoryBulkUpdateItem[], config?: { timeout?: number }) =>
+    api.patch<InventoryBulkUpdateResult>('/inventory/bulk', data, config),
   delete: (id: number) => api.delete(`/inventory/${id}`),
   summary: (startDate?: string, endDate?: string, branchId?: string) =>
     api.get<InventorySummaryData>('/inventory/summary', {

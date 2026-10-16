@@ -509,14 +509,14 @@ marked "sweep v1" is covered by the route sweep only.
 | `/dashboard` | dashboard | sweep v1; v2 | Figures for a world branch match the sales API for the day |
 | `/sales` | sales | sweep v1; v2 | Branch/day sales equals Σ sold × effective price; uncounted rows shown |
 | `/inventory` | inventory | sweep v1; v2 | Branch overview lists the world's products with today's figures |
-| `/inventory/details` | inventory, branch-cash | v1 | §6.2, §6.4 |
+| `/inventory/details` | inventory, branch-cash | v1; phone **done** | §6.2, §6.4; Stock ₱ column and revenue hidden from managers (`full/inventory-sheet.spec.ts`); phone count, delivery correction, offline queue, reload, refused count, logout guard (`full/phone/phone-count.spec.ts`); phone adjustments and transfers (`full/phone/phone-transfers.spec.ts`); tab bar and `?view=cash` (`full/phone/shell.spec.ts`) |
 | `/inventory/gaps` | inventory, jobs | sweep v1; v2 | A missing day appears as a gap; autofill-range closes it |
 | `/inventory/rejections` | inventory | sweep v1; v2 | Rejects entered in §6.2 appear by product |
 | `/inventory-adjustments` | inventory-adjustments | sweep v1; transfers **done** (§6.7, exercised on `/inventory/details`); v2 for this page itself | The page itself and ANOMALY adjustments; transfers (send → accept/reject, cap, immutability) are covered in §6.7 |
 | `/inventory-import` | inventory-import | sweep v1; v2 | Import a fixture XLSX; rows written; same file re-import refused (hash) |
 | `/inventory-import/history` | inventory-import | sweep v1; v2 | Import appears with file name, no download |
 | `/production` | production | sweep v1; v2 | Kitchen yield per product/day equals finalized orders (links §6.3) |
-| `/production/orders` | production-orders | v1 | §6.3 |
+| `/production/orders` | production-orders | v1; phone **done** | §6.3; manager opens on own branch (`full/production-orders.spec.ts`); phone suggestions → finalize, draft restore, failed finalize keeps draft, actions menu (`full/phone/phone-orders.spec.ts`) |
 | `/production-orders` | production-orders | v1 | §6.3 (same feature, second entry point — sweep both) |
 | `/production-cost` | recipes, materials | sweep v1; v2 | Cost for a past day uses that day's recipe version and material price |
 | `/production-efficiency` | production | sweep v1; v2 | Renders for the world branch; figures match API |
