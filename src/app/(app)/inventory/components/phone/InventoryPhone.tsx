@@ -10,6 +10,7 @@ import { useCan } from '@/lib/rbac/useHasFeature';
 import { rowFigures } from '@/lib/inventory/rowFigures';
 import { useCountQueue } from '@/lib/mobile/useCountQueue';
 import { orderedByProduct } from '@/app/(app)/production-orders/lib/orderedByProduct';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import QueryError from '@/components/QueryError';
 import { TableSkeleton } from '@/components/loading/Skeletons';
@@ -97,7 +98,13 @@ export default function InventoryPhone({ day }: { day: InventoryDay }) {
         </div>
       ) : null}
 
-      {day.invQuery.isError ? (
+      {day.invQuery.isError && day.invQuery.data ? (
+        <Alert className="mb-2">
+          <AlertDescription>Couldn&apos;t refresh — showing the last figures. Your counts are kept on this phone.</AlertDescription>
+        </Alert>
+      ) : null}
+
+      {day.invQuery.isError && !day.invQuery.data ? (
         <QueryError error={day.invQuery.error} onRetry={() => day.invQuery.refetch()} className="my-6" />
       ) : day.invQuery.isLoading ? (
         <TableSkeleton rows={8} columns={4} className="py-4" />

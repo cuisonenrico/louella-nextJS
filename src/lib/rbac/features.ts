@@ -1024,7 +1024,6 @@ export const ROLE_DEFAULTS: Record<RoleName, readonly PermissionKey[]> = {
     'dashboard:low-stock',
     'dashboard:rejections',
     'analytics',
-    'inventory-history:revenue',
     'all-branches',
   ],
   INVENTORY: [

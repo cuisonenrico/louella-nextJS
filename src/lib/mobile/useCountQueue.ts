@@ -18,6 +18,9 @@ import {
   type QueueEntry,
 } from './countQueue';
 
+/** A stalled request on a patchy link must not hold the queue; a timeout is retried. */
+const SEND_TIMEOUT_MS = 15000;
+
 const toItem = ({ inventoryId, delivery, leftover, reject }: QueueEntry): InventoryBulkUpdateItem => ({
   id: inventoryId,
   ...(delivery !== undefined && { delivery }),
@@ -61,6 +64,23 @@ export function useCountQueue(userId: number | null, opts: { storage?: Storage }
     [store],
   );
 
+  const refresh = useCallback(
+    // True once the rows on screen are the server's again. A refresh that fails
+    // (throttled, signal gone) leaves the counts queued: re-sending absolute
+    // figures is harmless, and showing stale ones would look like a lost count.
+    async () => {
+      try {
+        await qc.invalidateQueries({ queryKey: ['inventory'] }, { throwOnError: true });
+      } catch {
+        return false;
+      }
+      void qc.invalidateQueries({ queryKey: ['inventory-summary'] });
+      void qc.invalidateQueries({ queryKey: BRANCH_CASH_KEY });
+      return true;
+    },
+    [qc],
+  );
+
   const drain = useCallback(async () => {
     if (!store || inFlight.current) return;
     const batch = store.read().filter((e) => !e.error);
@@ -73,9 +93,13 @@ export function useCountQueue(userId: number | null, opts: { storage?: Storage }
     let retry = false;
     let signedOut = false;
     try {
-      await inventoryApi.updateBulk(batch.map(toItem));
-      commit(settle(store.read(), batch));
-      delivered = true;
+      await inventoryApi.updateBulk(batch.map(toItem), { timeout: SEND_TIMEOUT_MS });
+      // Keep showing the counts until the refreshed rows are in, or the list
+      // would flash the old figures (and a sheet opened then would start from them).
+      if (await refresh()) {
+        commit(settle(store.read(), batch));
+        delivered = true;
+      } else retry = true;
     } catch (err) {
       const kind = classifyError(err);
       if (kind === 'retry') retry = true;
@@ -83,8 +107,12 @@ export function useCountQueue(userId: number | null, opts: { storage?: Storage }
         // The batch is one transaction, so a single bad row refused all of it.
         for (const entry of batch) {
           try {
-            if (batch.length > 1) await inventoryApi.updateBulk([toItem(entry)]);
+            if (batch.length > 1) await inventoryApi.updateBulk([toItem(entry)], { timeout: SEND_TIMEOUT_MS });
             else throw err;
+            if (!(await refresh())) {
+              retry = true;
+              break;
+            }
             commit(settle(store.read(), [entry]));
             delivered = true;
           } catch (rowErr) {
@@ -108,12 +136,7 @@ export function useCountQueue(userId: number | null, opts: { storage?: Storage }
       setSending(false);
     }
 
-    if (delivered) {
-      step.current = 0;
-      qc.invalidateQueries({ queryKey: ['inventory'] });
-      qc.invalidateQueries({ queryKey: ['inventory-summary'] });
-      qc.invalidateQueries({ queryKey: BRANCH_CASH_KEY });
-    }
+    if (delivered) step.current = 0;
     if (retry) {
       const delay = BACKOFF_MS[Math.min(step.current, BACKOFF_MS.length - 1)];
       step.current += 1;
@@ -122,7 +145,7 @@ export function useCountQueue(userId: number | null, opts: { storage?: Storage }
       // Saved again while this send was in flight.
       void drainRef.current();
     }
-  }, [store, commit, qc]);
+  }, [store, commit, refresh]);
 
   useEffect(() => {
     drainRef.current = drain;

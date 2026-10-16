@@ -9,6 +9,8 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import QueryError from '@/components/QueryError';
 import { TableSkeleton } from '@/components/loading/Skeletons';
 import { useCan } from '@/lib/rbac/useHasFeature';
+import { useAuth } from '@/contexts/AuthContext';
+import { loadOrderDraft, orderDraftKey } from '@/lib/mobile/orderDraft';
 import OrderCard from './OrderCard';
 import PhoneOrderForm from './PhoneOrderForm';
 
@@ -41,6 +43,12 @@ export default function OrdersPhone(props: OrdersPhoneProps) {
   const canCreate = useCan('production-orders:create');
   const canEdit = useCan('production-orders:edit');
   const canDelete = useCan('production-orders:delete');
+  const { user } = useAuth();
+  // Edits kept on this phone for an order the server still has the old version of.
+  const hasLocalEdits = (order: ProductionOrder) =>
+    !!user &&
+    order.branchId != null &&
+    loadOrderDraft(orderDraftKey({ userId: user.id, branchId: order.branchId, date: filterDate, orderId: order.id })) !== null;
   const step = (d: number) => onDateChange(dayjs(filterDate).add(d, 'day').format('YYYY-MM-DD'));
 
   if (form) {
@@ -123,7 +131,9 @@ export default function OrdersPhone(props: OrdersPhoneProps) {
               canEdit={canEdit}
               canDelete={canDelete}
               onEdit={() => onFormChange(order)}
-              onFinalize={() => props.onFinalize(order)}
+              // Finalizing from the card books what the server has; with edits kept on
+              // this phone, open them instead so Finalize saves them first.
+              onFinalize={() => (hasLocalEdits(order) ? onFormChange(order) : props.onFinalize(order))}
               onCancel={() => props.onCancel(order)}
               onDelete={() => props.onDelete(order)}
             />

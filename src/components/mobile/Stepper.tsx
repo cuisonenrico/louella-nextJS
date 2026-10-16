@@ -37,7 +37,8 @@ export function Stepper({ label, value, onChange, min = 0, placeholder = '–', 
         className="size-11 shrink-0 rounded-none"
         aria-label={`Decrease ${label}`}
         disabled={disabled}
-        onClick={() => onChange(Math.max(min, (value ?? min) - 1))}
+        // Nothing entered stays nothing: a stray tap must not count an uncounted leftover.
+        onClick={() => value != null && onChange(Math.max(min, value - 1))}
       >
         <Minus />
       </Button>

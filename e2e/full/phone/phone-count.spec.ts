@@ -193,4 +193,25 @@ test.describe('phone count', () => {
     await expect(count.sync()).toContainText('1 waiting for signal');
     await page.context().close();
   });
+
+  test('a failed refresh keeps the count on screen and sends again', async ({ api, browser }) => {
+    const { world, page, count } = await setup(api, browser, 1);
+    const p = world.products[0];
+    const DAY = '**/api/v1/inventory/branch/*/date*';
+
+    // The production throttle answers 429; a 500 fails the refresh without retries.
+    await page.route(DAY, (route) => route.fulfill({ status: 500, contentType: 'application/json', body: '{"message":"busy"}' }));
+    await count.openProduct(p.name);
+    await count.set('Leftover', 4);
+    await count.saveAndNext();
+    await page.keyboard.press('Escape');
+    await expect(page.getByText(/Couldn't refresh/)).toBeVisible();
+    await expect(count.rowField(p.name, 'leftover')).toHaveText('4');
+    await expect(count.sync()).toContainText('1 waiting for signal');
+
+    await page.unroute(DAY);
+    await count.expectSaved();
+    await expect.poll(async () => (await rowFor(api, world, p.id)).leftover).toBe(4);
+    await page.context().close();
+  });
 });

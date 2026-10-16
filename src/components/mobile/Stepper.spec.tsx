@@ -33,6 +33,12 @@ describe('Stepper', () => {
     expect(onChange).toHaveBeenLastCalledWith(0);
   });
 
+  it('decrease on an empty value leaves it empty (an uncounted leftover stays uncounted)', async () => {
+    const { onChange } = setup(null);
+    await userEvent.click(screen.getByRole('button', { name: 'Decrease Leftover' }));
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it('increase from empty starts at one', async () => {
     const { onChange } = setup(null);
     await userEvent.click(screen.getByRole('button', { name: 'Increase Leftover' }));

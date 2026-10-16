@@ -32,22 +32,29 @@ const peso = (n: number) => `₱${n.toLocaleString()}`;
 export default function CountSheet({
   inv, product, queued, ordered, position, editable, canSeeRevenue, onSave, onAdjust, onClose,
 }: CountSheetProps) {
+  // What the row says right now — it follows the server while the sheet is open
+  // (a refetch after another save, an order finalized in the kitchen). Only the
+  // fields the person touches are theirs; the rest keep following the server and
+  // are never sent, so a stale figure can never overwrite a newer one.
   const shown = rowFigures(inv, queued, product);
-  const [leftover, setLeftover] = useState<number | null>(shown.uncounted ? null : shown.leftover);
-  const [reject, setReject] = useState(shown.reject);
-  const [delivery, setDelivery] = useState(shown.delivery);
+  const [edits, setEdits] = useState<{ delivery?: number; leftover?: number | null; reject?: number }>({});
   const [editingDelivery, setEditingDelivery] = useState(false);
+  const delivery = edits.delivery ?? shown.delivery;
+  const reject = edits.reject ?? shown.reject;
+  const leftover = 'leftover' in edits ? (edits.leftover ?? null) : shown.uncounted ? null : shown.leftover;
+  const setDelivery = (v: number) => setEdits((e) => ({ ...e, delivery: v }));
+  const setReject = (v: number) => setEdits((e) => ({ ...e, reject: v }));
+  const setLeftover = (v: number | null) => setEdits((e) => ({ ...e, leftover: v }));
 
   const live = rowFigures(inv, { ...queued, delivery, reject, ...(leftover !== null && { leftover }) }, product);
   const name = product?.name ?? `Product #${inv.productId}`;
 
   const save = () => {
-    // Only what the person changed. Delivery in particular is never echoed back:
-    // an order finalized after this sheet opened adds to it on the server.
+    // Only what the person touched. A leftover cleared back to empty is not a count.
     const fields: CountFields = {};
-    if (delivery !== shown.delivery) fields.delivery = delivery;
-    if (reject !== shown.reject) fields.reject = reject;
-    if (leftover !== null && (shown.uncounted || leftover !== shown.leftover)) fields.leftover = leftover;
+    if (edits.delivery !== undefined) fields.delivery = edits.delivery;
+    if (edits.reject !== undefined) fields.reject = edits.reject;
+    if (edits.leftover != null) fields.leftover = edits.leftover;
     onSave(fields);
   };
 

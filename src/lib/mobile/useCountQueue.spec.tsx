@@ -41,7 +41,46 @@ describe('useCountQueue', () => {
     const { result } = setup(memoryStorage());
     act(() => result.current.save(7, { leftover: 3 }));
     await waitFor(() => expect(result.current.waiting).toHaveLength(0));
-    expect(updateBulk).toHaveBeenCalledWith([{ id: 7, leftover: 3 }]);
+    // A stalled request on a patchy link must not hold the queue: it times out and retries.
+    expect(updateBulk).toHaveBeenCalledWith([{ id: 7, leftover: 3 }], { timeout: 15000 });
+  });
+
+  it('keeps showing a delivered count until the refreshed rows arrive', async () => {
+    updateBulk.mockImplementation(ok);
+    const qc = new QueryClient();
+    let refreshed!: () => void;
+    vi.spyOn(qc, 'invalidateQueries').mockImplementation(
+      (filters) =>
+        (filters as { queryKey: unknown[] }).queryKey[0] === 'inventory'
+          ? new Promise<void>((resolve) => { refreshed = resolve; })
+          : Promise.resolve(),
+    );
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
+    const storage = memoryStorage();
+    const { result } = renderHook(() => useCountQueue(1, { storage }), { wrapper });
+    act(() => result.current.save(7, { leftover: 3 }));
+    await waitFor(() => expect(updateBulk).toHaveBeenCalledTimes(1));
+    await act(async () => { await vi.advanceTimersByTimeAsync(50); });
+    expect(result.current.overlay.get(7)).toEqual({ leftover: 3 });
+    await act(async () => { refreshed(); });
+    await waitFor(() => expect(result.current.entries).toHaveLength(0));
+  });
+
+  it('keeps the count queued when the refresh after a send fails, and tries again', async () => {
+    updateBulk.mockImplementation(ok);
+    const qc = new QueryClient();
+    let fail = true;
+    vi.spyOn(qc, 'invalidateQueries').mockImplementation(() => (fail ? Promise.reject(new Error('429')) : Promise.resolve()));
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
+    const storage = memoryStorage();
+    const { result } = renderHook(() => useCountQueue(1, { storage }), { wrapper });
+    act(() => result.current.save(7, { leftover: 3 }));
+    await waitFor(() => expect(updateBulk).toHaveBeenCalledTimes(1));
+    await act(async () => { await vi.advanceTimersByTimeAsync(50); });
+    expect(result.current.waiting).toHaveLength(1);
+    fail = false;
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+    await waitFor(() => expect(result.current.waiting).toHaveLength(0));
   });
 
   it('keeps a count through a dropped connection and retries it', async () => {

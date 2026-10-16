@@ -99,6 +99,9 @@ export function useInventoryDay({ requireBranch = false }: { requireBranch?: boo
     queryKey: ['inventory-summary', filterDateFrom, filterDateTo, filterBranch],
     queryFn: () => inventoryApi.summary(filterDateFrom, filterDateTo, filterBranch || undefined).then((r) => r.data),
     placeholderData: keepPreviousData,
+    // The phone and cash views show no summary; skipping it keeps each save to
+    // one write and one read under the per-IP rate limit.
+    enabled: !requireBranch,
   });
 
   const rows = invQuery.data ?? NO_ROWS;

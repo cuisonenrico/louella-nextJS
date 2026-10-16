@@ -6,6 +6,16 @@ import { X } from 'lucide-react';
 import type { Branch, Product, ProductionOrder, ProductType, SuggestionPeriod } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -59,19 +69,24 @@ export default function PhoneOrderForm({
     }
   }
 
-  // Keep what is typed, after a short pause, until the server has it.
+  // Keep what is typed, as it is typed, until the server has it. No debounce:
+  // Android's back button or a reload would drop the last keystrokes.
   useEffect(() => {
     if (!key || !dirty) return;
-    const t = setTimeout(() => {
-      saveOrderDraft(key, { items: [...form.items], notes: form.notes, savedAt: new Date().toISOString() });
-    }, 500);
-    return () => clearTimeout(t);
+    saveOrderDraft(key, { items: [...form.items], notes: form.notes, savedAt: new Date().toISOString() });
   }, [key, dirty, form.items, form.notes]);
+  const [asking, setAsking] = useState(false);
 
   const writeDraftNow = () => {
     if (key && dirty) saveOrderDraft(key, { items: [...form.items], notes: form.notes, savedAt: new Date().toISOString() });
   };
+  // Closing with changes asks: nothing typed has reached the server, and the
+  // card's Finalize would book what the server has.
   const close = () => {
+    if (dirty) setAsking(true);
+    else onClose();
+  };
+  const keepOnPhone = () => {
     writeDraftNow();
     onClose();
   };
@@ -252,6 +267,32 @@ export default function PhoneOrderForm({
           </Button>
         ) : null}
       </footer>
+
+      <AlertDialog open={asking} onOpenChange={setAsking}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Save this order?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Your changes are not saved to the server yet. Keep them on this phone to finish later, or save them now.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => void save(false)}>Save draft</AlertDialogAction>
+            <AlertDialogCancel onClick={keepOnPhone}>Keep on this phone</AlertDialogCancel>
+            <Button
+              variant="ghost"
+              className="text-destructive"
+              onClick={() => {
+                discard();
+                setAsking(false);
+                onClose();
+              }}
+            >
+              Discard changes
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </section>
   );
 }

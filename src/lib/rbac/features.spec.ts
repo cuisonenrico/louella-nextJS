@@ -268,7 +268,9 @@ describe('RBAC manifest', () => {
       expect(f.panels).toContainEqual(expect.objectContaining({ id: 'revenue', sensitivity: 'presentation' }));
     });
 
-    it.each(['VIEWER', 'INVENTORY', 'ADMIN'] as const)('is granted to %s', (role) => {
+    // Every role that has the sheet, except MANAGER. VIEWER has no inventory sheet, and a child
+    // key without its parent is stripped at resolution (enforceParentRule).
+    it.each(['INVENTORY', 'ADMIN'] as const)('is granted to %s', (role) => {
       expect(ROLE_DEFAULTS[role]).toContain('inventory-history:revenue');
     });
 

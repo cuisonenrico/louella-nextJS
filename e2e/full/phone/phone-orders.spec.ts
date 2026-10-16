@@ -76,8 +76,7 @@ test.describe('phone Branch Orders', () => {
 
     await page.getByRole('button', { name: /New order/ }).click();
     await qty(page, p.name).fill('7');
-    await page.waitForTimeout(800); // the draft is written after a short pause in typing
-    await page.reload();
+    await page.reload(); // straight away: what was typed is already on the phone
     await page.getByRole('button', { name: /New order/ }).click();
     await expect(form(page).getByText(/Restored your unsaved order from/)).toBeVisible();
     await expect(qty(page, p.name)).toHaveValue('7');
@@ -107,6 +106,7 @@ test.describe('phone Branch Orders', () => {
     await page.unroute('**/api/v1/production-orders/*');
 
     await form(page).getByRole('button', { name: 'Close' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Keep on this phone' }).click();
     await expect(card(page, order.id)).toContainText('Draft');
     await card(page, order.id).getByRole('button', { name: 'Edit' }).click();
     await expect(form(page).getByText(/Restored your unsaved order from/)).toBeVisible();
@@ -128,6 +128,44 @@ test.describe('phone Branch Orders', () => {
     await expect(page.getByRole('menuitem', { name: 'Cancel order' })).toBeVisible();
     // A manager has no delete grant by default, so Delete is not offered at all.
     await expect(page.getByRole('menuitem', { name: 'Delete' })).toHaveCount(0);
+    await page.context().close();
+  });
+
+  test('closing a changed order asks, and Finalize on its card reopens the unsaved edits', async ({ api, browser }) => {
+    const world = await buildWorld(api, { products: 1 });
+    const p = world.products[0];
+    const order = await draftOrder(api, world, p.id, 5);
+    const page = await managerPage(browser, world, PHONE);
+    await openOrders(page);
+
+    await card(page, order.id).getByRole('button', { name: 'Edit' }).click();
+    await qty(page, p.name).fill('8');
+    await form(page).getByRole('button', { name: 'Close' }).click();
+    const ask = page.getByRole('alertdialog');
+    await expect(ask).toContainText('not saved');
+    await ask.getByRole('button', { name: 'Keep on this phone' }).click();
+    await expect(card(page, order.id)).toContainText('Draft');
+
+    // Finalizing from the card would book the server's 5; it opens the edits instead.
+    await card(page, order.id).getByRole('button', { name: 'Finalize' }).click();
+    await expect(form(page)).toBeVisible();
+    await expect(qty(page, p.name)).toHaveValue('8');
+    await page.context().close();
+  });
+
+  test('the New order button never covers the last card', async ({ api, browser }) => {
+    const world = await buildWorld(api, { products: 1 });
+    for (let i = 0; i < 4; i++) await draftOrder(api, world, world.products[0].id, i + 1);
+    const page = await managerPage(browser, world, PHONE);
+    await openOrders(page);
+    await page.mouse.wheel(0, 5000);
+    const last = page.getByRole('article').last().getByRole('button', { name: 'Finalize' });
+    await last.scrollIntoViewIfNeeded();
+    await page.mouse.wheel(0, 5000);
+    const a = (await last.boundingBox())!;
+    const b = (await page.getByRole('button', { name: /New order/ }).boundingBox())!;
+    const overlap = a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+    expect(overlap).toBe(false);
     await page.context().close();
   });
 });
