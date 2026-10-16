@@ -4,8 +4,10 @@ import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { usePageHeader } from '@/components/layout/usePageHeader';
 import { useCan } from '@/lib/rbac/useHasFeature';
+import { useIsMobile } from '@/lib/useIsMobile';
 import InventoryDesktop from '../components/InventoryDesktop';
 import InventoryCashView from '../components/phone/InventoryCashView';
+import InventoryPhone from '../components/phone/InventoryPhone';
 import { useInventoryDay } from '../hooks/useInventoryDay';
 
 function InventoryDetails() {
@@ -13,10 +15,11 @@ function InventoryDetails() {
   // showing only the cash panel.
   const canSeeCash = useCan('branch-cash');
   const cashView = useSearchParams().get('view') === 'cash' && canSeeCash;
-  usePageHeader({ title: cashView ? 'Cash' : 'Inventory Details' });
-  const day = useInventoryDay({ requireBranch: cashView });
+  const isMobile = useIsMobile();
+  usePageHeader({ title: cashView ? 'Cash' : isMobile ? 'Count' : 'Inventory Details' });
+  const day = useInventoryDay({ requireBranch: cashView || isMobile });
   if (cashView) return <InventoryCashView day={day} />;
-  return <InventoryDesktop day={day} />;
+  return isMobile ? <InventoryPhone day={day} /> : <InventoryDesktop day={day} />;
 }
 
 export default function InventoryDetailsPage() {

@@ -6,6 +6,7 @@ import dayjs from 'dayjs';
 import { toast } from 'sonner';
 import { useCan } from '@/lib/rbac/useHasFeature';
 import { useAuth } from '@/contexts/AuthContext';
+import { manilaToday } from '@/lib/manilaDate';
 import { branchesApi, inventoryApi, productsApi } from '@/lib/apiServices';
 import type { Branch, Inventory, InventorySummaryData, Product, ProductType } from '@/types';
 import { extractError } from '@/lib/errors';
@@ -40,7 +41,9 @@ export function useInventoryDay({ requireBranch = false }: { requireBranch?: boo
   const canImport = useCan('inventory-import:import');
   const canSeeCash = useCan('branch-cash');
   const canSeeRevenue = useCan('inventory-history:revenue');
-  const today = dayjs().format('YYYY-MM-DD');
+  // Manila's day, not the device's: a phone or CI runner in another zone would
+  // otherwise open the sheet on the wrong date (AGENTS.md: pin the zone).
+  const today = manilaToday();
 
   // Filter state
   const [dateMode, setDateMode] = useState<'date' | 'range'>('date');

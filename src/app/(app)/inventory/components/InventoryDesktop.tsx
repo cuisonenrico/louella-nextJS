@@ -3,7 +3,6 @@
 import { Loader2, Info } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import SmallScreenNotice from '@/components/layout/SmallScreenNotice';
 import { Button } from '@/components/ui/button';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import SheetPendingBar from '@/components/sheet/SheetPendingBar';
@@ -33,7 +32,6 @@ export default function InventoryDesktop({ day }: { day: InventoryDay }) {
   return (
     <>
         <TooltipProvider>
-          <SmallScreenNotice storageKey="inventory-details" />
           <InventoryFilterBar
             dateMode={dateMode}
             draftFrom={draftFrom}
