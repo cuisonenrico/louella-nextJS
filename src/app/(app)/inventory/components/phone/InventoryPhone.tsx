@@ -16,6 +16,7 @@ import { TableSkeleton } from '@/components/loading/Skeletons';
 import { SyncChip } from '@/components/mobile/SyncChip';
 import type { InventoryDay } from '../../hooks/useInventoryDay';
 import CountList, { PRODUCT_TYPE_ORDER } from './CountList';
+import AdjustSheet from './AdjustSheet';
 import CountSheet from './CountSheet';
 import IncomingTransfers from './IncomingTransfers';
 import PhoneDayBar from './PhoneDayBar';
@@ -29,7 +30,13 @@ export default function InventoryPhone({ day }: { day: InventoryDay }) {
   const { user } = useAuth();
   const queue = useCountQueue(user?.id ?? null);
   const canSeeOrders = useCan('production-orders');
+  const canAdjust = useCan('inventory-adjustments:create');
   const [openId, setOpenId] = useState<number | null>(null);
+  const [adjusting, setAdjusting] = useState(false);
+  const open = (id: number | null) => {
+    setAdjusting(false);
+    setOpenId(id);
+  };
 
   const branchId = day.selectedBranchId;
   const date = day.filterDateFrom;
@@ -71,7 +78,7 @@ export default function InventoryPhone({ day }: { day: InventoryDay }) {
           failed={queue.failed}
           persistent={queue.persistent}
           productName={productName}
-          onEdit={(id) => (ordering.some((r) => r.id === id) ? setOpenId(id) : undefined)}
+          onEdit={(id) => (ordering.some((r) => r.id === id) ? open(id) : undefined)}
           onDiscard={queue.discard}
         />
       </div>
@@ -103,11 +110,21 @@ export default function InventoryPhone({ day }: { day: InventoryDay }) {
           rowsByType={day.rowsByType}
           productById={day.productById}
           figures={figures}
-          onOpen={(inv) => setOpenId(inv.id)}
+          onOpen={(inv) => open(inv.id)}
         />
       )}
 
-      {openInv ? (
+      {openInv && adjusting ? (
+        <AdjustSheet
+          key={'adjust-' + openInv.id}
+          inv={openInv}
+          product={day.productById.get(openInv.productId)}
+          queued={queue.overlay.get(openInv.id)}
+          branches={day.branches}
+          onBack={() => setAdjusting(false)}
+          onClose={() => open(null)}
+        />
+      ) : openInv ? (
         <CountSheet
           key={openInv.id}
           inv={openInv}
@@ -117,10 +134,11 @@ export default function InventoryPhone({ day }: { day: InventoryDay }) {
           position={{ n: openIndex + 1, of: ordering.length }}
           editable={day.canEditInventory}
           canSeeRevenue={day.canSeeRevenue}
-          onClose={() => setOpenId(null)}
+          onAdjust={canAdjust ? () => setAdjusting(true) : undefined}
+          onClose={() => open(null)}
           onSave={(fields) => {
             if (Object.keys(fields).length > 0) queue.save(openInv.id, fields);
-            setOpenId(ordering[openIndex + 1]?.id ?? null);
+            open(ordering[openIndex + 1]?.id ?? null);
           }}
         />
       ) : null}
