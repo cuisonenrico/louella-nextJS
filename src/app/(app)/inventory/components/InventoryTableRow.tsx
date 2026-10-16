@@ -7,7 +7,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils';
 import { SheetInput } from '@/components/sheet/SheetInput';
 import { SHEET_CELL as CELL } from '@/components/sheet/styles';
-import { getAdjSum, getRevenue, getSold, getTotalStock } from '../hooks/useInventoryColumns';
+import { rowFigures } from '@/lib/inventory/rowFigures';
 
 type EditableField = 'delivery' | 'leftover' | 'reject';
 
@@ -37,25 +37,18 @@ export function InventoryTableRow({
   isRange,
   hasBranchFilter,
   canAdjust,
-  productById,
   onAdjustmentsOpen,
   onCellChange,
   getInputId,
   onMoveInColumn,
   onMoveLinear,
 }: InventoryTableRowProps) {
-  const merged = pending ? { ...inv, ...pending } : inv;
   // Nobody has counted this day's leftover: the server derives the close from
   // the stock on hand and books nothing as sold, so the sheet does the same
   // while a delivery or reject is being typed. Typing a leftover counts it.
-  const uncounted = inv.leftoverCountedAt === null && pending?.leftover === undefined;
-  const effectiveInv = uncounted
-    ? { ...merged, leftover: getTotalStock(merged) - (merged.reject ?? 0) }
-    : merged;
-  const adjSum = getAdjSum(effectiveInv);
-  const totalStock = getTotalStock(effectiveInv);
-  const sold = getSold(effectiveInv, productById);
-  const revenue = getRevenue(effectiveInv, productById);
+  const f = rowFigures(inv, pending, product);
+  const { uncounted, adjSum, totalStock, sold, revenue } = f;
+  const effectiveInv = { ...inv, ...pending, leftover: f.leftover, reject: f.reject, delivery: f.delivery };
   const hasPending = !!pending;
 
   const editCell = (field: EditableField) => (
