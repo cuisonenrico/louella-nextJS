@@ -4,19 +4,24 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import type { QueueEntry } from '@/lib/mobile/countQueue';
+
+/** A save the server refused, as the chip lists it. */
+export interface FailedSave {
+  key: string;
+  label: string;
+  error?: string;
+}
 
 interface SyncChipProps {
   waiting: number;
-  failed: QueueEntry[];
+  failed: FailedSave[];
   persistent: boolean;
-  onEdit: (inventoryId: number) => void;
-  onDiscard: (inventoryId: number) => void;
-  productName: (inventoryId: number) => string;
+  onEdit: (key: string) => void;
+  onDiscard: (key: string) => void;
 }
 
 /** Whether the counts typed on this phone have reached the server. */
-export function SyncChip({ waiting, failed, persistent, onEdit, onDiscard, productName }: SyncChipProps) {
+export function SyncChip({ waiting, failed, persistent, onEdit, onDiscard }: SyncChipProps) {
   const [open, setOpen] = useState(false);
   const memoryOnly = !persistent && (waiting > 0 || failed.length > 0) && (
     <span className="text-xs text-muted-foreground">Kept only until this page closes</span>
@@ -33,15 +38,15 @@ export function SyncChip({ waiting, failed, persistent, onEdit, onDiscard, produ
           </PopoverTrigger>
           <PopoverContent align="end" className="flex w-72 flex-col gap-3">
             {failed.map((e) => (
-              <div key={e.inventoryId} className="flex flex-col gap-2">
+              <div key={e.key} className="flex flex-col gap-2">
                 <p className="text-sm">
-                  {productName(e.inventoryId)}: {e.error}
+                  {e.label}: {e.error}
                 </p>
                 <div className="flex gap-2">
-                  <Button size="sm" variant="outline" onClick={() => { setOpen(false); onEdit(e.inventoryId); }}>
+                  <Button size="sm" variant="outline" onClick={() => { setOpen(false); onEdit(e.key); }}>
                     Edit
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => { setOpen(false); onDiscard(e.inventoryId); }}>
+                  <Button size="sm" variant="ghost" onClick={() => { setOpen(false); onDiscard(e.key); }}>
                     Discard
                   </Button>
                 </div>

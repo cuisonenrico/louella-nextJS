@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { SyncChip } from './SyncChip';
 
-const base = { onEdit: vi.fn(), onDiscard: vi.fn(), productName: () => 'Ensaymada' };
+const base = { onEdit: vi.fn(), onDiscard: vi.fn() };
 
 describe('SyncChip', () => {
   it('says saved when nothing waits', () => {
@@ -27,7 +27,7 @@ describe('SyncChip', () => {
     render(
       <SyncChip
         waiting={0}
-        failed={[{ inventoryId: 8, rev: 1, reject: 2, error: 'Bad value' }]}
+        failed={[{ key: '8', label: 'Ensaymada', error: 'Bad value' }]}
         persistent
         {...base}
         onEdit={onEdit}
@@ -37,9 +37,9 @@ describe('SyncChip', () => {
     await userEvent.click(screen.getByRole('button', { name: /1 couldn't save/ }));
     expect(await screen.findByText('Ensaymada: Bad value')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
-    expect(onEdit).toHaveBeenCalledWith(8);
+    expect(onEdit).toHaveBeenCalledWith('8');
     await userEvent.click(screen.getByRole('button', { name: /1 couldn't save/ }));
     await userEvent.click(await screen.findByRole('button', { name: 'Discard' }));
-    expect(onDiscard).toHaveBeenCalledWith(8);
+    expect(onDiscard).toHaveBeenCalledWith('8');
   });
 });

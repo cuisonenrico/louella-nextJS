@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
-import SmallScreenNotice from '@/components/layout/SmallScreenNotice';
 import { TableSkeleton } from '@/components/loading/Skeletons';
 import QueryError from '@/components/QueryError';
 import { Button } from '@/components/ui/button';
@@ -106,7 +105,6 @@ export default function ProductionDesktop({ filterDate, setFilterDate }: { filte
   return (
     <>
         <TooltipProvider>
-          <SmallScreenNotice storageKey="production" />
           <ProductionTabNav />
           <ProductionDateToolbar
             filterDate={filterDate}

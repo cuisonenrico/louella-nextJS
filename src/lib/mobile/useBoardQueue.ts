@@ -5,6 +5,7 @@ import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { inventoryApi, productionApi } from '@/lib/apiServices';
 import { extractError } from '@/lib/errors';
 import type { Inventory, Production } from '@/types';
+import { kitchenRowsByProduct } from '@/app/(app)/production/lib/kitchenRows';
 import { BACKOFF_MS, classifyError } from './countQueue';
 import {
   conflicts,
@@ -41,7 +42,10 @@ async function serverDays(qc: QueryClient, dates: string[]): Promise<ServerFigur
     }),
   );
   return {
-    yieldOf: (date, productId) => days.find((d) => d.date === date)?.prod.find((p) => p.productId === productId)?.yield,
+    yieldOf: (date, productId) => {
+      const prod = days.find((d) => d.date === date)?.prod;
+      return prod ? kitchenRowsByProduct(prod).get(productId)?.yield : undefined;
+    },
     deliveryOf: (inventoryId) => {
       for (const d of days) {
         const row = d.inv.find((i) => i.id === inventoryId);

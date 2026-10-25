@@ -5,6 +5,7 @@ import type { Branch, Inventory, Product, Production, ProductionOrder, ProductTy
 import type { ProdRow } from './useProductionRowUpdate';
 import { useProductionMutations } from './useProductionMutations';
 import { buildFinalizedPlannedYields } from './useProductionPlannedYield';
+import { kitchenRowsByProduct } from '../lib/kitchenRows';
 
 export const PRODUCT_TYPE_ORDER: ProductType[] = ['BREAD', 'CAKE', 'SPECIAL', 'MISCELLANEOUS'];
 
@@ -76,7 +77,7 @@ export function useProductionData(filterDate: string, onError: (message: string)
 
   // Lookup maps
   const productionByProduct = useMemo(
-    () => new Map((prodQuery.data ?? []).map((p) => [p.productId, p])),
+    () => kitchenRowsByProduct(prodQuery.data ?? []),
     [prodQuery.data],
   );
 
