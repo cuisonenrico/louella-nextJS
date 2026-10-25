@@ -49,6 +49,10 @@ async function openBoard(page: Page) {
   const loaded = page.waitForResponse((r) => r.url().includes('/api/v1/production/date') && r.url().includes(DAY()));
   await date.fill(DAY());
   await date.press('Tab'); // WebKit commits a date input's change on blur
+  // On a busy "today" the auto-fill may have staged plan figures for other tests' products;
+  // leaving the day then asks first. Those edits are not this test's.
+  const discard = page.getByRole('button', { name: 'Discard changes' });
+  if (await discard.waitFor({ state: 'visible', timeout: 3000 }).then(() => true, () => false)) await discard.click();
   await loaded;
 }
 
