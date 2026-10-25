@@ -59,6 +59,12 @@ interface UseYieldAutoSyncParams {
   pendingProduction: Map<number, { _productionId: number | null; yield: number }>;
   handleFieldChange: (row: ProdRow, field: string, newValue: number) => void;
   filterDate: string;
+  /**
+   * Whether the day's orders have loaded. Until they have, "planned" reads as 0;
+   * recording that as the baseline made the first real plan look like a +delta
+   * and added it on top of the yield finalizing had already booked.
+   */
+  plannedReady?: boolean;
 }
 
 export function useYieldAutoSync({
@@ -67,10 +73,20 @@ export function useYieldAutoSync({
   pendingProduction,
   handleFieldChange,
   filterDate,
+  plannedReady = true,
 }: UseYieldAutoSyncParams): void {
   const plannedBaselineRef = useRef<Map<number, number>>(new Map());
+  const baselineDateRef = useRef(filterDate);
 
   useEffect(() => {
+    // A new day starts a new baseline. (Reset here rather than in an effect of
+    // its own, which also ran on mount — after this one — and wiped the
+    // baseline just recorded, so the first plan change was missed.)
+    if (baselineDateRef.current !== filterDate) {
+      baselineDateRef.current = filterDate;
+      plannedBaselineRef.current = new Map();
+    }
+    if (!plannedReady) return;
     const { updates, newBaseline } = computeYieldDeltas(
       allRows, plannedByProduct, pendingProduction, plannedBaselineRef.current,
     );
@@ -83,11 +99,7 @@ export function useYieldAutoSync({
         handleFieldChange(row, 'yield', updated.yield);
       }
     }
-  }, [allRows, plannedByProduct, pendingProduction, handleFieldChange]);
-
-  useEffect(() => {
-    plannedBaselineRef.current = new Map();
-  }, [filterDate]);
+  }, [allRows, plannedByProduct, pendingProduction, handleFieldChange, filterDate, plannedReady]);
 }
 
 // Enter/Tab/arrow navigation for the production sheet lives in the shared

@@ -257,8 +257,13 @@ UI: shadcn/ui components in `src/components/ui/`. Layout shell in
 `src/components/sheet` + `src/lib/sheet`.
 
 Phones (below `md`) get their own views of `/inventory/details` (count list +
-product sheet) and `/production/orders` (cards + order form), plus a bottom tab
-bar. Spec: `docs/superpowers/specs/2026-10-16-mobile-count-and-orders-design.md`.
+product sheet), `/production/orders` (cards + order form) and `/production`
+(board list + yield/branch sheet), plus a bottom tab bar. Specs:
+`docs/superpowers/specs/2026-10-16-mobile-count-and-orders-design.md`,
+`docs/superpowers/specs/2026-10-25-phone-production-board-design.md`.
+Only the kitchen (`production:create` + `all-branches`) edits the phone board; its
+saves go through `src/lib/mobile/boardQueue.ts`, which refuses to overwrite a
+figure that changed on the server while the phone was offline.
 Both views of a page share one data hook (`useInventoryDay`, `useOrderForm`) and
 the row figures in `src/lib/inventory/rowFigures.ts`. Phone count saves go
 through a per-user `localStorage` queue (`src/lib/mobile/countQueue.ts`) so a

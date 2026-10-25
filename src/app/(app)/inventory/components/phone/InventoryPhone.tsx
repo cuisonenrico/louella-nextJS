@@ -76,11 +76,10 @@ export default function InventoryPhone({ day }: { day: InventoryDay }) {
         </span>
         <SyncChip
           waiting={queue.waiting.length}
-          failed={queue.failed}
+          failed={queue.failed.map((e) => ({ key: String(e.inventoryId), label: productName(e.inventoryId), error: e.error }))}
           persistent={queue.persistent}
-          productName={productName}
-          onEdit={(id) => (ordering.some((r) => r.id === id) ? open(id) : undefined)}
-          onDiscard={queue.discard}
+          onEdit={(key) => (ordering.some((r) => r.id === Number(key)) ? open(Number(key)) : undefined)}
+          onDiscard={(key) => queue.discard(Number(key))}
         />
       </div>
 
