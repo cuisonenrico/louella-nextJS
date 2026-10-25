@@ -8,6 +8,7 @@ import type { Inventory, Production } from '@/types';
 import { kitchenRowsByProduct } from '@/app/(app)/production/lib/kitchenRows';
 import { BACKOFF_MS, classifyError } from './countQueue';
 import {
+  applied,
   conflicts,
   createBoardStore,
   discardBoard,
@@ -21,8 +22,14 @@ import {
 } from './boardQueue';
 
 const SEND_TIMEOUT_MS = 15000;
-
-/** The day's rows as the server has them now; also refreshes the board's cache. */
+/** Quick saves go out together. */
+const SAVE_DEBOUNCE_MS = 1500;
+/**
+ * The day's rows as the server has them now; also refreshes the board's cache.
+ * Always a fresh read: a cached day — even seconds old — can predate the order
+ * finalized while the phone was offline, and the check would wave the stale
+ * send through.
+ */
 async function serverDays(qc: QueryClient, dates: string[]): Promise<ServerFigures> {
   const days = await Promise.all(
     dates.map(async (date) => {
@@ -56,17 +63,37 @@ async function serverDays(qc: QueryClient, dates: string[]): Promise<ServerFigur
   };
 }
 
-async function send(batch: BoardEntry[]) {
+/**
+ * Send, then write what the server answered straight into the board's cache —
+ * no second read of two large days per save (the API allows 20 requests a
+ * minute per IP, shared by every phone on the branch's Wi-Fi).
+ */
+async function send(qc: QueryClient, batch: BoardEntry[]) {
   const yields = batch.filter((e) => e.kind === 'yield');
   const deliveries = batch.filter((e) => e.kind === 'delivery');
   if (yields.length > 0) {
-    await productionApi.upsertBulk(
+    const { data } = await productionApi.upsertBulk(
       yields.map((e) => ({ productId: e.productId, date: e.date, yield: e.value })),
       { timeout: SEND_TIMEOUT_MS },
     );
+    for (const date of new Set(yields.map((e) => e.date))) {
+      qc.setQueryData<Production[]>(['production', date], (rows) => {
+        if (!rows) return rows;
+        const written = (data ?? []).filter((p) => p.date.slice(0, 10) === date);
+        return [...rows.filter((r) => !written.some((w) => w.id === r.id)), ...written];
+      });
+    }
   }
   if (deliveries.length > 0) {
     await inventoryApi.updateBulk(deliveries.map((e) => ({ id: e.inventoryId!, delivery: e.value })), { timeout: SEND_TIMEOUT_MS });
+    for (const date of new Set(deliveries.map((e) => e.date))) {
+      qc.setQueryData<Inventory[]>(['inventory-for-production', date], (rows) =>
+        rows?.map((r) => {
+          const e = deliveries.find((d) => d.inventoryId === r.id);
+          return e ? { ...r, delivery: e.value } : r;
+        }),
+      );
+    }
   }
 }
 
@@ -93,6 +120,7 @@ export function useBoardQueue(userId: number | null, opts: { storage?: Storage }
   const inFlight = useRef(false);
   const step = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const debounce = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const drainRef = useRef<() => Promise<void>>(async () => {});
 
   const commit = useCallback(
@@ -117,18 +145,21 @@ export function useBoardQueue(userId: number | null, opts: { storage?: Storage }
     const dates = [...new Set(batch.map((e) => e.date))];
     try {
       const server = await serverDays(qc, dates);
-      const moved = conflicts(batch, server);
+      // Already on the server (a send whose answer was lost, another tab): settle.
+      const done = applied(batch, server);
+      if (done.length > 0) commit(settleBoard(store.read(), done));
+      const rest = batch.filter((e) => !done.includes(e));
+      const moved = conflicts(rest, server);
       let current = store.read();
       for (const e of moved) {
         current = markBoardFailed(current, e.key, `Changed to ${serverFigureOf(e, server)} on the server — check and save again`);
       }
       if (moved.length > 0) commit(current);
-      const ready = batch.filter((e) => !moved.includes(e));
+      const ready = rest.filter((e) => !moved.includes(e));
 
       if (ready.length > 0) {
         try {
-          await send(ready);
-          await serverDays(qc, dates);
+          await send(qc, ready);
           commit(settleBoard(store.read(), ready));
           delivered = true;
         } catch (err) {
@@ -139,7 +170,7 @@ export function useBoardQueue(userId: number | null, opts: { storage?: Storage }
             // One request per kind is one transaction each, so a single bad row refused its batch.
             for (const entry of ready) {
               try {
-                if (ready.length > 1) await send([entry]);
+                if (ready.length > 1) await send(qc, [entry]);
                 else throw err;
                 commit(settleBoard(store.read(), [entry]));
                 delivered = true;
@@ -155,7 +186,6 @@ export function useBoardQueue(userId: number | null, opts: { storage?: Storage }
                 }
               }
             }
-            if (delivered) await serverDays(qc, dates).catch(() => undefined);
           }
         }
       }
@@ -203,6 +233,7 @@ export function useBoardQueue(userId: number | null, opts: { storage?: Storage }
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('storage', onStorage);
       clearTimeout(timer.current);
+      clearTimeout(debounce.current);
     };
   }, [store]);
 
@@ -212,7 +243,8 @@ export function useBoardQueue(userId: number | null, opts: { storage?: Storage }
       let next = store.read();
       for (const c of changes) next = enqueueBoard(next, c);
       commit(next);
-      void drainRef.current();
+      clearTimeout(debounce.current);
+      debounce.current = setTimeout(() => void drainRef.current(), SAVE_DEBOUNCE_MS);
     },
     [store, commit],
   );
@@ -225,11 +257,13 @@ export function useBoardQueue(userId: number | null, opts: { storage?: Storage }
   );
 
   const overlayYield = useCallback(
-    (date: string, productId: number) => entries.find((e) => e.kind === 'yield' && e.date === date && e.productId === productId)?.value,
+    // Flagged entries are not shown over the server: the sheet must show what the server has now.
+    (date: string, productId: number) =>
+      entries.find((e) => !e.error && e.kind === 'yield' && e.date === date && e.productId === productId)?.value,
     [entries],
   );
   const overlayDelivery = useCallback(
-    (inventoryId: number) => entries.find((e) => e.kind === 'delivery' && e.inventoryId === inventoryId)?.value,
+    (inventoryId: number) => entries.find((e) => !e.error && e.kind === 'delivery' && e.inventoryId === inventoryId)?.value,
     [entries],
   );
 

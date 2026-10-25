@@ -53,8 +53,17 @@ export function enqueueBoard(entries: BoardEntry[], change: BoardChange): BoardE
   return entries.map((e, j) => (j === i ? next : e));
 }
 
+/**
+ * Drop what was delivered. An entry revised while its send was in flight stays,
+ * re-based on the value that send stored — otherwise the next check would read
+ * the person's own save as someone else's change.
+ */
 export function settleBoard(stored: BoardEntry[], sent: BoardEntry[]): BoardEntry[] {
-  return stored.filter((e) => !sent.some((s) => s.key === e.key && s.rev === e.rev));
+  return stored.flatMap((e) => {
+    const s = sent.find((x) => x.key === e.key);
+    if (!s) return [e];
+    return s.rev === e.rev ? [] : [{ ...e, base: s.value }];
+  });
 }
 
 export function markBoardFailed(entries: BoardEntry[], key: string, message: string): BoardEntry[] {
@@ -70,6 +79,14 @@ export interface ServerFigures {
   yieldOf(date: string, productId: number): number | undefined;
   /** The stored delivery, or undefined when the row is not known (not checked). */
   deliveryOf(inventoryId: number): number | undefined;
+}
+
+/**
+ * Entries the server already holds — a send that landed but whose answer was
+ * lost (timeout, dropped signal), or another tab's send. Settle, don't send.
+ */
+export function applied(entries: BoardEntry[], server: ServerFigures): BoardEntry[] {
+  return entries.filter((e) => serverFigureOf(e, server) === e.value);
 }
 
 /** Entries whose server figure moved away from where the person started. */

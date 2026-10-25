@@ -31,7 +31,7 @@ export default function ProductionDesktop({ filterDate, setFilterDate }: { filte
   const [consumptionPlannedYield, setConsumptionPlannedYield] = useState<number | undefined>(undefined);
 
   const {
-    branches, productById, prodQuery, invQuery, rawOrders, plannedYields, plannedByProduct,
+    branches, productById, prodQuery, invQuery, plannedQuery, rawOrders, plannedYields, plannedByProduct,
     branchesWithNoInventory, allRows, rowsByType, initBranchMutation, initAllBranchesMutation, savePendingMutation,
   } = useProductionData(filterDate, (m) => setRowError(m));
 
@@ -50,7 +50,10 @@ export default function ProductionDesktop({ filterDate, setFilterDate }: { filte
     confirmDiscard(() => setFilterDate(next));
   }, [filterDate, confirmDiscard, setFilterDate]);
 
-  useYieldAutoSync({ allRows, plannedByProduct, pendingProduction, handleFieldChange, filterDate });
+  useYieldAutoSync({
+    allRows, plannedByProduct, pendingProduction, handleFieldChange, filterDate,
+    plannedReady: plannedQuery.isSuccess && !plannedQuery.isPlaceholderData,
+  });
 
   const discardPending = useCallback(() => {
     resetPending();

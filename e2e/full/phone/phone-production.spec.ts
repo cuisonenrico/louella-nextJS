@@ -101,6 +101,16 @@ test.describe('phone production board', () => {
     await board.sync().getByRole('button', { name: /couldn't save/ }).click();
     await expect(page.getByText(`${p.name}: Changed to 15 on the server — check and save again`)).toBeVisible();
     expect(await kitchenYield(api, p.id)).toBe(15);
+
+    // Checking it: the sheet shows what the server has now, and Save without changes accepts it.
+    await page.keyboard.press('Escape');
+    const sheet = await board.openProduct(p.name);
+    await expect(sheet.getByText('Changed to 15 on the server — check and save again')).toBeVisible();
+    await expect(sheet.getByRole('textbox', { name: 'Yield', exact: true })).toHaveValue('15');
+    await board.saveButton().click();
+    await page.keyboard.press('Escape');
+    await expect(board.sync()).toContainText('● Saved');
+    expect(await kitchenYield(api, p.id)).toBe(15);
   });
 
   test('a branch manager sees the board read-only', async ({ api, browser }) => {
@@ -110,6 +120,11 @@ test.describe('phone production board', () => {
     const mgr = await managerPage(browser, world, devices['Pixel 7']);
     const board = new PhoneBoard(mgr);
     await board.open();
+    // The kitchen's yield is not theirs to see: the list shows planned and their own share.
+    await expect(mgr.getByText('Read-only — the kitchen sets the yield')).toBeVisible();
+    await expect(board.rowField(p.name, 'planned')).toHaveText('10');
+    await expect(board.row(p.name).locator('[data-field="share"]')).toHaveText('10');
+    await expect(board.rowField(p.name, 'yield')).toHaveCount(0);
     const sheet = await board.openProduct(p.name);
     await expect(sheet.getByText('Only the kitchen changes yield and branch splits.')).toBeVisible();
     await expect(sheet.getByRole('textbox')).toHaveCount(0);

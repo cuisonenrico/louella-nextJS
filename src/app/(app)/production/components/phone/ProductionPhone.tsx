@@ -11,6 +11,7 @@ import QueryError from '@/components/QueryError';
 import { TableSkeleton } from '@/components/loading/Skeletons';
 import { SyncChip } from '@/components/mobile/SyncChip';
 import { useBoardQueue } from '@/lib/mobile/useBoardQueue';
+import { boardKey } from '@/lib/mobile/boardQueue';
 import { manilaToday } from '@/lib/manilaDate';
 import { useCan } from '@/lib/rbac/useHasFeature';
 import { allocation, startingYield } from '../../lib/allocation';
@@ -70,6 +71,7 @@ export default function ProductionPhone({ filterDate, setFilterDate }: { filterD
       const { assigned, over } = allocation(yieldVal, shares);
       return {
         row,
+        ownShare: shares.reduce((sum, v) => sum + v, 0),
         name: data.productById.get(row.productId)?.name ?? `Product #${row.productId}`,
         planned,
         yieldVal,
@@ -86,12 +88,16 @@ export default function ProductionPhone({ filterDate, setFilterDate }: { filterD
   const openIndex = ordering.findIndex((r) => r.productId === openId);
   const openRow = openIndex >= 0 ? ordering[openIndex] : null;
 
+  const flaggedFor = (productId: number) => queue.failed.find((e) => e.date === filterDate && e.productId === productId);
+
   const nameOf = (key: string) => {
     const e = queue.entries.find((x) => x.key === key);
     return data.productById.get(e?.productId ?? 0)?.name ?? 'A product from another day';
   };
 
-  const isLoading = data.prodQuery.isLoading || data.invQuery.isLoading;
+  // Placeholder rows are the previous day's: never offer them for editing.
+  const isLoading =
+    data.prodQuery.isLoading || data.invQuery.isLoading || data.prodQuery.isPlaceholderData || data.invQuery.isPlaceholderData;
   const isError = data.prodQuery.isError || data.invQuery.isError;
   const noFinalized =
     !isLoading && data.rawOrders.length > 0 && data.plannedYields.length === 0 && data.allRows.length > 0;
@@ -124,7 +130,11 @@ export default function ProductionPhone({ filterDate, setFilterDate }: { filterD
 
       <div className="mb-2 flex items-center justify-between gap-2">
         <span className="text-sm text-muted-foreground">
-          {ordering.length > 0 ? `${withYield} of ${ordering.length} products have yield` : ''}
+          {ordering.length === 0
+            ? ''
+            : editable
+              ? `${withYield} of ${ordering.length} products have yield`
+              : 'Read-only — the kitchen sets the yield'}
         </span>
         <SyncChip
           waiting={queue.waiting.length}
@@ -162,7 +172,7 @@ export default function ProductionPhone({ filterDate, setFilterDate }: { filterD
       ) : ordering.length === 0 ? (
         <p className="py-12 text-center text-muted-foreground">No active products found.</p>
       ) : (
-        <BoardList rowsByType={data.rowsByType} view={view} onOpen={(row) => setOpenId(row.productId)} />
+        <BoardList rowsByType={data.rowsByType} view={view} readOnly={!editable} onOpen={(row) => setOpenId(row.productId)} />
       )}
 
       {openRow ? (
@@ -183,7 +193,14 @@ export default function ProductionPhone({ filterDate, setFilterDate }: { filterD
               : undefined
           }
           onClose={() => setOpenId(null)}
+          flagged={flaggedFor(openRow.productId)?.error}
           onSave={(changes) => {
+            // Saving without touching a flagged figure accepts what the server has now.
+            for (const e of queue.failed) {
+              if (e.date === filterDate && e.productId === openRow.productId && !changes.some((c) => boardKey(c) === e.key)) {
+                queue.discard(e.key);
+              }
+            }
             queue.save(changes);
             setOpenId(ordering[openIndex + 1]?.productId ?? null);
           }}

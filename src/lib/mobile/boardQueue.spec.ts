@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { boardKey, conflicts, createBoardStore, discardBoard, enqueueBoard, markBoardFailed, settleBoard } from './boardQueue';
+import { applied, boardKey, conflicts, createBoardStore, discardBoard, enqueueBoard, markBoardFailed, settleBoard } from './boardQueue';
 
 function memoryStorage() {
   const ls = new Map<string, string>();
@@ -36,7 +36,8 @@ describe('boardQueue', () => {
   it('settle removes only unrevised entries; enqueue clears an error; discard drops by key', () => {
     const sent = enqueueBoard([], yieldOf('2026-10-25', 3, 12, 10));
     const revised = enqueueBoard(sent, yieldOf('2026-10-25', 3, 13, 12));
-    expect(settleBoard(revised, sent)).toEqual(revised);
+    // Revised while in flight: kept, and re-based on what the server now holds.
+    expect(settleBoard(revised, sent)).toEqual([{ ...revised[0], base: 12 }]);
     expect(settleBoard(sent, sent)).toEqual([]);
     const failed = markBoardFailed(sent, 'yield:2026-10-25:3', 'Changed to 24 on the server — check and save again');
     expect(failed[0].error).toMatch(/Changed to 24/);
@@ -54,6 +55,11 @@ describe('boardQueue', () => {
     const server = { yieldOf: () => 15, deliveryOf: () => 8 };
     expect(conflicts(q, server).map((e) => e.key)).toEqual(['yield:2026-10-25:3']);
     expect(conflicts(q, { yieldOf: () => 10, deliveryOf: () => undefined })).toEqual([]);
+  });
+
+  it('finds entries the server already holds', () => {
+    const q = enqueueBoard(enqueueBoard([], yieldOf('2026-10-25', 3, 12, 10)), deliveryOf(91, 3, 8, 6));
+    expect(applied(q, { yieldOf: () => 12, deliveryOf: () => 7 }).map((e) => e.key)).toEqual(['yield:2026-10-25:3']);
   });
 
   it('a yield with no server row yet counts as 0', () => {

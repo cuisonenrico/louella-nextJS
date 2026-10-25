@@ -33,11 +33,12 @@ export function useProductionData(filterDate: string, onError: (message: string)
     placeholderData: keepPreviousData,
   });
 
-  const { data: rawOrders = [] } = useQuery<ProductionOrder[]>({
+  const plannedQuery = useQuery<ProductionOrder[]>({
     queryKey: ['planned-yield', filterDate],
     queryFn: () => productionOrdersApi.byDate(filterDate).then((r) => r.data as ProductionOrder[]),
     placeholderData: keepPreviousData,
   });
+  const rawOrders = useMemo(() => plannedQuery.data ?? [], [plannedQuery.data]);
 
   const plannedYields = useMemo(() => buildFinalizedPlannedYields(rawOrders), [rawOrders]);
 
@@ -108,7 +109,7 @@ export function useProductionData(filterDate: string, onError: (message: string)
   }, [allRows]);
 
   return {
-    branches, products, productById, prodQuery, invQuery, rawOrders, plannedYields, plannedByProduct,
+    branches, products, productById, prodQuery, invQuery, plannedQuery, rawOrders, plannedYields, plannedByProduct,
     orderedByProductBranch, branchesWithNoInventory, inventoryByProductBranch, allRows, rowsByType,
     initBranchMutation, initAllBranchesMutation, savePendingMutation,
   };

@@ -35,7 +35,11 @@ export interface BoardSheetProps {
   onSave: (changes: BoardChange[]) => void;
   onMaterials: (() => void) | undefined;
   onClose: () => void;
+  /** Why an earlier save of this product was stopped, if it was. */
+  flagged: string | undefined;
 }
+
+type Edit = { value: number; base: number };
 
 /**
  * One product on the phone board: its yield and what each branch gets. Remount
@@ -43,26 +47,32 @@ export interface BoardSheetProps {
  * figure it started from, so the queue can tell when the server moved on.
  */
 export default function BoardSheet({
-  date, productId, productName, position, planned, storedYield, queuedYield, branches, editable, onSave, onMaterials, onClose,
+  date, productId, productName, position, planned, storedYield, queuedYield, branches, editable, onSave, onMaterials, onClose, flagged,
 }: BoardSheetProps) {
-  const [yieldEdit, setYieldEdit] = useState<number | undefined>(undefined);
-  const [branchEdits, setBranchEdits] = useState<Record<number, number>>({});
+  // Each edit keeps the server figure it started from (taken at the first touch),
+  // so a figure that changes while the sheet is open is caught by the queue's
+  // check instead of being overwritten.
+  const [yieldEdit, setYieldEdit] = useState<Edit | undefined>(undefined);
+  const [branchEdits, setBranchEdits] = useState<Record<number, Edit>>({});
 
   const start = queuedYield !== undefined ? { value: queuedYield, fromPlan: false } : startingYield(storedYield, planned);
   const fromPlan = yieldEdit === undefined && start.fromPlan;
-  const yieldVal = yieldEdit ?? start.value;
-  const branchValue = (b: BoardBranch) => branchEdits[b.id] ?? b.queued ?? b.stored;
+  const yieldVal = yieldEdit?.value ?? start.value;
+  const branchValue = (b: BoardBranch) => branchEdits[b.id]?.value ?? b.queued ?? b.stored;
   const { assigned, over } = allocation(yieldVal, branches.filter((b) => b.inventoryId != null).map(branchValue));
   const diff = yieldVal - planned;
 
   const save = () => {
     const changes: BoardChange[] = [];
-    if (yieldEdit !== undefined || fromPlan) {
+    if (yieldEdit !== undefined) {
+      changes.push({ kind: 'yield', date, productId, value: yieldEdit.value, base: yieldEdit.base });
+    } else if (fromPlan) {
       changes.push({ kind: 'yield', date, productId, value: yieldVal, base: storedYield });
     }
     for (const b of branches) {
-      if (b.inventoryId != null && branchEdits[b.id] !== undefined) {
-        changes.push({ kind: 'delivery', date, productId, inventoryId: b.inventoryId, value: branchEdits[b.id], base: b.stored });
+      const e = branchEdits[b.id];
+      if (b.inventoryId != null && e !== undefined) {
+        changes.push({ kind: 'delivery', date, productId, inventoryId: b.inventoryId, value: e.value, base: e.base });
       }
     }
     onSave(changes);
@@ -93,6 +103,11 @@ export default function BoardSheet({
         </>
       }
     >
+      {flagged ? (
+        <p role="alert" className="rounded-md bg-amber-50 p-2 text-sm text-amber-800">
+          {flagged}
+        </p>
+      ) : null}
       <p className="text-sm">
         Planned <span className="text-lg font-semibold tabular-nums">{planned}</span>
       </p>
@@ -103,19 +118,17 @@ export default function BoardSheet({
           <Stepper
             label="Yield"
             value={yieldVal}
-            onChange={(v) => setYieldEdit(v ?? 0)}
+            onChange={(v) => setYieldEdit((prev) => ({ value: v ?? 0, base: prev?.base ?? storedYield }))}
           />
           {fromPlan ? <span className="text-xs text-amber-700">From plan — not saved yet</span> : null}
         </div>
-      ) : (
-        <p className="text-sm">
-          Yield <span className="text-lg font-semibold tabular-nums">{yieldVal}</span>
-        </p>
-      )}
+      ) : null}
 
+      {editable ? (
       <p className={cn('text-sm font-medium', diff < 0 ? 'text-amber-700' : diff > 0 ? 'text-green-700' : 'text-muted-foreground')}>
         {diff > 0 ? `${diff} over plan` : diff < 0 ? `${-diff} short of plan` : 'Matches plan'}
       </p>
+      ) : null}
 
       <div className="flex flex-col gap-2">
         <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Send to branches</span>
@@ -131,7 +144,9 @@ export default function BoardSheet({
               <Stepper
                 label={b.name}
                 value={branchValue(b)}
-                onChange={(v) => setBranchEdits((e) => ({ ...e, [b.id]: v ?? 0 }))}
+                onChange={(v) =>
+                  setBranchEdits((e) => ({ ...e, [b.id]: { value: v ?? 0, base: e[b.id]?.base ?? b.stored } }))
+                }
                 className="flex-1"
               />
             ) : (
@@ -141,9 +156,11 @@ export default function BoardSheet({
         ))}
       </div>
 
-      <p className={cn('text-sm', over ? 'font-semibold text-destructive' : 'text-muted-foreground')}>
-        Assigned {assigned} of {yieldVal}
-      </p>
+      {editable ? (
+        <p className={cn('text-sm', over ? 'font-semibold text-destructive' : 'text-muted-foreground')}>
+          Assigned {assigned} of {yieldVal}
+        </p>
+      ) : null}
       {over && editable ? <p className="text-sm text-destructive">Lower a branch to match the yield</p> : null}
       {!editable ? (
         <p className="text-sm text-muted-foreground">Only the kitchen changes yield and branch splits.</p>

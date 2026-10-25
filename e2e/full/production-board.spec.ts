@@ -54,8 +54,9 @@ test.describe('production board (desktop)', () => {
 
     await page.goto('/production');
     const yieldInput = await cellInput(page, p.name, 'Yield');
-    // Not asserting the starting value: the desktop auto-sync double-counts a yield that
-    // finalizing already booked (known bug, user-manual findings) — out of scope here.
+    // Regression: the yield auto-fill used to add the plan on top of the 10 finalizing had
+    // already booked when the orders loaded after the rows, staging 20.
+    await expect(yieldInput).toHaveValue('10');
     await yieldInput.fill('12');
     const branchInput = await cellInput(page, p.name, new RegExp(`^${world.branch.name}`));
     await branchInput.fill('11');

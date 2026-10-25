@@ -139,9 +139,14 @@ Through "More" in the phone tab bar (the three tabs stay Count / Orders / Cash).
   `['inventory-for-production']`.
 - Over-allocation is checked on the phone before queueing (§4a). No server check.
 - Why a separate queue rather than the count queue: board entries need `base` for
-  the conflict check and include yields. The same delivery figure could sit in
-  both queues only if one person edits it on both screens on one phone; the
-  conflict check makes the second send flag instead of overwrite.
+  the conflict check and include yields.
+- **Known gap (not closed here):** the same `Inventory.delivery` is also edited
+  from the branch manager's phone count, whose queue has no `base`. If the
+  kitchen moves a branch's share on the board and a stale count from an offline
+  branch phone (with a touched delivery) arrives later, the count overwrites the
+  board's figure. The board's own sends are protected; the count's are not.
+  Closing it means giving count deliveries a base and the same check — a change
+  to the shipped count screen, left for a separate decision.
 
 ## 6. Architecture
 

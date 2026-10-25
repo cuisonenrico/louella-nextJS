@@ -19,7 +19,7 @@ export class PhoneBoard {
 
   async open() {
     await this.page.goto('/production');
-    await expect(this.page.getByText(/products have yield/)).toBeVisible();
+    await expect(this.page.getByText(/products have yield|Read-only — the kitchen sets the yield/)).toBeVisible();
   }
 
   row(product: string): Locator {

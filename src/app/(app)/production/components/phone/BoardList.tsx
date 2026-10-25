@@ -17,17 +17,30 @@ export interface BoardRowView {
   assigned: number;
   branchesWithShare: number;
   over: boolean;
+  /** What the viewer's own branch gets (read-only view). */
+  ownShare: number;
 }
 
-/** The day's board at a glance: planned, yield and the difference, per product. */
+function secondLine(v: BoardRowView): string {
+  if (v.assigned !== v.yieldVal) return `assigned ${v.assigned} of ${v.yieldVal}`;
+  return `to ${v.branchesWithShare} branch${v.branchesWithShare === 1 ? '' : 'es'} · all assigned`;
+}
+
+/**
+ * The day's board at a glance. The kitchen sees planned, yield and the
+ * difference; a reader limited to their own branch cannot see the kitchen's
+ * yield, so they see planned and what their branch gets.
+ */
 export default function BoardList({
   rowsByType,
   view,
   onOpen,
+  readOnly,
 }: {
   rowsByType: Map<ProductType, ProdRow[]>;
   view: (row: ProdRow) => BoardRowView;
   onOpen: (row: ProdRow) => void;
+  readOnly: boolean;
 }) {
   return (
     <div className="-mx-4 flex flex-col">
@@ -39,8 +52,14 @@ export default function BoardList({
             <div className="flex items-center px-4 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               <span className="flex-1">{TYPE_LABELS[type]}</span>
               <span className={NUM}>Planned</span>
-              <span className={NUM}>Yield</span>
-              <span className={NUM}>Diff</span>
+              {readOnly ? (
+                <span className={NUM}>Yours</span>
+              ) : (
+                <>
+                  <span className={NUM}>Yield</span>
+                  <span className={NUM}>Diff</span>
+                </>
+              )}
             </div>
             {rows.map((row) => {
               const v = view(row);
@@ -52,29 +71,37 @@ export default function BoardList({
                   onClick={() => onOpen(row)}
                   className={cn(
                     'flex min-h-13 items-center gap-1 border-b px-4 py-1.5 text-left active:bg-muted',
-                    v.over ? 'bg-red-50/70' : 'bg-background',
+                    !readOnly && v.over ? 'bg-red-50/70' : 'bg-background',
                   )}
                 >
                   <span className="flex min-w-0 flex-1 flex-col">
                     <span className="truncate font-medium">{v.name}</span>
-                    <span className={cn('text-xs', v.over ? 'font-medium text-destructive' : 'text-muted-foreground')}>
-                      {v.over
-                        ? `assigned ${v.assigned} of ${v.yieldVal}`
-                        : `to ${v.branchesWithShare} branch${v.branchesWithShare === 1 ? '' : 'es'} · all assigned`}
-                    </span>
+                    {readOnly ? null : (
+                      <span className={cn('text-xs', v.over ? 'font-medium text-destructive' : 'text-muted-foreground')}>
+                        {secondLine(v)}
+                      </span>
+                    )}
                   </span>
                   <span data-field="planned" className={NUM}>
                     {v.planned}
                   </span>
-                  <span data-field="yield" className={cn(NUM, 'font-semibold')}>
-                    {v.yieldVal}
-                  </span>
-                  <span
-                    data-field="diff"
-                    className={cn(NUM, diff > 0 ? 'text-green-700' : diff < 0 ? 'text-amber-700' : 'text-muted-foreground')}
-                  >
-                    {diff > 0 ? `+${diff}` : diff < 0 ? `−${-diff}` : '0'}
-                  </span>
+                  {readOnly ? (
+                    <span data-field="share" className={cn(NUM, 'font-semibold')}>
+                      {v.ownShare}
+                    </span>
+                  ) : (
+                    <>
+                      <span data-field="yield" className={cn(NUM, 'font-semibold')}>
+                        {v.yieldVal}
+                      </span>
+                      <span
+                        data-field="diff"
+                        className={cn(NUM, diff > 0 ? 'text-green-700' : diff < 0 ? 'text-amber-700' : 'text-muted-foreground')}
+                      >
+                        {v.yieldVal === 0 ? '–' : diff > 0 ? `+${diff}` : diff < 0 ? `−${-diff}` : '0'}
+                      </span>
+                    </>
+                  )}
                 </button>
               );
             })}

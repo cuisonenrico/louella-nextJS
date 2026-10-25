@@ -21,12 +21,14 @@ function setup(over: Partial<BoardSheetProps> = {}) {
     onSave,
     onMaterials: undefined,
     onClose: vi.fn(),
+    flagged: undefined,
     ...over,
   };
-  render(<BoardSheet {...props} />);
+  const view = render(<BoardSheet {...props} />);
+  const rerender = (next: Partial<BoardSheetProps>) => view.rerender(<BoardSheet {...props} {...next} />);
   const save = () => screen.getByRole('button', { name: /Save & next/ });
   const field = (name: string) => screen.getByRole('textbox', { name });
-  return { onSave, save, field };
+  return { onSave, save, field, rerender };
 }
 
 describe('BoardSheet', () => {
@@ -71,11 +73,39 @@ describe('BoardSheet', () => {
     expect(screen.queryByRole('textbox')).toBeNull();
     expect(screen.queryByRole('button', { name: /Save & next/ })).toBeNull();
     expect(screen.getByText('Only the kitchen changes yield and branch splits.')).toBeInTheDocument();
+    // A branch-scoped reader cannot see the kitchen's yield, so none is shown.
+    expect(screen.queryByText(/^Yield/)).toBeNull();
+    expect(screen.queryByText(/plan$|Matches plan/)).toBeNull();
+    expect(screen.queryByText(/^Assigned/)).toBeNull();
   });
 
   it('shows a branch without rows yet as setting up', () => {
     setup({ branches: [{ id: 1, name: 'C2', ordered: 8, inventoryId: null, stored: 0, queued: undefined }] });
     expect(screen.getByText('Setting up…')).toBeInTheDocument();
     expect(screen.queryByRole('textbox', { name: 'C2' })).toBeNull();
+  });
+
+  it('checks against the figure the person started from, not one that changed while the sheet was open', async () => {
+    const { save, field, onSave, rerender } = setup();
+    fireEvent.change(field('Yield'), { target: { value: '14' } });
+    fireEvent.change(field('C2'), { target: { value: '9' } });
+    // An order finalized meanwhile; the board refetched: yield 13 → 18, C2's delivery 8 → 13.
+    rerender({
+      storedYield: 18,
+      branches: [
+        { id: 1, name: 'C2', ordered: 13, inventoryId: 91, stored: 13, queued: undefined },
+        { id: 2, name: 'Calamba', ordered: 5, inventoryId: 92, stored: 5, queued: undefined },
+      ],
+    });
+    await userEvent.click(save());
+    expect(onSave).toHaveBeenCalledWith([
+      { kind: 'yield', date: '2026-10-25', productId: 3, value: 14, base: 13 },
+      { kind: 'delivery', date: '2026-10-25', productId: 3, inventoryId: 91, value: 9, base: 8 },
+    ]);
+  });
+
+  it('says when an earlier save was stopped because the server changed', () => {
+    setup({ flagged: 'Changed to 15 on the server — check and save again' });
+    expect(screen.getByText('Changed to 15 on the server — check and save again')).toBeInTheDocument();
   });
 });
