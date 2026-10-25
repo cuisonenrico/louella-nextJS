@@ -399,8 +399,8 @@ export const productionApi = {
   create: (data: Partial<Production>) => api.post<Production>('/production', data),
   createBulk: (data: Partial<Production>[]) =>
     api.post<Production[]>('/production/bulk', data),
-  upsertBulk: (data: Array<{ productId: number; date: string; yield: number; branchId?: number }>) =>
-    api.post<Production[]>('/production/upsert-bulk', data),
+  upsertBulk: (data: Array<{ productId: number; date: string; yield: number; branchId?: number }>, config?: { timeout?: number }) =>
+    api.post<Production[]>('/production/upsert-bulk', data, config),
   update: (id: number, data: { yield?: number; notes?: string | null }) =>
     api.patch<Production>(`/production/${id}`, data),
   delete: (id: number) => api.delete(`/production/${id}`),

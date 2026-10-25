@@ -19,21 +19,23 @@ export type QueueEntry = CountFields & {
   error?: string;
 };
 
-export interface CountQueueStore {
-  read(): QueueEntry[];
-  write(entries: QueueEntry[]): void;
+export interface QueueStore<T> {
+  read(): T[];
+  write(entries: T[]): void;
   /** False when storage is unavailable and entries last only as long as the page. */
   persistent: boolean;
 }
+
+export type CountQueueStore = QueueStore<QueueEntry>;
 
 export const countQueueKey = (userId: number) => `louella:count-queue:v1:${userId}`;
 
 /** Retry delays after a failed send; the last one repeats. */
 export const BACKOFF_MS = [2000, 5000, 15000, 30000] as const;
 
-const memory = new Map<string, QueueEntry[]>();
+const memory = new Map<string, unknown[]>();
 
-function browserStorage(): Storage | undefined {
+export function browserStorage(): Storage | undefined {
   try {
     return typeof window === 'undefined' ? undefined : window.localStorage;
   } catch {
@@ -41,10 +43,13 @@ function browserStorage(): Storage | undefined {
   }
 }
 
-export function createCountStore(userId: number, storage: Storage | undefined = browserStorage()): CountQueueStore {
-  const key = countQueueKey(userId);
+/**
+ * A list kept in localStorage under one key, falling back to memory when storage
+ * is unavailable. Storage is the shared truth across tabs.
+ */
+export function createQueueStore<T>(key: string, storage: Storage | undefined = browserStorage()): QueueStore<T> {
   let persistent = !!storage;
-  const store: CountQueueStore = {
+  const store: QueueStore<T> = {
     get persistent() {
       return persistent;
     },
@@ -56,13 +61,13 @@ export function createCountStore(userId: number, storage: Storage | undefined = 
           // tab sent everything, not that this tab's memory is still current.
           if (!raw) return [];
           const parsed: unknown = JSON.parse(raw);
-          return Array.isArray(parsed) ? (parsed as QueueEntry[]) : [];
+          return Array.isArray(parsed) ? (parsed as T[]) : [];
         } catch (err) {
           if (err instanceof SyntaxError) return [];
           persistent = false;
         }
       }
-      return memory.get(key) ?? [];
+      return (memory.get(key) as T[] | undefined) ?? [];
     },
     write(entries) {
       memory.set(key, entries);
@@ -76,6 +81,10 @@ export function createCountStore(userId: number, storage: Storage | undefined = 
     },
   };
   return store;
+}
+
+export function createCountStore(userId: number, storage: Storage | undefined = browserStorage()): CountQueueStore {
+  return createQueueStore<QueueEntry>(countQueueKey(userId), storage);
 }
 
 /** Merge a save over the row's waiting entry (latest values win). */
