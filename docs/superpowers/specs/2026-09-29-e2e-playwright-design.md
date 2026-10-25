@@ -515,7 +515,7 @@ marked "sweep v1" is covered by the route sweep only.
 | `/inventory-adjustments` | inventory-adjustments | sweep v1; transfers **done** (§6.7, exercised on `/inventory/details`); v2 for this page itself | The page itself and ANOMALY adjustments; transfers (send → accept/reject, cap, immutability) are covered in §6.7 |
 | `/inventory-import` | inventory-import | sweep v1; v2 | Import a fixture XLSX; rows written; same file re-import refused (hash) |
 | `/inventory-import/history` | inventory-import | sweep v1; v2 | Import appears with file name, no download |
-| `/production` | production | sweep v1; v2 | Kitchen yield per product/day equals finalized orders (links §6.3) |
+| `/production` | production | sweep v1; desktop + phone **done** | Desktop: yield + branch share saved together, over-allocation blocks save (`full/production-board.spec.ts`). Phone: yield + branch share, per-product over-allocation, offline save, no stale overwrite after a finalize, read-only for a branch manager (`full/phone/phone-production.spec.ts`). Still open: kitchen yield equals finalized orders (the desktop double-count) |
 | `/production/orders` | production-orders | v1; phone **done** | §6.3; manager opens on own branch (`full/production-orders.spec.ts`); phone suggestions → finalize, draft restore, failed finalize keeps draft, actions menu (`full/phone/phone-orders.spec.ts`) |
 | `/production-orders` | production-orders | v1 | §6.3 (same feature, second entry point — sweep both) |
 | `/production-cost` | recipes, materials | sweep v1; v2 | Cost for a past day uses that day's recipe version and material price |
