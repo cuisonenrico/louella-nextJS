@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures/test';
 import type { Api } from '../fixtures/api';
-import { today } from '../fixtures/dates';
+import { addDays, today } from '../fixtures/dates';
 import { buildWorld, type World } from '../fixtures/world';
 import { KITCHEN_BRANCH_ID } from '../support/credentials';
 
@@ -10,12 +10,17 @@ import { KITCHEN_BRANCH_ID } from '../support/credentials';
  * One row per product; Yield and one column per branch are inputs; edits are staged and
  * saved with "Save Changes". Cells have no accessible names, so they are found by the
  * column whose header carries the label.
+ *
+ * The desktop board refuses to save while ANY product of the day has more delivered to
+ * branches than baked — and other specs type deliveries without production on today and
+ * yesterday. So these tests work on a day nothing else touches.
  */
+const DAY = () => addDays(today(), -20);
 
 async function finalizedOrder(api: Api, world: World, productId: number, qty: number) {
   const order = await api.post<{ id: number }>('/production-orders', {
     branchId: world.branch.id,
-    date: today(),
+    date: DAY(),
     items: [{ productId, yield: qty }],
   });
   await api.patch(`/production-orders/${order.id}`, { status: 'FINALIZED' });
@@ -24,7 +29,7 @@ async function finalizedOrder(api: Api, world: World, productId: number, qty: nu
 async function kitchenYield(api: Api, productId: number): Promise<number> {
   const rows = await api.get<Array<{ productId: number; yield: number }>>(
     `/production/branch/${KITCHEN_BRANCH_ID}/date`,
-    { date: today() },
+    { date: DAY() },
   );
   return rows.find((r) => r.productId === productId)?.yield ?? 0;
 }
@@ -32,9 +37,19 @@ async function kitchenYield(api: Api, productId: number): Promise<number> {
 async function branchDelivery(api: Api, world: World, productId: number): Promise<number> {
   const rows = await api.get<Array<{ productId: number; delivery: number }>>(
     `/inventory/branch/${world.branch.id}/date`,
-    { date: today() },
+    { date: DAY() },
   );
   return rows.find((r) => r.productId === productId)?.delivery ?? 0;
+}
+
+async function openBoard(page: Page) {
+  await page.goto('/production');
+  const date = page.locator('input[type="date"]').first();
+  await expect(date).toBeVisible();
+  const loaded = page.waitForResponse((r) => r.url().includes('/api/v1/production/date') && r.url().includes(DAY()));
+  await date.fill(DAY());
+  await date.press('Tab'); // WebKit commits a date input's change on blur
+  await loaded;
 }
 
 async function cellInput(page: Page, product: string, header: string | RegExp) {
@@ -52,7 +67,7 @@ test.describe('production board (desktop)', () => {
     const p = world.products[0];
     await finalizedOrder(api, world, p.id, 10);
 
-    await page.goto('/production');
+    await openBoard(page);
     const yieldInput = await cellInput(page, p.name, 'Yield');
     // Regression: the yield auto-fill used to add the plan on top of the 10 finalizing had
     // already booked when the orders loaded after the rows, staging 20.
@@ -77,7 +92,7 @@ test.describe('production board (desktop)', () => {
     const p = world.products[0];
     await finalizedOrder(api, world, p.id, 10);
 
-    await page.goto('/production');
+    await openBoard(page);
     const yieldInput = await cellInput(page, p.name, 'Yield');
     await yieldInput.fill('8');
     await expect(page.getByText(/Cannot save — over-allocated/)).toBeVisible();

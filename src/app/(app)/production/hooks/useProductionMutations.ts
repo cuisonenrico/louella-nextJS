@@ -23,9 +23,13 @@ export function useProductionMutations({
 }: UseProductionMutationsParams) {
   const qc = useQueryClient();
 
+  // Autofill creates the day's production rows as well as its inventory rows.
+  // Refreshing only the inventory left the board comparing new deliveries with
+  // old yields, so it reported "over-allocated" and refused to save.
   const invalidateInventory = () => {
     qc.invalidateQueries({ queryKey: ['inventory-for-production'] });
     qc.invalidateQueries({ queryKey: ['inventory'] });
+    qc.invalidateQueries({ queryKey: ['production'] });
   };
 
   /**

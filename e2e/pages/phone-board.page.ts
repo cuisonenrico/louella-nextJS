@@ -49,6 +49,14 @@ export class PhoneBoard {
     return this.sheet().getByRole('button', { name: /Save & next/ });
   }
 
+  /**
+   * The chip once everything reached the server. Generous: each send first re-reads two whole
+   * days (hundreds of KB in the e2e database once the suite has run for a while).
+   */
+  async expectSaved() {
+    await expect(this.sync()).toContainText('● Saved', { timeout: 30_000 });
+  }
+
   /** CSS, not getByRole: the open sheet marks the page behind it aria-hidden. */
   sync(): Locator {
     return this.page.locator('[role="status"]').filter({ hasText: /Saved|waiting for signal|couldn't save/ });

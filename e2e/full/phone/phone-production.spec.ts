@@ -55,7 +55,7 @@ test.describe('phone production board', () => {
     await expect(sheet.getByText('2 over plan')).toBeVisible();
     await board.saveButton().click();
     await page.keyboard.press('Escape');
-    await expect(board.sync()).toContainText('● Saved');
+    await board.expectSaved();
     await expect.poll(() => kitchenYield(api, p.id)).toBe(12);
     await expect.poll(() => branchDelivery(api, world, p.id)).toBe(12);
     await expect(board.rowField(p.name, 'diff')).toHaveText('+2');
@@ -81,7 +81,7 @@ test.describe('phone production board', () => {
     await expect(board.rowField(p.name, 'yield')).toHaveText('13');
     await page.context().setOffline(false);
     await goOnline(page);
-    await expect(board.sync()).toContainText('● Saved');
+    await board.expectSaved();
     await expect.poll(() => kitchenYield(api, p.id)).toBe(13);
   });
 
@@ -97,7 +97,7 @@ test.describe('phone production board', () => {
     await finalizedOrder(api, world, p.id, 5); // the server's yield is now 15
     await page.context().setOffline(false);
     await goOnline(page);
-    await expect(board.sync()).toContainText("1 couldn't save");
+    await expect(board.sync()).toContainText("1 couldn't save", { timeout: 30_000 });
     await board.sync().getByRole('button', { name: /couldn't save/ }).click();
     await expect(page.getByText(`${p.name}: Changed to 15 on the server — check and save again`)).toBeVisible();
     expect(await kitchenYield(api, p.id)).toBe(15);
@@ -109,7 +109,7 @@ test.describe('phone production board', () => {
     await expect(sheet.getByRole('textbox', { name: 'Yield', exact: true })).toHaveValue('15');
     await board.saveButton().click();
     await page.keyboard.press('Escape');
-    await expect(board.sync()).toContainText('● Saved');
+    await board.expectSaved();
     expect(await kitchenYield(api, p.id)).toBe(15);
   });
 
