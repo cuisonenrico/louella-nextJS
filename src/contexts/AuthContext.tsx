@@ -156,9 +156,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     const { data } = await authApi.login(email, password);
     setAccessToken(data.accessToken);
-    // The login response predates feature permissions and is consumed by the
-    // Flutter client too, so its shape is left alone; permissions come from a
-    // follow-up call that costs no database query server-side.
+    // The login response predates feature permissions, so permissions come
+    // from a follow-up call that costs no database query server-side.
     const { data: permData } = await usersApi.myPermissions();
     setState({
       user: data.user,

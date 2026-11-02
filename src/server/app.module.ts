@@ -30,7 +30,6 @@ import { InventoryAdjustmentsModule } from './inventory-adjustments/inventory-ad
 import { InventoryImportModule } from './inventory-import/inventory-import.module';
 import { SuppliersModule } from './suppliers/suppliers.module';
 import { DashboardModule } from './dashboard/dashboard.module';
-import { NotificationsModule } from './notifications/notifications.module';
 import { PermissionsModule } from './permissions/permissions.module';
 import { EmployeesModule } from './employees/employees.module';
 import { PayrollModule } from './payroll/payroll.module';
@@ -52,10 +51,6 @@ import { CacheNamespaceModule } from './common/cache/cache-namespace.module';
     PrismaModule,
     UsersModule,
     AuthModule,
-    // FilesModule (src/server/files, pre-signed S3 uploads) is deliberately not
-    // registered: nothing calls it and its AWS configuration is placeholder,
-    // so mounting it only exposed /files/presign and /files/complete to every
-    // signed-in user. Import it here again once a real caller exists.
     JobsModule,
     ProductsModule,
     BranchesModule,
@@ -72,7 +67,6 @@ import { CacheNamespaceModule } from './common/cache/cache-namespace.module';
     InventoryImportModule,
     SuppliersModule,
     DashboardModule,
-    NotificationsModule,
     PermissionsModule,
     EmployeesModule,
     PayrollModule,

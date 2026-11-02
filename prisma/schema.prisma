@@ -100,7 +100,6 @@ model User {
   inventoryAdjustmentEdits InventoryAdjustment[] @relation("InventoryAdjustmentUpdatedBy")
   transferResponses        InventoryAdjustment[] @relation("TransferRespondedBy")
   materialAdjustments      MaterialAdjustment[]  @relation("MaterialAdjustmentCreatedBy")
-  deviceTokens             DeviceToken[]
   importLogs               ImportLog[]           @relation("ImportLogCreatedBy")
 
   createdBy     User?   @relation("UserCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
@@ -678,23 +677,6 @@ model UnitConversion {
   @@unique([fromUnit, toUnit])
   @@index([fromUnit])
   @@index([toUnit])
-}
-
-// ---------------------------------------------------------------------------
-// Notifications — FCM Device Tokens
-// ---------------------------------------------------------------------------
-
-model DeviceToken {
-  id        Int      @id @default(autoincrement())
-  userId    Int
-  token     String   @unique
-  platform  String   @default("web") // web | android | ios
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
 }
 
 // ---------------------------------------------------------------------------

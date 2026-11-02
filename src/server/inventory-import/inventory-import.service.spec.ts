@@ -1170,7 +1170,7 @@ describe('InventoryImportService', () => {
       }
 
       it('throws ConflictException when ambiguity left nothing to import', async () => {
-        // The Flutter client and plain curl never see page.tsx's disabled
+        // A direct API call never sees page.tsx's disabled
         // buttons; the refusal has to live on the server.
         await expect(
           service.importWorkbook(ambiguousWorkbook(), 7, 'sheet.xlsx'),
@@ -1247,7 +1247,7 @@ describe('InventoryImportService', () => {
         ]);
 
       it('refuses the import when an unknown label is neither created nor acknowledged', async () => {
-        // The web UI disables its button, but Flutter and curl never see it.
+        // The web UI disables its button, but a direct API call never sees it.
         // Without this the label is silently dropped and a product's whole
         // history goes missing from the file.
         await expect(

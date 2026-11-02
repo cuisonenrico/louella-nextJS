@@ -31,8 +31,7 @@ deployment if wrong:
 | `DIRECT_URL` | Session pooler (5432). Used only by `prisma migrate`, which cannot run through the transaction pooler. |
 | `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` | ≥16 chars. `validateEnv` fails the boot without them — on serverless that surfaces as a 500 on first request, not a deploy failure. |
 | ~~`TZ`~~ | **Cannot be set — Vercel reserves the name** and rejects it with `The name of your Environment Variable is reserved`. Cloud Run allowed it; Vercel does not. Functions always run UTC, so every date boundary must pin `Asia/Manila` explicitly in code (see below). |
-| `ALLOWED_ORIGINS` | Only for cross-origin clients (the Flutter app). The web app is same-origin and needs no entry. |
-| `FIREBASE_SERVICE_ACCOUNT` | Inline JSON. There is no writable filesystem for the file-path variant. |
+| `ALLOWED_ORIGINS` | Only for a cross-origin client. The web app is same-origin and needs no entry. |
 
 ## Timezone: pin it in code, never via `TZ`
 
@@ -97,8 +96,7 @@ Inventory and Production placeholder rows for a date.
 
 Runs are recorded in `JobRun` with `trigger: 'auto'`, so the Settings → Jobs
 screen shows them alongside historical `cron` and `boot` rows. `trigger` is a
-plain String column, so this needed no migration — which matters while the
-Cloud Run image is frozen.
+plain String column, so this needed no migration.
 
 The manual `POST /api/v1/jobs/*` triggers are unchanged and still require a
 MANAGER JWT. `POST /jobs/autofill-range` is the way to close a gap wider than
@@ -120,20 +118,13 @@ Migrations are **not** run by the build. Run them deliberately:
 npm run prisma:deploy   # prisma migrate deploy, uses DIRECT_URL
 ```
 
-## Cutover state (as of 2026-08-12)
+## Cutover state
 
-**The web app is live on the consolidated API.**
-
-1. ✅ API consolidated into this project.
-2. ✅ Deployed to preview and verified.
-3. ✅ Promoted to production (`6bd2341`), env vars set, `NEXT_PUBLIC_API_URL`
-   removed so the frontend uses the relative `/api/v1`. Verified live: login,
-   refresh-via-cookie, all three autofill sheets, and the module sweep.
-4. ⬜ **Cloud Run `louella-be` is frozen, not deleted.** Its existing image
-   keeps serving the current Flutter build. Stop deploying to it — do not
-   delete it.
-5. ⬜ Repoint the Flutter app's base URL to the Vercel domain, ship that build,
-   *then* delete the Cloud Run service. Cost is only eliminated at this step.
+**Complete.** The consolidated app has served production since `6bd2341`
+(2026-08-12). The Flutter app was dropped in September 2026 and the Cloud Run
+`louella-be` service no longer serves, so this project is the only thing that
+reads or writes the database. Migrations no longer need to stay compatible
+with an older API image.
 
 ### Env var changes require a rebuild, and the ordering is load-bearing
 
@@ -170,12 +161,8 @@ and has no `/api/v1` function at all.
 `vercel promote <deploymentId>` is the fast way back — it is an alias swap with
 no rebuild, ~2s, and does not need the source or env vars to be correct yet.
 
-> **While Cloud Run is frozen, every Prisma migration must stay
-> backward-compatible with that image** — it and this app share one database.
-
-`louella-be/` still exists on disk as a separate git repo. It is deprecated and
-no longer the source of truth; see the deprecation notice in its README.
-Deleting it is a decision for after the Flutter cutover.
+`louella-be/` may still exist on disk as a separate git repo. It is deprecated,
+nothing runs from it, and it is no longer the source of truth.
 
 ## Known regressions
 

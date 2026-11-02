@@ -41,10 +41,6 @@ export class UsersService {
     });
   }
 
-  async createUser(email: string, passwordHash: string) {
-    return this.prisma.user.create({ data: { email, passwordHash } });
-  }
-
   async findAll(page: number, limit: number, search?: string) {
     const where: Prisma.UserWhereInput = search
       ? { email: { contains: search, mode: 'insensitive' } }

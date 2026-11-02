@@ -17,9 +17,9 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { RequireFeature } from '../common/decorators/require-feature.decorator';
 
 // Catalog READS are deliberately left ungated: branch, product and material
-// lists feed pickers on nearly every screen (and the shipped Flutter build
-// calls them from roles that hold no catalog key), so requiring the key here
-// would break screens the user is entitled to. Writes carry the key.
+// lists feed pickers on nearly every screen, including for roles that hold no
+// catalog key, so requiring the key here would break screens the user is
+// entitled to. Writes carry the key.
 @Controller('branches')
 export class BranchesController {
   constructor(private readonly branchesService: BranchesService) {}

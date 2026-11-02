@@ -493,13 +493,6 @@ export const jobsApi = {
     }),
 };
 
-// ─── Notifications ────────────────────────────────────────────────
-export const notificationsApi = {
-  registerToken: (token: string, platform?: string) =>
-    api.post<{ message: string }>('/notifications/register', { token, platform }),
-  removeToken: (token: string) =>
-    api.delete(`/notifications/token/${encodeURIComponent(token)}`),
-};
 // ─── Employees & payroll (admin only) ─────────────────────────────
 export const jobRolesApi = {
   list: (includeInactive = false) =>
