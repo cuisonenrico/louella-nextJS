@@ -1,5 +1,4 @@
 import {
-  ConflictException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -123,27 +122,6 @@ export class AuthService {
 
   async login(email: string, password: string) {
     const user = await this.validateUser(email, password);
-    const accessToken = this.createAccessToken(user);
-    const { refreshToken, refreshTokenId } =
-      await this.createRefreshToken(user);
-
-    return {
-      accessToken,
-      refreshToken,
-      refreshTokenId,
-      user: this.sanitizeUser(user),
-    };
-  }
-
-  async register(email: string, password: string) {
-    const existing = await this.usersService.findByEmail(email);
-    if (existing) {
-      throw new ConflictException('Email already in use');
-    }
-
-    const passwordHash = await bcrypt.hash(password, BCRYPT_COST_FACTOR);
-    const user = await this.usersService.createUser(email, passwordHash);
-
     const accessToken = this.createAccessToken(user);
     const { refreshToken, refreshTokenId } =
       await this.createRefreshToken(user);

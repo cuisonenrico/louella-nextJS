@@ -16,7 +16,6 @@ const APP_DIR = join(REPO_ROOT, 'src', 'app', '(app)');
 const API_FEATURE: Record<string, string | string[] | null> = {
   authApi: null,
   usersApi: null, // only `me/permissions` is called outside the admin screen
-  notificationsApi: null,
   branchesApi: null,
   productsApi: null,
   materialsApi: null,

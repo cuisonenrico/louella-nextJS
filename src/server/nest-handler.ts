@@ -6,7 +6,7 @@
  * listen on: the platform hands us one request at a time. Everything else
  * main.ts configured — global prefix, pipes, filters, cookie parsing, body
  * limits, the Prisma Decimal patch — is preserved verbatim, because the HTTP
- * contract the Flutter app depends on is defined by exactly those settings.
+ * contract the frontend depends on is defined by exactly those settings.
  *
  * The app is cached in module scope, so it boots once per lambda instance and
  * every later request on that instance reuses it. All API routes share this

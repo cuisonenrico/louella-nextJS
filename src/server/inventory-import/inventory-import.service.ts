@@ -907,8 +907,8 @@ export class InventoryImportService {
     // Every label that resolves to nothing must be accounted for before a
     // single row is written — either the operator asked for it to become a
     // product, or they explicitly acknowledged skipping it. The check lives
-    // here rather than only in the UI because the Flutter client and plain
-    // curl never see a disabled button, and the failure it prevents is
+    // here rather than only in the UI because a direct API call never sees a
+    // disabled button, and the failure it prevents is
     // silent: an unmatched label loses that product's data for the whole file
     // while the summary still reports a cheerful success.
     const importableSheets = parsedSheets.filter(
@@ -1029,7 +1029,7 @@ export class InventoryImportService {
     );
 
     // Blocking ambiguity server-side, not just in the UI: page.tsx disables
-    // its buttons, but the Flutter client and plain curl never see them. When
+    // its buttons, but a direct API call never sees them. When
     // ambiguity is the reason nothing at all was written, the caller gets a
     // hard error naming what to fix rather than a cheerful zero-row summary.
     // A partial import is left alone — it really did write rows, and must

@@ -13,7 +13,6 @@ import { Throttle } from '@nestjs/throttler';
 import type { Response, Request } from 'express';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
-import { RefreshDto } from './dto/refresh.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/user.decorator';
@@ -29,12 +28,11 @@ export class AuthController {
   @Post('login')
   async login(
     @Body() body: LoginDto,
-    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
     const result = await this.authService.login(body.email, body.password);
     this.setRefreshCookie(res, result.refreshToken);
-    return withRefreshTokenFor(req, result);
+    return withoutRefreshToken(result);
   }
 
   // Every full page load spends one refresh, and the throttler keys on IP — so
@@ -47,42 +45,25 @@ export class AuthController {
   @Throttle({ default: { ttl: 60_000, limit: throttleLimit(60) } })
   @Post('refresh')
   async refresh(
-    @Body() body: RefreshDto,
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const bodyToken = body.refreshToken;
-    const token = bodyToken ?? req.cookies?.refresh_token;
+    const token: string | undefined = req.cookies?.refresh_token;
     if (!token) {
       throw new UnauthorizedException('Refresh token required');
     }
     const result = await this.authService.refresh(token);
     this.setRefreshCookie(res, result.refreshToken);
-
-    // Only clients that authenticated with a token in the body get one back.
-    //
-    // The Flutter app has no cookie jar and round-trips the token itself, so
-    // it must keep receiving it. A browser authenticates with the HttpOnly
-    // cookie, and echoing the rotated 30-day token into a JS-readable body
-    // would hand any XSS foothold a long-lived credential — defeating the
-    // whole point of keeping it HttpOnly. The cookie above is the browser's
-    // copy; it never needs to read one.
-    if (!bodyToken) {
-      const { refreshToken: _cookieOnly, ...rest } = result;
-      return rest;
-    }
-    return result;
+    return withoutRefreshToken(result);
   }
 
   @Public()
   @Post('logout')
   async logout(
-    @Body() body: RefreshDto,
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const token = body.refreshToken ?? req.cookies?.refresh_token;
-    const result = await this.authService.logout(token);
+    const result = await this.authService.logout(req.cookies?.refresh_token);
     this.clearAuthCookies(res);
     return result;
   }
@@ -105,7 +86,6 @@ export class AuthController {
   async changePassword(
     @Body() body: ChangePasswordDto,
     @CurrentUser() user: { id: number },
-    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
     // Changing the password revokes every refresh token, the caller's
@@ -116,7 +96,7 @@ export class AuthController {
       body.newPassword,
     );
     this.setRefreshCookie(res, result.refreshToken);
-    return withRefreshTokenFor(req, result);
+    return withoutRefreshToken(result);
   }
 
   private setRefreshCookie(res: Response, token: string) {
@@ -165,34 +145,15 @@ function cookieOptions() {
 }
 
 /**
- * True when the request was made by a browser.
+ * Drop the refresh token from a response body.
  *
- * `Sec-Fetch-*` and `Origin` are forbidden request headers: page script cannot
- * set or remove them, so an XSS payload cannot pass itself off as a
- * non-browser client. The Flutter app's Dart HTTP client sends neither.
- */
-function isBrowserRequest(req: Request): boolean {
-  const headers = req.headers ?? {};
-  return (
-    headers['sec-fetch-mode'] != null ||
-    headers['sec-fetch-site'] != null ||
-    headers.origin != null
-  );
-}
-
-/**
- * Drop the refresh token from a response body when the caller is a browser.
- *
- * A browser holds its copy in the HttpOnly cookie. Echoing the 30-day token
+ * The browser holds its copy in the HttpOnly cookie. Echoing the 30-day token
  * into a JS-readable body would hand any XSS foothold a long-lived credential
- * and defeat the point of the cookie. The Flutter app has no cookie jar and
- * must keep receiving it.
+ * and defeat the point of the cookie.
  */
-function withRefreshTokenFor<T extends { refreshToken: string }>(
-  req: Request,
+function withoutRefreshToken<T extends { refreshToken: string }>(
   result: T,
-): T | Omit<T, 'refreshToken'> {
-  if (!isBrowserRequest(req)) return result;
+): Omit<T, 'refreshToken'> {
   const { refreshToken: _cookieOnly, ...rest } = result;
   return rest;
 }

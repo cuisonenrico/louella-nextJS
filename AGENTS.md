@@ -89,7 +89,7 @@ Standard NestJS module structure — each domain has a `*.module.ts`,
 `auth`, `users`, `permissions`, `branches`, `products`, `inventory`,
 `inventory-adjustments`, `inventory-import`, `production`, `production-orders`,
 `materials`, `material-inventory`, `material-adjustments`, `recipes`, `sales`,
-`suppliers`, `unit-conversions`, `dashboard`, `jobs`, `notifications`, `files`,
+`suppliers`, `unit-conversions`, `dashboard`, `jobs`,
 `employees`, `payroll`, `branch-cash`, `landing`
 
 Plus infrastructure-only: `prisma`, `json_body`.
@@ -227,11 +227,6 @@ Spec: `docs/superpowers/specs/2026-09-24-landing-page-cms-design.md`.
   memory, so the limit applies per lambda, not globally.
 - **The 45s cache is per-instance**, so the impact is a lower hit rate, not
   staleness beyond the TTL. `CACHE_ENABLED=false` disables it.
-- **`src/server/files/` (pre-signed S3 uploads) is built but unwired.** No
-  caller exists in this app, and the AWS env vars are
-  placeholders. The XLSX import does *not* use it. `FilesModule` is **not
-  registered** in `app.module.ts`, so `/files/*` routes do not exist — import
-  it there again when a real caller appears.
 - **Branch scoping must survive Express 5.** `req.query` is a re-parsing
   getter, so assigning into it is silently discarded. `BranchGuard` replaces
   the property instead; anything else that rewrites query values must do the

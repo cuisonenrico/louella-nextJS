@@ -2,13 +2,9 @@ import { UnauthorizedException } from '@nestjs/common';
 import { AuthController } from './auth.controller';
 
 /**
- * The refresh endpoint serves two clients with different threat models.
- *
- * A browser authenticates with the HttpOnly cookie and must never see the
- * rotated token in a JS-readable body — that would hand any XSS foothold a
- * 30-day credential and undo the whole reason the cookie is HttpOnly. The
- * Flutter app has no cookie jar, round-trips the token itself, and must keep
- * receiving it.
+ * The refresh token lives only in the HttpOnly cookie. It must never appear in
+ * a JS-readable body — that would hand any XSS foothold a 30-day credential and
+ * undo the whole reason the cookie is HttpOnly.
  */
 function makeController() {
   const rotated = {
@@ -23,22 +19,22 @@ function makeController() {
   return { controller, res, rotated };
 }
 
-describe('AuthController.refresh — who gets the refresh token back', () => {
-  it('omits it when the caller authenticated with the cookie', async () => {
+describe('AuthController.refresh — the token stays in the cookie', () => {
+  it('omits it from the body', async () => {
     const { controller, res } = makeController();
     const req = { cookies: { refresh_token: 'cookie-token' } } as never;
 
-    const result = await controller.refresh({} as never, req, res);
+    const result = await controller.refresh(req, res);
 
     expect(result).not.toHaveProperty('refreshToken');
     expect(result.accessToken).toBe('new-access');
   });
 
-  it('still sets the rotated token as a cookie for that caller', async () => {
+  it('sets the rotated token as an HttpOnly cookie', async () => {
     const { controller, res } = makeController();
     const req = { cookies: { refresh_token: 'cookie-token' } } as never;
 
-    await controller.refresh({} as never, req, res);
+    await controller.refresh(req, res);
 
     const [name, value, opts] = (res as unknown as { cookie: jest.Mock }).cookie
       .mock.calls[0];
@@ -47,28 +43,15 @@ describe('AuthController.refresh — who gets the refresh token back', () => {
     expect(opts.httpOnly).toBe(true);
   });
 
-  it('returns it when the caller sent one in the body (the mobile client)', async () => {
+  it('ignores a token sent in the body', async () => {
+    // The body-token path served the Flutter app, which is gone. A token in
+    // the body alone must not authenticate.
     const { controller, res } = makeController();
-    const req = { cookies: {} } as never;
+    const req = { cookies: {}, body: { refreshToken: 'body-token' } } as never;
 
-    // The return type is a union — present on the body-auth path, absent on
-    // the cookie path — so read it as a record rather than narrowing here.
-    const result: Record<string, unknown> = await controller.refresh(
-      { refreshToken: 'body-token' } as never,
-      req,
-      res,
+    await expect(controller.refresh(req, res)).rejects.toThrow(
+      UnauthorizedException,
     );
-
-    expect(result.refreshToken).toBe('new-refresh');
-  });
-
-  it('rejects a caller with neither', async () => {
-    const { controller, res } = makeController();
-    const req = { cookies: {} } as never;
-
-    await expect(
-      controller.refresh({} as never, req, res),
-    ).rejects.toThrow(UnauthorizedException);
   });
 });
 
@@ -79,7 +62,7 @@ describe('AuthController — session hint cookie', () => {
     const { controller, res } = makeController();
     const req = { cookies: { refresh_token: 'cookie-token' } } as never;
 
-    await controller.refresh({} as never, req, res);
+    await controller.refresh(req, res);
 
     const calls = (res as unknown as { cookie: jest.Mock }).cookie.mock.calls;
     const hint = calls.find(([name]) => name === 'has_session');
@@ -96,7 +79,7 @@ describe('AuthController — session hint cookie', () => {
     const res = { cookie: jest.fn(), clearCookie: jest.fn() } as never;
     const req = { cookies: { refresh_token: 'cookie-token' } } as never;
 
-    await controller.logout({} as never, req, res);
+    await controller.logout(req, res);
 
     const cleared = (res as unknown as { clearCookie: jest.Mock }).clearCookie.mock.calls.map(
       ([name]) => name,
@@ -118,7 +101,7 @@ describe('AuthController — session hint cookie', () => {
       const controller = new AuthController(authService);
       const res = { cookie: jest.fn(), clearCookie: jest.fn() } as never;
 
-      await controller.logout({} as never, { cookies: {} } as never, res);
+      await controller.logout({ cookies: {} } as never, res);
 
       for (const [, opts] of (res as unknown as { clearCookie: jest.Mock })
         .clearCookie.mock.calls) {
@@ -132,8 +115,8 @@ describe('AuthController — session hint cookie', () => {
   });
 });
 
-describe('AuthController.login — who gets the refresh token back', () => {
-  function makeLoginController() {
+describe('AuthController.login — the token stays in the cookie', () => {
+  it('sets it as a cookie and omits it from the body', async () => {
     const authService = {
       login: jest.fn().mockResolvedValue({
         accessToken: 'access',
@@ -144,31 +127,16 @@ describe('AuthController.login — who gets the refresh token back', () => {
     } as never;
     const controller = new AuthController(authService);
     const res = { cookie: jest.fn(), clearCookie: jest.fn() } as never;
-    return { controller, res };
-  }
-  const body = { email: 'a@b.com', password: 'password' } as never;
 
-  it.each([
-    ['sec-fetch-mode', { 'sec-fetch-mode': 'cors' }],
-    ['origin', { origin: 'https://louella.example' }],
-  ])('omits it for a browser (%s header)', async (_name, headers) => {
-    const { controller, res } = makeLoginController();
-
-    const result = await controller.login(body, { headers } as never, res);
-
-    expect(result).not.toHaveProperty('refreshToken');
-    expect(result.accessToken).toBe('access');
-  });
-
-  it('returns it to a client without browser headers (the mobile app)', async () => {
-    const { controller, res } = makeLoginController();
-
-    const result: Record<string, unknown> = await controller.login(
-      body,
-      { headers: { 'user-agent': 'Dart/3.5 (dart:io)' } } as never,
+    const result = await controller.login(
+      { email: 'a@b.com', password: 'password' } as never,
       res,
     );
 
-    expect(result.refreshToken).toBe('refresh');
+    expect(result).not.toHaveProperty('refreshToken');
+    expect(result.accessToken).toBe('access');
+    const [name, value] = (res as unknown as { cookie: jest.Mock }).cookie.mock.calls[0];
+    expect(name).toBe('refresh_token');
+    expect(value).toBe('refresh');
   });
 });

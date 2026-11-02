@@ -13,11 +13,10 @@
  * icons, or `@prisma/client`. Nav icons live in
  * `src/components/layout/navIcons.ts`, keyed by feature key.
  *
- * IMPORTANT - the ten keys listed in MOBILE_CONTRACT_KEYS are mirrored in
- * `louella_mobile/lib/core/constants/feature_keys.dart`, and the Flutter build
- * currently in the field is frozen against the old Cloud Run image. Adding keys
- * is safe (mobile ignores what it does not know); renaming or removing one of
- * those ten breaks the mobile app.
+ * The ten keys listed in MOBILE_CONTRACT_KEYS were mirrored by the Flutter app,
+ * which was retired in September 2026. They stay because stored role and user
+ * overrides reference them; removing one is a permissions-matrix change of its
+ * own, not a cleanup.
  *
  * ## Three tiers
  *
@@ -899,8 +898,8 @@ export type PermissionKey = FeatureKey | ActionKey | PanelKey;
 export const FEATURE_LIST: readonly FeatureDef[] = FEATURES;
 
 /**
- * The ten keys the Flutter app mirrors. Renaming or removing any of these
- * breaks the shipped mobile build; a conformance test asserts they survive.
+ * The ten keys the retired Flutter app mirrored. A conformance test asserts
+ * they survive until they are removed deliberately (see the header).
  */
 export const MOBILE_CONTRACT_KEYS = [
   'quick-entry',
