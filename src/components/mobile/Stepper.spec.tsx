@@ -51,4 +51,21 @@ describe('Stepper', () => {
     expect(input).toHaveAttribute('placeholder', '–');
     expect(input).toHaveAttribute('inputmode', 'numeric');
   });
+
+  it('Enter moves to the next stepper, and leaves the last one', async () => {
+    render(
+      <>
+        <Stepper label="Leftover" value={1} onChange={vi.fn()} />
+        <Stepper label="Reject" value={0} onChange={vi.fn()} />
+      </>,
+    );
+    const leftover = screen.getByRole('textbox', { name: 'Leftover' });
+    const reject = screen.getByRole('textbox', { name: 'Reject' });
+    expect(leftover).toHaveAttribute('enterkeyhint', 'next');
+    await userEvent.click(leftover);
+    await userEvent.keyboard('{Enter}');
+    expect(reject).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    expect(reject).not.toHaveFocus();
+  });
 });

@@ -4,6 +4,7 @@ import type { Api } from '../../fixtures/api';
 import { today } from '../../fixtures/dates';
 import { buildWorld, managerPage, type World } from '../../fixtures/world';
 import { PhoneCount } from '../../pages/phone-count.page';
+import { fakeOnScreenKeyboard } from '../../support/keyboard';
 
 const PHONE = devices['Pixel 7'];
 const BULK = '**/api/v1/inventory/bulk';
@@ -262,6 +263,28 @@ test.describe('phone count', () => {
     const count = new PhoneCount(page);
     await count.open();
     expect(allBranches).toEqual([]);
+    await page.context().close();
+  });
+
+  test('the keypad bar goes from Leftover to Reject without closing the sheet', async ({ api, browser }) => {
+    const { world, page, count } = await setup(api, browser, 1);
+    await fakeOnScreenKeyboard(page);
+    await page.reload();
+    const sheet = await count.openProduct(world.products[0].name);
+    const bar = page.getByRole('toolbar', { name: 'Keypad' });
+
+    await sheet.getByRole('textbox', { name: 'Leftover', exact: true }).click();
+    await bar.getByRole('button', { name: 'Next' }).click();
+    const reject = sheet.getByRole('textbox', { name: 'Reject', exact: true });
+    await expect(reject).toBeFocused();
+    await page.keyboard.type('2');
+    await expect(reject).toHaveValue('2');
+
+    await expect(bar.getByRole('button', { name: 'Next' })).toHaveCount(0);
+    await bar.getByRole('button', { name: 'Done' }).click();
+    await expect(bar).toHaveCount(0);
+    await expect(sheet).toBeVisible(); // a tap on the bar is not a tap outside the sheet
+    await expect(reject).toHaveValue('2');
     await page.context().close();
   });
 });

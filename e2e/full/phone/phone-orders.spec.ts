@@ -4,6 +4,7 @@ import type { Api } from '../../fixtures/api';
 import { today, yesterday } from '../../fixtures/dates';
 import { buildWorld, managerPage, type World } from '../../fixtures/world';
 import { PhoneCount } from '../../pages/phone-count.page';
+import { fakeOnScreenKeyboard } from '../../support/keyboard';
 
 const PHONE = devices['Pixel 7'];
 
@@ -176,6 +177,32 @@ test.describe('phone Branch Orders', () => {
     await page.getByRole('button', { name: /New order/ }).click();
     await expect(form(page).getByText('No sales in this period to suggest from.')).toBeVisible();
     await expect(form(page).getByRole('button', { name: 'Fill all from suggestions' })).toBeDisabled();
+    await page.context().close();
+  });
+
+  test('the keypad bar moves to the next quantity and closes on Done', async ({ api, browser }) => {
+    const world = await buildWorld(api, { products: 2 });
+    const page = await managerPage(browser, world, PHONE);
+    await fakeOnScreenKeyboard(page);
+    await openOrders(page);
+    await page.getByRole('button', { name: /New order/ }).click();
+
+    const fields = form(page).locator('input[data-keypad-field]');
+    const bar = page.getByRole('toolbar', { name: 'Keypad' });
+    await expect(bar).toHaveCount(0);
+    await fields.first().click();
+    await expect(bar).toBeVisible();
+    await bar.getByRole('button', { name: 'Next' }).click();
+    await expect(fields.nth(1)).toBeFocused(); // the keyboard stays up: focus moved, never dropped
+    await page.keyboard.type('4');
+    await expect(fields.nth(1)).toHaveValue('4');
+
+    // The last quantity has nowhere to go next; Done puts the keyboard away.
+    await fields.last().focus(); // a tap could land on the bar, which now sits over the list
+    await expect(bar.getByRole('button', { name: 'Next' })).toHaveCount(0);
+    await bar.getByRole('button', { name: 'Done' }).click();
+    await expect(fields.last()).not.toBeFocused();
+    await expect(bar).toHaveCount(0);
     await page.context().close();
   });
 });
