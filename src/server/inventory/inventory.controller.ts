@@ -18,6 +18,8 @@ import {
 import type { Response } from 'express';
 import { UserRole } from '@prisma/client';
 import { InventoryService } from './inventory.service';
+import { InventoryWorkbookService } from './inventory-workbook.service';
+import { InventoryWorkbookQueryDto } from './dto/inventory-workbook-query.dto';
 import { CreateInventoryDto } from './dto/create-inventory.dto';
 import { UpdateInventoryDto } from './dto/update-inventory.dto';
 import { UpdateInventoryItemDto } from './dto/update-inventory-bulk.dto';
@@ -47,7 +49,10 @@ import { clampPage, clampPageSize } from '../common/utils/pagination.util';
 // is the only thing this list has to say.
 @UseGuards(BranchGuard)
 export class InventoryController {
-  constructor(private readonly inventoryService: InventoryService) {}
+  constructor(
+    private readonly inventoryService: InventoryService,
+    private readonly workbookService: InventoryWorkbookService,
+  ) {}
 
   @Post()
   @RequireFeature('inventory-history:create')
@@ -229,6 +234,30 @@ export class InventoryController {
       `attachment; filename="sales-report-${start}-to-${end}.csv"`,
     );
     return new StreamableFile(Buffer.from(csv, 'utf-8'));
+  }
+
+  /**
+   * One branch's days as an XLSX in the paper sheet's layout: a sheet per day
+   * plus a Summary. It carries sales and cash, so it needs the revenue panel —
+   * managers do not get it unless an admin grants it.
+   */
+  @Get('export-workbook')
+  @RequireFeature('inventory-history:revenue')
+  async exportWorkbook(
+    @Query() query: InventoryWorkbookQueryDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { buffer, fileName } = await this.workbookService.export(
+      query.branchId,
+      query.from,
+      query.to,
+    );
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    return new StreamableFile(buffer);
   }
 
   @Get('gaps')

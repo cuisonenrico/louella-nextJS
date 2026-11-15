@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronLeft, ChevronRight, Calendar, CalendarRange, CalendarDays, Upload } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar, CalendarRange, CalendarDays, Download, Upload } from 'lucide-react';
 import type { Branch } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,6 +21,8 @@ interface InventoryFilterBarProps {
   onStepDate: (delta: number) => void;
   onBranchChange: (branchId: string) => void;
   onImportOpen?: () => void;
+  /** Absent without the revenue permission: the workbook carries sales and cash. */
+  onExportOpen?: () => void;
 }
 
 export default function InventoryFilterBar({
@@ -37,6 +39,7 @@ export default function InventoryFilterBar({
   onStepDate,
   onBranchChange,
   onImportOpen,
+  onExportOpen,
 }: InventoryFilterBarProps) {
 
   return (
@@ -131,6 +134,12 @@ export default function InventoryFilterBar({
         )}
 
         <div className="flex-grow" />
+
+        {onExportOpen && (
+          <Button size="sm" variant="outline" onClick={onExportOpen}>
+            <Download className="h-3.5 w-3.5 mr-1" /> Export XLSX
+          </Button>
+        )}
 
         {onImportOpen && (
           <Button size="sm" variant="outline" onClick={onImportOpen}>

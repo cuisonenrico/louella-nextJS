@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { Loader2, Info } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -15,6 +16,7 @@ import InventorySummaryPanel from './InventorySummaryPanel';
 import PendingTransfersPanel from './PendingTransfersPanel';
 import InventoryTypeTables from './InventoryTypeTables';
 import InventoryAdjustmentsDialog from './InventoryAdjustmentsDialog';
+import InventoryExportDialog from './InventoryExportDialog';
 import type { InventoryDay } from '../hooks/useInventoryDay';
 
 /** The desktop sheet: filter bar, summary, per-type grids and the cash panel. */
@@ -28,6 +30,7 @@ export default function InventoryDesktop({ day }: { day: InventoryDay }) {
     commitDates, changeBranch, stepDate, handleDateModeChange, setDraftFrom, setDraftTo,
     adjRow, setAdjRow, discardDialog, confirmDiscard,
   } = day;
+  const [exporting, setExporting] = useState(false);
 
   return (
     <>
@@ -46,7 +49,18 @@ export default function InventoryDesktop({ day }: { day: InventoryDay }) {
             onStepDate={stepDate}
             onBranchChange={changeBranch}
             onImportOpen={canImport ? () => confirmDiscard(() => router.push('/inventory-import')) : undefined}
+            onExportOpen={canSeeRevenue ? () => setExporting(true) : undefined}
           />
+          {exporting ? (
+            <InventoryExportDialog
+              open
+              onOpenChange={setExporting}
+              branches={branches}
+              branchId={selectedBranchId}
+              from={filterDateFrom}
+              to={filterDateTo}
+            />
+          ) : null}
 
           <PendingTransfersPanel branchId={selectedBranchId} />
 

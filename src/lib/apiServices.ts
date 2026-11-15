@@ -188,6 +188,12 @@ export const inventoryApi = {
       params: { startDate, endDate, ...(branchId ? { branchId } : {}) },
       responseType: 'blob',
     }),
+  /** One branch's days as an XLSX: a sheet per day plus a Summary. */
+  exportWorkbook: (branchId: number, from: string, to: string) =>
+    api.get<Blob>('/inventory/export-workbook', {
+      params: { branchId, from, to },
+      responseType: 'blob',
+    }),
   gaps: (startDate: string, endDate: string, branchId?: number) =>
     api.get<InventoryGapsResult>('/inventory/gaps', {
       params: { startDate, endDate, ...(branchId ? { branchId } : {}) },
