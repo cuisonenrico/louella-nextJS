@@ -47,6 +47,14 @@ export class CreateProductDto {
   isActive?: boolean;
 
   @ApiPropertyOptional({
+    example: false,
+    description: 'Branch equipment (trays, freezer…): counted and carried over, never ordered. Miscellaneous only.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  isEquipment?: boolean;
+
+  @ApiPropertyOptional({
     example: 10,
     description: 'Display order within the product type (lower comes first)',
   })

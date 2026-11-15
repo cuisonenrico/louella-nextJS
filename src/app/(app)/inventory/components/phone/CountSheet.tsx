@@ -113,7 +113,17 @@ export default function CountSheet({
         </p>
       )}
       <p className="text-sm">
-        {live.uncounted ? (
+        {live.equipment ? (
+          live.sold > 0 ? (
+            <span className="font-semibold text-destructive">
+              {live.sold} missing{canSeeRevenue ? ` · ${peso(live.revenue)} charged to the drawer` : ''}
+            </span>
+          ) : live.sold < 0 ? (
+            <span className="font-semibold">{-live.sold} found</span>
+          ) : (
+            <span className="text-muted-foreground">Equipment — none missing</span>
+          )
+        ) : live.uncounted ? (
           <span className="text-muted-foreground">Not counted yet — enter the leftover to count this day</span>
         ) : (
           <>

@@ -90,7 +90,8 @@ export function useProductionData(filterDate: string, onError: (message: string)
 
   // One row per active product
   const allRows = useMemo<ProdRow[]>(() => {
-    return products.filter((p) => p.isActive).map((p) => {
+    // Equipment is counted at the branch, never produced.
+    return products.filter((p) => p.isActive && !p.isEquipment).map((p) => {
       const prodRec = productionByProduct.get(p.id);
       const row: ProdRow = { id: p.id, productId: p.id, type: p.type, _productionId: prodRec?.id ?? null, yield: prodRec?.yield ?? 0 };
       for (const b of branches) {

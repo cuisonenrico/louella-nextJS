@@ -134,6 +134,16 @@ describe('SalesService — counted days', () => {
     expect(result.totals).toMatchObject({ totalSales: 30, settledDays: 1, unsettledDays: 1 });
   });
 
+  it('uncounted equipment is settled: it carries its count and never holds up the day', async () => {
+    const prisma = makePrisma();
+    const tray = { ...inv(2, 1, null), product: { id: 2, name: 'Trays', type: 'MISCELLANEOUS', price: 130, isEquipment: true } };
+    prisma.inventory.findMany.mockResolvedValue([inv(1, 1, new Date()), tray]);
+    const result = await new SalesService(prisma as never).getByBranchAndDate(1, '2026-09-01');
+
+    expect(result.breakdown.map((r) => r.settled)).toEqual([true, true]);
+    expect(result.totals).toMatchObject({ unsettledDays: 0 });
+  });
+
   it('summarises several branches from one read', async () => {
     const prisma = makePrisma();
     prisma.inventory.findMany.mockResolvedValue([inv(1, 1, new Date()), inv(2, 2, new Date())]);

@@ -35,6 +35,8 @@ export interface WorkbookProduct {
   type: ProductType;
   /** Current price, used on every day. */
   price: number;
+  /** Branch equipment: a drop is missing (charged like a sale), an uncounted day just carries. */
+  isEquipment?: boolean;
 }
 
 export interface WorkbookRow {
@@ -208,8 +210,17 @@ function buildDaySheet(input: WorkbookInput, day: WorkbookDay) {
         s.put(r, C.opening, number(f.opening));
         s.put(r, C.pullIn, number(f.pullIn));
         s.put(r, C.pullOut, number(f.pullOut));
-        if (!f.counted) s.put(r, C.note, text('Not counted'));
       }
+      const note = p.isEquipment
+        ? f.sold > 0
+          ? `Missing ${f.sold}`
+          : f.sold < 0
+            ? `Found ${-f.sold}`
+            : 'Equipment'
+        : row && !f.counted
+          ? 'Not counted'
+          : undefined;
+      if (note) s.put(r, C.note, text(note));
       s.put(r, C.deliveryP, formula(`${ref(C.price)}*${ref(C.delivery)}`, times(p.price, f.delivery), PESO));
       s.put(r, C.leftoverP, formula(`${ref(C.price)}*${ref(C.leftover)}`, times(p.price, f.leftover), PESO));
       s.put(r, C.rejectP, formula(`${ref(C.price)}*${ref(C.reject)}`, times(p.price, f.reject), PESO));

@@ -42,7 +42,8 @@ export class LandingService {
       parseContent(row.draft) ?? parseContent(row.published) ?? (await defaultContent(this.prisma));
     const [products, branches, publishedBy] = await Promise.all([
       this.prisma.product.findMany({
-        where: { deletedAt: null },
+        // Equipment (trays, freezer…) is not something the bakery sells on its site.
+        where: { deletedAt: null, isEquipment: false },
         orderBy: [{ type: 'asc' }, { sortOrder: 'asc' }, { name: 'asc' }],
         select: { id: true, name: true, price: true, isActive: true, type: true },
       }),

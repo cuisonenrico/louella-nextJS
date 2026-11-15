@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { toUtcDay } from '../common/utils/date-range.util';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -38,6 +38,7 @@ export class ProductsService {
 
   async create(body: CreateProductDto) {
     const type = body.type ?? 'BREAD';
+    assertEquipmentType(type, body.isEquipment);
     const sortOrder = body.sortOrder ?? (await this.getNextSortOrder(type));
 
     return this.prisma.product.create({
@@ -47,6 +48,7 @@ export class ProductsService {
         sortOrder,
         price: body.price,
         date: body.date ? new Date(body.date) : undefined,
+        isEquipment: body.isEquipment,
         priceHistory: openingPriceRow(body.price, body.date),
       },
     });
@@ -81,6 +83,7 @@ export class ProductsService {
           nextOrderByType.set(type, nextOrder + 1);
         }
 
+        assertEquipmentType(type, item.isEquipment);
         return this.prisma.product.create({
           data: {
             name: item.name,
@@ -88,6 +91,7 @@ export class ProductsService {
             sortOrder,
             price: item.price,
             date: item.date ? new Date(item.date) : undefined,
+            isEquipment: item.isEquipment,
             priceHistory: openingPriceRow(item.price, item.date),
           },
         });
@@ -127,6 +131,7 @@ export class ProductsService {
 
   async update(id: number, body: UpdateProductDto) {
     const existing = await this.findOne(id);
+    assertEquipmentType(body.type ?? existing.type, body.isEquipment ?? existing.isEquipment);
 
     const needsPriceRecord =
       body.price !== undefined && body.price !== existing.price.toNumber();
@@ -142,6 +147,7 @@ export class ProductsService {
             price: body.price,
             date: body.date ? new Date(body.date) : undefined,
             isActive: body.isActive,
+            isEquipment: body.isEquipment,
           },
         }),
         this.prisma.productPriceHistory.create({
@@ -168,6 +174,7 @@ export class ProductsService {
         price: body.price,
         date: body.date ? new Date(body.date) : undefined,
         isActive: body.isActive,
+        isEquipment: body.isEquipment,
       },
     });
   }
@@ -223,5 +230,12 @@ export class ProductsService {
       where: { id },
       data: { deletedAt: new Date(), isActive: false },
     });
+  }
+}
+
+/** Equipment sits under Miscellaneous on the sheet, as on the paper one. */
+function assertEquipmentType(type: string, isEquipment: boolean | undefined) {
+  if (isEquipment && type !== 'MISCELLANEOUS') {
+    throw new BadRequestException('Equipment must be in the Miscellaneous category.');
   }
 }

@@ -72,8 +72,17 @@ export default function CountList({ rowsByType, productById, figures, onOpen }: 
                   <span data-field="reject" className={NUM}>
                     {f.reject}
                   </span>
-                  <span data-field="sold" className={cn(NUM, 'font-semibold', f.uncounted && 'font-normal text-muted-foreground')}>
-                    {f.uncounted ? '–' : f.sold}
+                  <span
+                    data-field="sold"
+                    className={cn(
+                      NUM,
+                      'font-semibold',
+                      f.uncounted && 'font-normal text-muted-foreground',
+                      f.equipment && f.sold > 0 && 'text-destructive',
+                    )}
+                    title={f.equipment ? 'Equipment: missing (− = found)' : undefined}
+                  >
+                    {f.uncounted ? '–' : f.equipment && f.sold > 0 ? `−${f.sold}` : f.equipment && f.sold < 0 ? `+${-f.sold}` : f.sold}
                   </span>
                 </button>
               );

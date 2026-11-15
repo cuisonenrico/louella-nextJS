@@ -40,6 +40,7 @@ type InventoryRow = {
     name: string;
     type: string;
     price: number | { toNumber(): number };
+    isEquipment: boolean;
   };
   adjustments: Array<{ type: string; value: number }>;
 };
@@ -59,8 +60,10 @@ function computeRow(row: InventoryRow, historyByProduct: PriceHistoryMap) {
     sold,
     sales: pesos(revenue),
     // Settled once someone has counted the leftover. Until then the row's
-    // close is derived and it has sold nothing yet.
-    settled: row.leftoverCountedAt !== null,
+    // close is derived and it has sold nothing yet. Equipment is always
+    // settled: it is counted only now and then, and an uncounted day simply
+    // carries yesterday's count — it must not hold up the cash day.
+    settled: row.leftoverCountedAt !== null || row.product.isEquipment === true,
     notes: row.notes,
   };
 }
@@ -79,7 +82,7 @@ export class SalesService {
     leftoverCountedAt: true,
     notes: true,
     branch: { select: { id: true, name: true } },
-    product: { select: { id: true, name: true, type: true, price: true } },
+    product: { select: { id: true, name: true, type: true, price: true, isEquipment: true } },
     adjustments: {
       select: { type: true, value: true },
       where: { deletedAt: null },

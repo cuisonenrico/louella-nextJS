@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -30,6 +31,7 @@ interface ProductFormData {
   type: ProductType;
   price: string;
   isActive: boolean;
+  isEquipment: boolean;
   date: string;
 }
 
@@ -38,6 +40,7 @@ const defaultForm: ProductFormData = {
   type: 'BREAD',
   price: '0',
   isActive: true,
+  isEquipment: false,
   date: dayjs().format('YYYY-MM-DD'),
 };
 
@@ -131,6 +134,7 @@ export default function ProductsPage() {
       type: p.type,
       price: p.price.toString(),
       isActive: p.isActive,
+      isEquipment: p.isEquipment ?? false,
       date: p.date ? dayjs(p.date).format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'),
     });
     setFormError('');
@@ -147,6 +151,8 @@ export default function ProductsPage() {
       type: form.type,
       price: parseFloat(form.price) || 0,
       isActive: form.isActive,
+      // Only Miscellaneous items can be equipment; moving one out of it clears the flag.
+      isEquipment: form.type === 'MISCELLANEOUS' && form.isEquipment,
       date: form.date,
     };
     // A fast double click sends two requests before the button disables: one save per press.
@@ -195,7 +201,12 @@ export default function ProductsPage() {
                 filtered.map((p) => (
                   <TableRow key={p.id}>
                     <TableCell className="font-semibold">{p.name}</TableCell>
-                    <TableCell><Badge variant="outline">{p.type}</Badge></TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        <Badge variant="outline">{p.type}</Badge>
+                        {p.isEquipment ? <Badge variant="secondary">Equipment</Badge> : null}
+                      </div>
+                    </TableCell>
                     <TableCell className="text-right">₱{p.price.toFixed(2)}</TableCell>
                     <TableCell>{p.date ? dayjs(p.date).format('MMM D, YYYY') : '—'}</TableCell>
                     <TableCell><Badge variant={p.isActive ? 'default' : 'secondary'}>{p.isActive ? 'Active' : 'Inactive'}</Badge></TableCell>
@@ -285,6 +296,22 @@ function ProductForm({ form, setForm, formError }: { form: ProductFormData; setF
           <SelectContent>{PRODUCT_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
         </Select>
       </div>
+      {form.type === 'MISCELLANEOUS' ? (
+        <div className="flex items-start gap-2">
+          <Checkbox
+            id="is-equipment"
+            checked={form.isEquipment}
+            onCheckedChange={(v) => setForm((f) => ({ ...f, isEquipment: v === true }))}
+          />
+          <div className="grid gap-1">
+            <Label htmlFor="is-equipment">Equipment</Label>
+            <p className="text-xs text-muted-foreground">
+              Trays, freezer, estante… Counted on the sheet when checked and carried over every other day. Never
+              ordered or produced. A missing piece is charged to the drawer at its price.
+            </p>
+          </div>
+        </div>
+      ) : null}
       <div className="space-y-2">
         <Label htmlFor="price">Price (₱)</Label>
         <Input id="price" type="number" min={0} step={0.01} value={form.price} onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))} />

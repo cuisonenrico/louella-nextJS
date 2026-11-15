@@ -54,6 +54,8 @@ export interface Product {
   sortOrder: number;
   price: number;
   isActive: boolean;
+  /** Branch equipment (trays, freezer…): counted and carried, never ordered. Miscellaneous only. */
+  isEquipment: boolean;
   date: string;
   createdAt: string;
   deletedAt: string | null;

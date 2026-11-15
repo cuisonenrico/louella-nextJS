@@ -131,13 +131,23 @@ export function InventoryTableRow({
       {numberCell('leftover')}
       {numberCell('reject')}
       <TableCell className={cn(CELL, 'px-2 text-center')}>
-        {/* Negative sold = more leftover/reject than stock: a typo to fix, so it shows red. */}
-        <Badge
-          variant={sold !== 0 ? 'default' : 'secondary'}
-          className={sold > 0 ? 'bg-green-500' : sold < 0 ? 'bg-red-500 text-white' : ''}
-        >
-          {sold}
-        </Badge>
+        {f.equipment ? (
+          // Equipment is not sold: a drop in the count is missing (charged to the drawer), a rise is found.
+          <Badge
+            variant={sold !== 0 ? 'default' : 'secondary'}
+            className={sold > 0 ? 'bg-red-500 text-white' : sold < 0 ? 'bg-green-500' : ''}
+          >
+            {sold > 0 ? `${sold} missing` : sold < 0 ? `${-sold} found` : '0'}
+          </Badge>
+        ) : (
+          // Negative sold = more leftover/reject than stock: a typo to fix, so it shows red.
+          <Badge
+            variant={sold !== 0 ? 'default' : 'secondary'}
+            className={sold > 0 ? 'bg-green-500' : sold < 0 ? 'bg-red-500 text-white' : ''}
+          >
+            {sold}
+          </Badge>
+        )}
       </TableCell>
       {showRevenue && (
         <TableCell className={cn(CELL, 'px-2 text-right')}>

@@ -122,7 +122,7 @@ export class JobsService {
         }),
         this.prisma.product.findMany({
           where: { deletedAt: null, isActive: true },
-          select: { id: true, name: true },
+          select: { id: true, name: true, isEquipment: true },
           orderBy: [{ type: 'asc' }, { sortOrder: 'asc' }, { name: 'asc' }],
         }),
       ]);
@@ -134,7 +134,7 @@ export class JobsService {
   private async autofillForDate(
     dateStr: string,
     branches: Array<{ id: number; name: string }>,
-    products: Array<{ id: number; name: string }>,
+    products: Array<{ id: number; name: string; isEquipment: boolean }>,
   ): Promise<{
     inventoryCreated: number;
     productionCreated: number;
@@ -206,7 +206,7 @@ export class JobsService {
 
   private findMissingPairs(
     branches: Array<{ id: number }>,
-    products: Array<{ id: number }>,
+    products: Array<{ id: number; isEquipment: boolean }>,
     existingInvKeys: Set<string>,
     existingProdKeys: Set<string>,
   ): {
@@ -220,7 +220,8 @@ export class JobsService {
         const key = `${branch.id}-${product.id}`;
         if (!existingInvKeys.has(key))
           missingInvPairs.push({ branchId: branch.id, productId: product.id });
-        if (!existingProdKeys.has(key))
+        // Equipment is counted at the branch, never produced by the kitchen.
+        if (!product.isEquipment && !existingProdKeys.has(key))
           missingProdPairs.push({ branchId: branch.id, productId: product.id });
       }
     }
@@ -366,7 +367,7 @@ export class JobsService {
       }),
       this.prisma.product.findMany({
         where: { deletedAt: null, isActive: true },
-        select: { id: true, name: true },
+        select: { id: true, name: true, isEquipment: true },
         orderBy: [{ type: 'asc' }, { sortOrder: 'asc' }, { name: 'asc' }],
       }),
     ]);

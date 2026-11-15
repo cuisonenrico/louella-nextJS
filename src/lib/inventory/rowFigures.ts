@@ -5,8 +5,13 @@ import { computeAdjSum, computeSold, computeTotalStock } from './metrics';
 export type CountFields = { delivery?: number; leftover?: number; reject?: number };
 
 export interface RowFigures {
-  /** Nobody has counted the leftover, and nothing typed counts it either. */
+  /** Nobody has counted the leftover, and nothing typed counts it either. Never true for equipment. */
   uncounted: boolean;
+  /**
+   * Branch equipment (trays, freezer…). It is counted only now and then: a day
+   * nobody counted carries the count, and `sold` reads as pieces missing.
+   */
+  equipment: boolean;
   delivery: number;
   leftover: number;
   reject: number;
@@ -29,14 +34,18 @@ export interface RowFigures {
  */
 export function rowFigures(inv: Inventory, pending: CountFields | undefined, product: Product | undefined): RowFigures {
   const merged = pending ? { ...inv, ...pending } : inv;
-  const uncounted = inv.leftoverCountedAt === null && pending?.leftover === undefined;
+  const equipment = product?.isEquipment ?? false;
+  const notCounted = inv.leftoverCountedAt === null && pending?.leftover === undefined;
+  // Equipment not counted today simply still has what it had: same close, nothing flagged.
+  const uncounted = notCounted && !equipment;
   const reject = merged.reject ?? 0;
   const totalStock = computeTotalStock(merged);
-  const leftover = uncounted ? totalStock - reject : merged.leftover;
+  const leftover = notCounted ? totalStock - reject : merged.leftover;
   const sold = computeSold({ ...merged, leftover });
   const price = inv.effectivePrice ?? product?.price ?? 0;
   return {
     uncounted,
+    equipment,
     delivery: merged.delivery,
     leftover,
     reject,

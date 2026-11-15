@@ -81,7 +81,8 @@ export default function ProductionOrdersPage() {
     [activeBranches, activeBranchId],
   );
 
-  const activeProducts = useMemo(() => products.filter((p) => p.isActive), [products]);
+  // Equipment is counted at the branch, never ordered.
+  const activeProducts = useMemo(() => products.filter((p) => p.isActive && !p.isEquipment), [products]);
   const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
 
   const { data: orders = [], isLoading, isError, error, refetch } = useQuery<ProductionOrder[]>({

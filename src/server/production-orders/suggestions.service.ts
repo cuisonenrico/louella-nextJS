@@ -45,6 +45,8 @@ export class SuggestionsService {
         // Counted days only: an uncounted row has sold nothing yet, which
         // is no data, not zero demand.
         leftoverCountedAt: { not: null },
+        // Missing equipment is not demand: trays are never ordered.
+        product: { isEquipment: false },
         date: { gte: start, lte: end },
       },
       select: {

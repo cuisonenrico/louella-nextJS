@@ -52,6 +52,7 @@ export class ProductionOrdersService {
 
   async create(dto: CreateProductionOrderDto, userId?: number) {
     await this.ensureActiveBranch(dto.branchId);
+    await this.assertNoEquipment(dto.items);
     await this.ensureInventoryForDate(dto.branchId, dto.date);
 
     return this.prisma.productionOrder.create({
@@ -135,6 +136,7 @@ export class ProductionOrdersService {
     if (dto.branchId && dto.branchId !== existing.branchId) {
       await this.ensureActiveBranch(dto.branchId);
     }
+    if (dto.items) await this.assertNoEquipment(dto.items);
 
     // Order edit and finalization commit together, so an order can never be
     // FINALIZED without its yield, deliveries and material use booked.
@@ -272,6 +274,21 @@ export class ProductionOrdersService {
    * needing to wait for the nightly cron. Missing rows carry forward the most
    * recent prior leftover (or 0 if none exists).
    */
+  /** Equipment (trays, freezer…) is counted at the branch, never ordered from the kitchen. */
+  private async assertNoEquipment(items: Array<{ productId: number; yield?: number }>) {
+    const ids = items.filter((i) => (i.yield ?? 0) > 0).map((i) => i.productId);
+    if (ids.length === 0) return;
+    const equipment = await this.prisma.product.findMany({
+      where: { id: { in: ids }, isEquipment: true },
+      select: { name: true },
+    });
+    if (equipment.length > 0) {
+      throw new BadRequestException(
+        `${equipment.map((p) => p.name).join(', ')} ${equipment.length === 1 ? 'is' : 'are'} equipment and cannot be ordered.`,
+      );
+    }
+  }
+
   private async ensureInventoryForDate(
     branchId: number,
     dateStr: string,

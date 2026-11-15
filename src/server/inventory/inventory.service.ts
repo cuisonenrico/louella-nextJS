@@ -357,6 +357,7 @@ export class InventoryService {
         type: string;
         price: number | { toNumber(): number };
         name: string;
+        isEquipment: boolean;
       };
     }>,
     historyByProduct: PriceHistoryMap,
@@ -405,7 +406,11 @@ export class InventoryService {
       totalSold += sold;
       totalDelivery += inv.delivery;
       totalReject += inv.reject;
-      if (inv.leftoverCountedAt === null) uncountedRows++;
+      // Equipment is counted only now and then: an uncounted day carries the
+      // count and is not "uncounted", and it never belongs in zero sales.
+      if (inv.product.isEquipment) {
+        /* neither */
+      } else if (inv.leftoverCountedAt === null) uncountedRows++;
       else countedProducts.add(inv.productId);
       const key = `${inv.branchId}:${inv.productId}`;
       const last = lastLeftover.get(key);
@@ -772,7 +777,7 @@ export class InventoryService {
       },
       include: {
         adjustments: { where: { deletedAt: null } },
-        product: { select: { id: true, type: true, price: true, name: true } },
+        product: { select: { id: true, type: true, price: true, name: true, isEquipment: true } },
       },
     });
 
@@ -833,7 +838,7 @@ export class InventoryService {
       orderBy: { date: 'asc' },
       include: {
         adjustments: { where: { deletedAt: null } },
-        product: { select: { id: true, type: true, price: true, name: true } },
+        product: { select: { id: true, type: true, price: true, name: true, isEquipment: true } },
       },
     });
 

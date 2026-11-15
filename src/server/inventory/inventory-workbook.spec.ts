@@ -92,6 +92,33 @@ describe('buildInventoryWorkbook', () => {
     expect(v(sum, `F${days + 2}`)).toBe('Not counted');
   });
 
+  it('equipment says missing, not "Not counted"', () => {
+    const eq = buildInventoryWorkbook({
+      ...input,
+      products: [{ id: 9, name: 'Trays', type: 'MISCELLANEOUS', price: 130, isEquipment: true }],
+      days: [
+        {
+          date: '2026-10-30',
+          rows: [{ productId: 9, opening: 51, delivery: 0, pullIn: 0, pullOut: 0, leftover: 49, reject: 0 }],
+          cash: { expenses: 0, vale: 0, actualCash: null, status: 'OPEN' },
+        },
+        {
+          date: '2026-10-31',
+          rows: [{ productId: 9, opening: 49, delivery: 0, pullIn: 0, pullOut: 0, leftover: null, reject: 0 }],
+          cash: { expenses: 0, vale: 0, actualCash: null, status: 'OPEN' },
+        },
+      ],
+    });
+    const d1 = eq.Sheets['Oct 30'];
+    const r1 = rowOf(d1, 'Trays');
+    expect(v(d1, `N${r1}`)).toBe('Missing 2');
+    expect(v(d1, `M${r1}`)).toBe(260); // charged like a sale
+    const d2 = eq.Sheets['Oct 31'];
+    const r2 = rowOf(d2, 'Trays');
+    expect(v(d2, `E${r2}`)).toBe(49); // carried
+    expect(v(d2, `N${r2}`)).toBe('Equipment');
+  });
+
   it('writes a readable xlsx', () => {
     const back = XLSX.read(writeInventoryWorkbook(input), { type: 'buffer' });
     expect(back.SheetNames).toEqual(['Oct 30', 'Oct 31', 'Summary']);

@@ -32,6 +32,11 @@ export class UpdateProductDto {
   @IsBoolean()
   isActive?: boolean;
 
+  /** Branch equipment: counted and carried over, never ordered. Miscellaneous only. */
+  @IsOptional()
+  @IsBoolean()
+  isEquipment?: boolean;
+
   @IsOptional()
   @IsNumber()
   @Min(0)

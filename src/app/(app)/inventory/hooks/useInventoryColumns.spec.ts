@@ -33,6 +33,7 @@ function makeProduct(overrides: Partial<Product> = {}): Product {
     sortOrder: 0,
     price: 10,
     isActive: true,
+    isEquipment: false,
     date: '2024-01-01',
     createdAt: '2024-01-01T00:00:00.000Z',
     deletedAt: null,

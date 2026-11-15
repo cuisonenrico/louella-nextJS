@@ -57,12 +57,12 @@ export class InventoryWorkbookService {
     const withRows = [...new Set(rows.map((r) => r.productId))];
     const productRecords = await this.prisma.product.findMany({
       where: { deletedAt: null, OR: [{ isActive: true }, { id: { in: withRows } }] },
-      select: { id: true, name: true, type: true, price: true, sortOrder: true },
+      select: { id: true, name: true, type: true, price: true, sortOrder: true, isEquipment: true },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
     });
     const products: WorkbookProduct[] = productRecords
       .filter((p) => TYPE_ORDER.includes(p.type))
-      .map((p) => ({ id: p.id, name: p.name, type: p.type, price: num(p.price) }));
+      .map((p) => ({ id: p.id, name: p.name, type: p.type, price: num(p.price), isEquipment: p.isEquipment }));
 
     const rowsByDay = new Map<string, WorkbookRow[]>();
     for (const r of rows) {

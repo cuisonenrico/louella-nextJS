@@ -32,6 +32,21 @@ describe('rowFigures', () => {
     expect(f).toMatchObject({ uncounted: true, leftover: 38, sold: 0, revenue: 0 });
   });
 
+  describe('equipment', () => {
+    const trays = { id: 1, name: 'Trays', type: 'MISCELLANEOUS', price: 130, isEquipment: true } as Product;
+    const carried = inv({ quantity: 51, delivery: 0, reject: 0, leftover: 51, leftoverCountedAt: null, effectivePrice: 130 });
+
+    it('a day nobody counted carries the count and is not flagged', () => {
+      const f = rowFigures(carried, undefined, trays);
+      expect(f).toMatchObject({ equipment: true, uncounted: false, leftover: 51, sold: 0 });
+    });
+
+    it('a lower count is missing, charged at its price', () => {
+      const f = rowFigures(carried, { leftover: 49 }, trays);
+      expect(f).toMatchObject({ equipment: true, sold: 2, revenue: 260 });
+    });
+  });
+
   it('a pending leftover counts the row', () => {
     const f = rowFigures(inv({ leftoverCountedAt: null }), { leftover: 5 }, undefined);
     expect(f).toMatchObject({ uncounted: false, leftover: 5, sold: 33 });
