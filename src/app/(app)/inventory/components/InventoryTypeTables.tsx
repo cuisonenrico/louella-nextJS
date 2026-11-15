@@ -1,9 +1,11 @@
 import { Fragment, useCallback, useMemo } from 'react';
 import type { Inventory, Product, ProductType } from '@/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useSheetNavigation } from '@/components/sheet/useSheetNavigation';
 import { SHEET_BANNER, SHEET_CONTAINER, SHEET_HEAD, SHEET_TABLE } from '@/components/sheet/styles';
+import { rowFigures } from '@/lib/inventory/rowFigures';
 import { InventoryTableRow } from './InventoryTableRow';
 
 const PRODUCT_TYPE_ORDER: ProductType[] = ['BREAD', 'CAKE', 'SPECIAL', 'MISCELLANEOUS'];
@@ -114,10 +116,73 @@ export default function InventoryTypeTables({
                   onMoveLinear={moveLinear}
                 />
               ))}
+              <SubtotalRow
+                label={TYPE_LABELS[type]}
+                rows={typeRows}
+                productById={productById}
+                pendingUpdates={pendingUpdates}
+                leadingColumns={columnCount - 1 - 1 - (showRevenue ? 1 : 0)}
+                showRevenue={showRevenue}
+              />
             </Fragment>
           );
         })}
       </TableBody>
     </Table>
+  );
+}
+
+/** Ruled like the sheet, but taller and set off by a thick rule above. */
+const SUBTOTAL_CELL = 'h-10 p-0 border-t-2 border-t-primary border-b-2 border-b-border border-r border-border last:border-r-0';
+
+/**
+ * A category's sold and revenue, summed from the same per-row figures the rows
+ * show (unsaved edits included), so the subtotal always matches what is above it.
+ */
+function SubtotalRow({
+  label,
+  rows,
+  productById,
+  pendingUpdates,
+  leadingColumns,
+  showRevenue,
+}: {
+  label: string;
+  rows: Inventory[];
+  productById: Map<number, Product>;
+  pendingUpdates: Map<number, Partial<Inventory>>;
+  /** Columns between Product and Sold. */
+  leadingColumns: number;
+  showRevenue: boolean;
+}) {
+  let sold = 0;
+  let centavos = 0;
+  for (const inv of rows) {
+    const f = rowFigures(inv, pendingUpdates.get(inv.id), productById.get(inv.productId));
+    sold += f.sold;
+    centavos += Math.round(f.revenue * 100);
+  }
+  const revenue = centavos / 100;
+
+  return (
+    <TableRow className="bg-accent text-accent-foreground hover:bg-accent">
+      <TableCell className={cn(SUBTOTAL_CELL, 'sticky left-0 z-10 bg-accent px-2 text-left text-xs font-bold uppercase tracking-wider')}>
+        {label} subtotal
+      </TableCell>
+      {leadingColumns > 0 && <TableCell colSpan={leadingColumns} className={SUBTOTAL_CELL} />}
+      <TableCell className={cn(SUBTOTAL_CELL, 'px-2 text-center')}>
+        <Badge
+          variant={sold !== 0 ? 'default' : 'secondary'}
+          className={cn('px-2.5 text-sm font-bold tabular-nums', sold > 0 ? 'bg-green-600' : sold < 0 ? 'bg-red-600 text-white' : '')}
+        >
+          {sold}
+        </Badge>
+      </TableCell>
+      {showRevenue && (
+        <TableCell className={cn(SUBTOTAL_CELL, 'px-2 text-right text-base font-bold tabular-nums', revenue < 0 && 'text-red-600')}>
+          ₱{revenue.toLocaleString()}
+        </TableCell>
+      )}
+    </TableRow>
   );
 }

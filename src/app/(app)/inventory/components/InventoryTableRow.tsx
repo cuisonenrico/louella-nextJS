@@ -131,7 +131,11 @@ export function InventoryTableRow({
       {numberCell('leftover')}
       {numberCell('reject')}
       <TableCell className={cn(CELL, 'px-2 text-center')}>
-        <Badge variant={sold > 0 ? 'default' : 'secondary'} className={sold > 0 ? 'bg-green-500' : ''}>
+        {/* Negative sold = more leftover/reject than stock: a typo to fix, so it shows red. */}
+        <Badge
+          variant={sold !== 0 ? 'default' : 'secondary'}
+          className={sold > 0 ? 'bg-green-500' : sold < 0 ? 'bg-red-500 text-white' : ''}
+        >
           {sold}
         </Badge>
       </TableCell>

@@ -56,4 +56,18 @@ describe('InventoryTypeTables columns', () => {
     // on hand = 10 + 30 = 40, at ₱4
     expect(within(r).getByText('₱160')).toBeInTheDocument();
   });
+
+  it("ends each category with its sold and revenue subtotal", () => {
+    renderTables({ showRevenue: true });
+    // sold = 10 + 30 − 5 − 1 = 34, at ₱4
+    const subtotal = screen.getByRole('row', { name: /Bread subtotal/ });
+    expect(within(subtotal).getByText('34')).toBeInTheDocument();
+    expect(within(subtotal).getByText('₱136')).toBeInTheDocument();
+  });
+
+  it('subtotal leaves out revenue without the revenue permission', () => {
+    renderTables({ showRevenue: false });
+    const subtotal = screen.getByRole('row', { name: /Bread subtotal/ });
+    expect(within(subtotal).queryByText(/₱/)).toBeNull();
+  });
 });

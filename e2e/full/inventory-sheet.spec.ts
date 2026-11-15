@@ -44,6 +44,45 @@ test.describe('inventory sheet @stress', () => {
     await sheet.expectNumber(p.name, 'Sold', 20 - 2);
   });
 
+  test('sold is green when positive and red when negative', async ({ api, page }) => {
+    const world = await buildWorld(api, { products: 1 });
+    const p = world.products[0];
+    const sheet = new InventorySheet(page);
+    const sold = sheet.cell(p.name, 'Sold').getByText(/^-?\d+$/);
+
+    await sheet.open(world.branch.name, today(), [p.name]);
+    await sheet.enter(p.name, { delivery: 5, leftover: 2 });
+    await sheet.expectNumber(p.name, 'Sold', 3);
+    await expect(sold).toHaveClass(/bg-green-500/);
+
+    // More leftover than stock: the server would refuse it, but while it is typed the sheet shows −3 in red.
+    await sheet.fill(p.name, { leftover: 8 });
+    await sheet.expectNumber(p.name, 'Sold', -3);
+    await expect(sold).toHaveClass(/bg-red-500/);
+    await expect(sold).not.toHaveClass(/bg-green-500/);
+  });
+
+  test('each category ends with its sold and revenue subtotal', async ({ api, page }) => {
+    // Two BREAD products at ₱10 and ₱15. The branch is new, so every other product's row sells nothing.
+    const world = await buildWorld(api, { products: 2 });
+    const [a, b] = world.products;
+    const sheet = new InventorySheet(page);
+
+    await sheet.open(world.branch.name, today(), [a.name, b.name]);
+    await sheet.fill(a.name, { delivery: 10, leftover: 2 });
+    await sheet.enter(b.name, { delivery: 6, leftover: 1 });
+
+    const sold = 8 + 5;
+    const revenue = 8 * a.price + 5 * b.price;
+    const subtotal = page.getByRole('row').filter({ has: page.getByRole('cell', { name: 'Bread subtotal', exact: true }) });
+    await expect(subtotal.getByRole('cell').nth(2)).toHaveText(String(sold));
+    await expect(subtotal.getByRole('cell').nth(3)).toHaveText(`₱${revenue.toLocaleString()}`);
+
+    const day = await api.get<SalesDay>(`/sales/branch/${world.branch.id}/date`, { date: today() });
+    const mine = day.breakdown.filter((r) => r.product.id === a.id || r.product.id === b.id);
+    expect(mine.reduce((n, r) => n + r.sold, 0)).toBe(sold);
+  });
+
   test('a PULL_IN adjustment moves sold', async ({ api, page }) => {
     const world = await buildWorld(api, { products: 1 });
     const p = world.products[0];
