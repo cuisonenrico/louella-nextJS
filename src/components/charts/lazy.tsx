@@ -21,3 +21,4 @@ export const ProductionPieChart = dynamic(() => import('./ProductionPieChart'), 
 export const RevenueTrendChart = dynamic(() => import('./RevenueTrendChart'), { ssr: false, loading: placeholder(220) });
 export const DailyRevenueChart = dynamic(() => import('./DailyRevenueChart'), { ssr: false, loading: placeholder(260) });
 export const RejectionsBarChart = dynamic(() => import('./RejectionsBarChart'), { ssr: false, loading: placeholder(260) });
+export const PayrollTrendChart = dynamic(() => import('./PayrollTrendChart'), { ssr: false, loading: placeholder(240) });
