@@ -59,7 +59,9 @@ export default function CategoriesDialog({ open, onOpenChange }: { open: boolean
                 size="sm"
                 variant="ghost"
                 aria-label={`Move ${c.name} up`}
-                disabled={i === 0}
+                // Reordering sends two writes; a second click before they land would
+                // swap against stale sort orders.
+                disabled={i === 0 || update.isPending}
                 onClick={() => {
                   const prev = categories[i - 1];
                   update.mutate({ id: c.id, data: { sortOrder: prev.sortOrder } });
@@ -70,13 +72,14 @@ export default function CategoriesDialog({ open, onOpenChange }: { open: boolean
               </Button>
               <label className="flex items-center gap-1 text-xs">
                 <Switch
+                  disabled={update.isPending}
                   checked={c.requiresNote}
                   onCheckedChange={(v) => update.mutate({ id: c.id, data: { requiresNote: v } })}
                 />
                 Note required
               </label>
               <label className="flex items-center gap-1 text-xs">
-                <Switch checked={c.isActive} onCheckedChange={(v) => update.mutate({ id: c.id, data: { isActive: v } })} />
+                <Switch disabled={update.isPending} checked={c.isActive} onCheckedChange={(v) => update.mutate({ id: c.id, data: { isActive: v } })} />
                 Active
               </label>
             </li>

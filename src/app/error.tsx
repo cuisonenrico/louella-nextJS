@@ -6,10 +6,13 @@ import { Button } from '@/components/ui/button';
 
 export default function Error({
   error,
+  retry,
   unstable_retry,
   reset,
 }: {
   error: Error & { digest?: string };
+  /** Next 16.4; `unstable_retry` was its 16.2 name. */
+  retry?: () => void;
   unstable_retry?: () => void;
   reset?: () => void;
 }) {
@@ -18,7 +21,7 @@ export default function Error({
     console.error(error);
   }, [error]);
 
-  const retry = unstable_retry ?? reset ?? (() => window.location.reload());
+  const again = retry ?? unstable_retry ?? reset ?? (() => window.location.reload());
 
   return (
     <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-6 text-center">
@@ -35,7 +38,7 @@ export default function Error({
           </p>
         )}
       </div>
-      <Button onClick={() => retry()}>Try again</Button>
+      <Button onClick={() => again()}>Try again</Button>
     </div>
   );
 }

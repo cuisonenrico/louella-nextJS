@@ -3,7 +3,7 @@ import { JobStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { MaterialInventoryService } from '../material-inventory/material-inventory.service';
 import { addDays, manilaToday } from '@/lib/manilaDate';
-import { lockInventoryChains } from '../common/utils/stock-chain';
+import { lockInventoryChains, lockProductionKeys } from '../common/utils/stock-chain';
 
 /**
  * What caused a job to run, recorded on the JobRun row.
@@ -179,6 +179,12 @@ export class JobsService {
       // lock (one batched statement), so a leftover saved at the same moment
       // is either seen here or walks forward onto these rows afterwards.
       const [invResult, prodResult] = await this.prisma.$transaction(async (tx) => {
+        // Production keys first, then the finished-goods chains: the fixed lock
+        // order (stock-chain.ts) that a production-order finalize also follows.
+        // Taking only the inventory chains and then inserting production rows
+        // deadlocked against a finalize, which holds a new production row while
+        // it waits for the same inventory chain.
+        await lockProductionKeys(tx, missingProdPairs.map((p) => ({ ...p, date })));
         await lockInventoryChains(tx, missingInvPairs);
         const priorLeftoverMap = await this.fetchPriorLeftovers(tx, missingInvPairs, date);
         return Promise.all([

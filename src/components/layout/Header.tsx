@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePageHeaderStore } from '@/lib/pageHeaderStore';
@@ -31,6 +31,10 @@ export default function Header({ onOpenNav }: { onOpenNav?: () => void }) {
   const { user, logout } = useAuth();
   const router = useRouter();
   const title = usePageHeaderStore((s) => s.title);
+  // The browser tab and history name the page, not just "Louella Bakery".
+  useEffect(() => {
+    document.title = title ? `${title} · Louella Bakery` : 'Louella Bakery';
+  }, [title]);
   const headerContent = usePageHeaderStore((s) => s.content);
   const headerActions = usePageHeaderStore((s) => s.actions);
 

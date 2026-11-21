@@ -129,3 +129,33 @@ h3 {
   --font-lp-serif: var(--font-lp-serif-face), Georgia, "Times New Roman", serif;
   --font-lp-sans: var(--font-lp-sans-face), ui-sans-serif, system-ui, sans-serif;
 }
+
+/* ── Delayed reveal ──────────────────────────────────────────────────────── */
+/* Loading placeholders stay invisible for a moment, so a fast load never
+   flashes them. Reduced motion keeps the delay but drops the fade. */
+@keyframes delayed-reveal {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.delayed-reveal {
+  animation: delayed-reveal 150ms ease-out 200ms both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .delayed-reveal {
+    animation: delayed-reveal 1ms linear 200ms both;
+  }
+}
+
+/* ── Reduced motion ──────────────────────────────────────────────────────── */
+/* Transitions and decorative animations become instant. Spinners keep turning:
+   they are the only sign something is still working. */
+@media (prefers-reduced-motion: reduce) {
+  *:not(.animate-spin),
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -17,6 +17,7 @@ export interface SlipRow {
   employeeName: string;
   jobRoleName: string;
   branchName: string | null;
+  companyName?: string | null;
   workingDays: number;
   absenceDays: number;
   daysWorked: number;
@@ -137,7 +138,16 @@ function LineDetails({ row, actions }: { row: SlipRow; actions?: CutoffTableActi
   );
 }
 
-export function CutoffTable({ rows, actions }: { rows: SlipRow[]; actions?: CutoffTableActions }) {
+export function CutoffTable({
+  rows,
+  actions,
+  emptyText,
+}: {
+  rows: SlipRow[];
+  actions?: CutoffTableActions;
+  /** Shown when no row is left, e.g. after filtering. */
+  emptyText?: string;
+}) {
   const [open, setOpen] = useState<ReadonlySet<number>>(new Set());
   const toggle = (id: number) =>
     setOpen((prev) => {
@@ -148,7 +158,7 @@ export function CutoffTable({ rows, actions }: { rows: SlipRow[]; actions?: Cuto
     });
 
   if (rows.length === 0) {
-    return <p className="py-8 text-center text-muted-foreground">Nobody was employed during this cutoff.</p>;
+    return <p className="py-8 text-center text-muted-foreground">{emptyText ?? 'Nobody was employed during this cutoff.'}</p>;
   }
 
   return (
@@ -179,7 +189,11 @@ export function CutoffTable({ rows, actions }: { rows: SlipRow[]; actions?: Cuto
                     <TableCell>{expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}</TableCell>
                     <TableCell>
                       <div className="font-medium">{row.employeeName}</div>
-                      <div className="text-xs text-muted-foreground">{row.jobRoleName}{row.branchName ? ` · ${row.branchName}` : ''}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {row.jobRoleName}
+                        {row.branchName ? ` · ${row.branchName}` : ''}
+                        {row.companyName ? ` · ${row.companyName}` : ''}
+                      </div>
                       <div className="mt-1 flex flex-wrap gap-1"><WarningBadges row={row} /></div>
                     </TableCell>
                     <TableCell className="text-right tabular-nums">{row.workingDays}</TableCell>

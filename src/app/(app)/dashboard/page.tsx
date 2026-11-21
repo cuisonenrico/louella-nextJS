@@ -22,9 +22,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import QueryError from '@/components/QueryError';
 import { DashboardSkeleton } from '@/components/loading/Skeletons';
-import {
-  ResponsiveContainer, PieChart, Pie, Cell, Tooltip as RechartsTooltip,
-} from 'recharts';
+import { ProductionPieChart } from '@/components/charts/lazy';
 
 export default function DashboardPage() {
   usePageHeader({ title: 'Dashboard' });
@@ -153,31 +151,17 @@ export default function DashboardPage() {
                     </Alert>
                   ) : (
                     <>
-                      <ResponsiveContainer width="100%" height={180}>
-                        <PieChart>
-                          <Pie
-                            data={data.production.byType
-                              .filter((x) => x.totalYield > 0)
-                              .map((x) => ({
-                                name: PRODUCT_TYPE_LABELS[x.type] ?? x.type,
-                                value: x.totalYield,
-                              }))}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={50}
-                            outerRadius={75}
-                            dataKey="value"
-                            paddingAngle={4}
-                          >
-                            {data.production.byType
-                              .filter((x) => x.totalYield > 0)
-                              .map(({ type }) => (
-                                <Cell key={type} fill={PRODUCT_TYPE_COLORS[type] ?? '#8B7355'} />
-                              ))}
-                          </Pie>
-                          <RechartsTooltip formatter={(v) => [`${(v as number).toLocaleString()} pcs`, '']} />
-                        </PieChart>
-                      </ResponsiveContainer>
+                      <ProductionPieChart
+                        height={180}
+                        slices={data.production.byType
+                          .filter((x) => x.totalYield > 0)
+                          .map((x) => ({
+                            key: x.type,
+                            name: PRODUCT_TYPE_LABELS[x.type] ?? x.type,
+                            value: x.totalYield,
+                            fill: PRODUCT_TYPE_COLORS[x.type] ?? '#8B7355',
+                          }))}
+                      />
                       <div className="flex flex-wrap justify-center gap-3 mt-1 mb-2">
                         {data.production.byType.filter((x) => x.totalYield > 0).map(({ type, totalYield }) => (
                           <div key={type} className="flex items-center gap-1.5 text-xs">

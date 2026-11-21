@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import QueryError from '@/components/QueryError';
+import { TableSkeleton } from '@/components/loading/Skeletons';
 
 const TYPE_LABEL: Record<HolidayType, string> = { REGULAR: 'Regular', SPECIAL: 'Special' };
 
@@ -26,10 +27,13 @@ export function HolidaysTable({
   rows,
   onEdit,
   onDelete,
+  deleting = false,
 }: {
   rows: PayrollHoliday[];
   onEdit: (h: PayrollHoliday) => void;
   onDelete: (h: PayrollHoliday) => void;
+  /** A delete is in flight: the delete buttons wait for it. */
+  deleting?: boolean;
 }) {
   if (rows.length === 0) return <p className="py-6 text-center text-sm text-muted-foreground">No holidays this year.</p>;
   return (
@@ -58,7 +62,7 @@ export function HolidaysTable({
                   <Button variant="ghost" size="icon" className="size-8" aria-label={`Edit ${h.name}`} onClick={() => onEdit(h)}>
                     <Pencil className="size-4" />
                   </Button>
-                  <Button variant="ghost" size="icon" className="size-8" aria-label={`Delete ${h.name}`} onClick={() => onDelete(h)}>
+                  <Button variant="ghost" size="icon" className="size-8" aria-label={`Delete ${h.name}`} disabled={deleting} onClick={() => onDelete(h)}>
                     <Trash2 className="size-4" />
                   </Button>
                 </span>
@@ -160,13 +164,14 @@ export function HolidaysCard() {
         </div>
       </div>
       {isLoading ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">Loading…</p>
+        <TableSkeleton rows={4} columns={5} className="py-2" />
       ) : isError ? (
         <QueryError error={error} onRetry={() => refetch()} />
       ) : (
         <HolidaysTable
           rows={rows}
           onEdit={(h) => setDialog({ holiday: h })}
+          deleting={remove.isPending}
           onDelete={(h) => { if (window.confirm(`Delete ${h.name} (${h.date})?`)) remove.mutate(h.id); }}
         />
       )}

@@ -167,8 +167,12 @@ describe('JobsService', () => {
 
       await service.autofillMissingEntries('2026-06-13');
 
-      expect(prisma.$executeRaw).toHaveBeenCalledTimes(1);
-      const lockedAt = prisma.$executeRaw.mock.invocationCallOrder[0];
+      // Two batched statements: production keys (namespace 1), then inventory chains (3),
+      // the fixed order a production-order finalize also takes them in.
+      expect(prisma.$executeRaw).toHaveBeenCalledTimes(2);
+      const namespaces = prisma.$executeRaw.mock.calls.map((c: unknown[]) => c[1]);
+      expect(namespaces).toEqual([1, 3]);
+      const lockedAt = prisma.$executeRaw.mock.invocationCallOrder[1];
       const readAt = prisma.$queryRaw.mock.invocationCallOrder[0];
       expect(lockedAt).toBeLessThan(readAt);
     });

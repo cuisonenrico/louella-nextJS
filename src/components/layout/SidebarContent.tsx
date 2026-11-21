@@ -1,8 +1,9 @@
 'use client';
 
+import { useState, useTransition } from 'react';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
-import { Settings, ShieldCheck } from 'lucide-react';
+import { Loader2, Settings, ShieldCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { guardNavigation } from '@/lib/navigationGuard';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -45,6 +46,10 @@ export default function SidebarContent({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  // A click shows on its item until the new page has rendered: navigation is a
+  // transition, so isPending lasts exactly as long as the old page stays up.
+  const [navigating, startNavigation] = useTransition();
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
   const { permissions } = useAuth();
 
   // Derived entirely from the shared RBAC manifest and the user's effective
@@ -60,13 +65,23 @@ export default function SidebarContent({
 
   function renderItem(item: { key: string; href: string; label: string }) {
     const active = item.key === activeKey;
-    const Icon = NAV_ICONS[item.key] ?? DEFAULT_NAV_ICON;
+    const loading = navigating && pendingHref === item.href;
+    const Icon = loading ? Loader2 : (NAV_ICONS[item.key] ?? DEFAULT_NAV_ICON);
 
     const btn = (
       <li key={item.href}>
         <button
+          aria-current={active ? 'page' : undefined}
+          aria-busy={loading || undefined}
+          // Buttons (not links) so the unsaved-changes guard runs first; they
+          // prefetch on intent, as a <Link> would on sight.
+          onMouseEnter={() => router.prefetch(item.href)}
+          onFocus={() => router.prefetch(item.href)}
           onClick={() => {
-            guardNavigation(() => router.push(item.href));
+            guardNavigation(() => {
+              setPendingHref(item.href);
+              startNavigation(() => router.push(item.href));
+            });
             onNavigate?.();
           }}
           className={cn(
@@ -80,6 +95,7 @@ export default function SidebarContent({
           <Icon
             className={cn(
               'h-[18px] w-[18px] shrink-0',
+              loading && 'animate-spin',
               active ? 'text-primary-foreground' : 'text-white/60'
             )}
           />
@@ -154,6 +170,10 @@ export default function SidebarContent({
             </div>
           );
         })}
+        {/* Screen readers hear the wait the spinner shows. */}
+        <span role="status" className="sr-only">
+          {navigating ? 'Loading page' : ''}
+        </span>
       </nav>
     </>
   );
