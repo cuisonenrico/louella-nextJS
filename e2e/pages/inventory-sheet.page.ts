@@ -23,11 +23,14 @@ const COLUMNS = [
   'Product',
   'Prev. Leftover',
   'Delivery',
+  'Delivery ₱',
   'Adjustments',
   'Total Stock',
   'Stock ₱',
   'Leftover',
+  'Leftover ₱',
   'Reject',
+  'Reject ₱',
   'Sold',
   'Revenue',
 ] as const;
@@ -64,10 +67,14 @@ export class InventorySheet {
     if ((await dateInput.inputValue()) !== date) await dateInput.fill(date);
     expect((await loaded).ok()).toBe(true);
 
-    // Either the rows are there (branch-only "Adjustments" column) or the Initialize bar is.
+    // Either the rows are there or the Initialize bar is. Not just the branch-only "Adjustments"
+    // column: while the branch loads, the sheet still shows the "All" rows it had (keepPreviousData)
+    // under the branch's header, so a header alone can be the old rows. This world's own product
+    // is never among them unless the branch already has its rows.
     const initialize = this.page.getByRole('button', { name: /^Initialize \d+ rows?$/ });
     const adjustments = this.page.getByRole('columnheader', { name: 'Adjustments', exact: true });
-    await expect(initialize.or(adjustments).first()).toBeVisible();
+    const ready = productNames.length > 0 ? this.row(productNames[0]) : adjustments;
+    await expect(initialize.or(ready).first()).toBeVisible();
 
     if (await initialize.isVisible()) {
       const created = this.page.waitForResponse(

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Inventory, Product } from '@/types';
-import { rowFigures } from './rowFigures';
+import { pesoValue, rowFigures } from './rowFigures';
 
 const inv = (o: Partial<Inventory> = {}): Inventory => ({
   id: 1,
@@ -59,5 +59,39 @@ describe('rowFigures', () => {
   it('falls back to product price when effectivePrice is missing', () => {
     const p = { id: 1, price: 4 } as Product;
     expect(rowFigures(inv({ effectivePrice: undefined }), undefined, p).price).toBe(4);
+  });
+
+  it('prices delivery, leftover and reject at the Stock ₱ price', () => {
+    // Buns Big: ₱38, 15 delivered → ₱570
+    const f = rowFigures(inv({ delivery: 15, leftover: 3, reject: 1, effectivePrice: 38 }), undefined, undefined);
+    expect(f.stockValue / f.totalStock).toBe(38);
+    expect(f).toMatchObject({ deliveryValue: 570, leftoverValue: 114, rejectValue: 38 });
+  });
+
+  it('peso values follow unsaved edits and an uncounted leftover', () => {
+    expect(rowFigures(inv(), { delivery: 20, reject: 4 }, undefined)).toMatchObject({ deliveryValue: 100, rejectValue: 20 });
+    // uncounted: leftover = 10 + 30 − 2 = 38
+    expect(rowFigures(inv({ leftoverCountedAt: null }), undefined, undefined).leftoverValue).toBe(190);
+  });
+
+  it('no price at all prices everything at ₱0, never NaN', () => {
+    const f = rowFigures(inv({ effectivePrice: undefined }), undefined, undefined);
+    expect(f).toMatchObject({ deliveryValue: 0, leftoverValue: 0, rejectValue: 0 });
+  });
+});
+
+describe('pesoValue', () => {
+  it('multiplies to the centavo', () => {
+    expect(pesoValue(3, 12.5)).toBe(37.5);
+    expect(pesoValue(3, 0.1)).toBe(0.3);
+  });
+
+  it('treats a missing or bad quantity or price as 0', () => {
+    expect(pesoValue(null, 38)).toBe(0);
+    expect(pesoValue(undefined, 38)).toBe(0);
+    expect(pesoValue(15, null)).toBe(0);
+    expect(pesoValue(15, undefined)).toBe(0);
+    expect(pesoValue(Number.NaN, 38)).toBe(0);
+    expect(Object.is(pesoValue(-0, 38), 0)).toBe(true);
   });
 });

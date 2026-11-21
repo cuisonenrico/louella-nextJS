@@ -50,6 +50,15 @@ export function InventoryTableRow({
   // while a delivery or reject is being typed. Typing a leftover counts it.
   const f = rowFigures(inv, pending, product);
   const { uncounted, adjSum, totalStock, sold, revenue, stockValue } = f;
+  // Delivery ₱ / Leftover ₱ / Reject ₱: the count at the same price as Stock ₱. View only.
+  const pesoCell = (value: number, muted = false) =>
+    !isRange && (
+      <TableCell
+        className={cn(CELL, 'px-2 text-right tabular-nums', muted && 'italic text-muted-foreground')}
+      >
+        ₱{value.toLocaleString()}
+      </TableCell>
+    );
   const effectiveInv = { ...inv, ...pending, leftover: f.leftover, reject: f.reject, delivery: f.delivery };
   const hasPending = !!pending;
 
@@ -92,6 +101,7 @@ export function InventoryTableRow({
         </TableCell>
       )}
       {numberCell('delivery')}
+      {pesoCell(f.deliveryValue)}
       {hasBranchFilter && (
         <TableCell className={cn(CELL, 'px-2')}>
           <div className="flex items-center justify-center gap-1">
@@ -129,7 +139,9 @@ export function InventoryTableRow({
         <TableCell className={cn(CELL, 'px-2 text-right tabular-nums')}>₱{stockValue.toLocaleString()}</TableCell>
       )}
       {numberCell('leftover')}
+      {pesoCell(f.leftoverValue, uncounted)}
       {numberCell('reject')}
+      {pesoCell(f.rejectValue)}
       <TableCell className={cn(CELL, 'px-2 text-center')}>
         {f.equipment ? (
           // Equipment is not sold: a drop in the count is missing (charged to the drawer), a rise is found.

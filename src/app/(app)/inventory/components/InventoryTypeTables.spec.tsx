@@ -32,15 +32,17 @@ function renderTables(opts: { isRange?: boolean; showRevenue: boolean }) {
 }
 
 describe('InventoryTypeTables columns', () => {
-  it('shows Stock ₱ after Total Stock, and Revenue when allowed', () => {
+  it('shows each count with its pesos beside it, Stock ₱ after Total Stock, and Revenue when allowed', () => {
     expect(renderTables({ showRevenue: true })).toEqual([
-      'Product', 'Prev. Leftover', 'Delivery', 'Adjustments', 'Total Stock', 'Stock ₱', 'Leftover', 'Reject', 'Sold', 'Revenue',
+      'Product', 'Prev. Leftover', 'Delivery', 'Delivery ₱', 'Adjustments', 'Total Stock', 'Stock ₱',
+      'Leftover', 'Leftover ₱', 'Reject', 'Reject ₱', 'Sold', 'Revenue',
     ]);
   });
 
   it('drops Revenue without the revenue permission', () => {
     expect(renderTables({ showRevenue: false })).toEqual([
-      'Product', 'Prev. Leftover', 'Delivery', 'Adjustments', 'Total Stock', 'Stock ₱', 'Leftover', 'Reject', 'Sold',
+      'Product', 'Prev. Leftover', 'Delivery', 'Delivery ₱', 'Adjustments', 'Total Stock', 'Stock ₱',
+      'Leftover', 'Leftover ₱', 'Reject', 'Reject ₱', 'Sold',
     ]);
   });
 
@@ -48,6 +50,21 @@ describe('InventoryTypeTables columns', () => {
     const headers = renderTables({ isRange: true, showRevenue: true });
     expect(headers).not.toContain('Total Stock');
     expect(headers).not.toContain('Stock ₱');
+    expect(headers).not.toContain('Delivery ₱');
+  });
+
+  it('prices delivery, leftover and reject at the row price, and subtotals them', () => {
+    const headers = renderTables({ showRevenue: true });
+    const cells = (name: RegExp) =>
+      within(screen.getByRole('row', { name })).getAllByRole('cell').map((c) => c.textContent?.trim());
+    const at = (row: (string | undefined)[], header: string) => row[headers.indexOf(header)];
+    const r = cells(/Pandesal/);
+    // 30 delivered, 5 left, 1 rejected, at ₱4
+    expect(at(r, 'Delivery ₱')).toBe('₱120');
+    expect(at(r, 'Leftover ₱')).toBe('₱20');
+    expect(at(r, 'Reject ₱')).toBe('₱4');
+    const sub = screen.getByRole('row', { name: /Bread subtotal/ });
+    for (const v of ['₱120', '₱20', '₱4']) expect(within(sub).getByText(v)).toBeInTheDocument();
   });
 
   it('prices the stock on hand', () => {
@@ -68,6 +85,6 @@ describe('InventoryTypeTables columns', () => {
   it('subtotal leaves out revenue without the revenue permission', () => {
     renderTables({ showRevenue: false });
     const subtotal = screen.getByRole('row', { name: /Bread subtotal/ });
-    expect(within(subtotal).queryByText(/₱/)).toBeNull();
+    expect(within(subtotal).queryByText('₱136')).toBeNull();
   });
 });
