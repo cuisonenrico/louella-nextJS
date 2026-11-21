@@ -2,6 +2,7 @@ import { PartialType, OmitType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
+  ArrayMinSize,
   ArrayUnique,
   IsArray,
   IsIn,
@@ -37,6 +38,12 @@ export class CreateEmployeeDto {
   @IsInt()
   @IsPositive()
   branchId?: number | null;
+
+  /** The business that pays them; null = not assigned. */
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  companyId?: number | null;
 
   /** Weekdays off, 0 = Sunday. At most six: someone must have a working day. */
   @IsOptional()
@@ -117,4 +124,20 @@ export class CreateRateDto {
 
   @IsCalendarDate()
   effectiveOn: string;
+}
+
+/** Assign (or clear, with null) the company of several employees at once. */
+export class AssignCompanyDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(500)
+  @ArrayUnique()
+  @IsInt({ each: true })
+  @IsPositive({ each: true })
+  employeeIds: number[];
+
+  @ValidateIf((o: AssignCompanyDto) => o.companyId !== null)
+  @IsInt()
+  @IsPositive()
+  companyId: number | null;
 }

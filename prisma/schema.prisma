@@ -830,6 +830,18 @@ model JobRole {
   employees Employee[]
 }
 
+/// The business an employee is paid by. Each branch trades under its own
+/// business name; payroll exports one sheet per company. Retired, never deleted.
+model Company {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employees Employee[]
+}
+
 /// A person on payroll. The login, if any, is the optional `user`.
 model Employee {
   id               Int       @id @default(autoincrement())
@@ -837,6 +849,7 @@ model Employee {
   lastName         String
   jobRoleId        Int
   branchId         Int? // null = central kitchen / unassigned; not an access control
+  companyId        Int? // the business that pays them; null = not assigned yet
   restDays         Int[]     @default([0]) // weekdays off, 0 = Sunday … 6 = Saturday
   hiredOn          DateTime  @db.Date
   separatedOn      DateTime? @db.Date
@@ -852,6 +865,7 @@ model Employee {
 
   jobRole             JobRole                  @relation(fields: [jobRoleId], references: [id])
   branch              Branch?                  @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  company             Company?                 @relation(fields: [companyId], references: [id])
   user                User?                    @relation("EmployeeLogin", fields: [userId], references: [id], onDelete: SetNull)
   rates               EmployeeRate[]
   recurringDeductions RecurringDeduction[]
@@ -864,6 +878,7 @@ model Employee {
 
   @@index([jobRoleId])
   @@index([branchId])
+  @@index([companyId])
 }
 
 /// Daily-rate history. A raise is a new row, never an edit.
@@ -979,6 +994,7 @@ model Payslip {
   employeeName       String
   jobRoleName        String
   branchName         String?
+  companyName        String? // snapshot at finalize; null = no company
   workingDays        Int
   absenceDays        Int
   daysWorked         Int

@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { EmployeesService, toEmployeeView } from './employees.service';
 
 const at = (d: string) => new Date(`${d}T00:00:00.000Z`);
@@ -10,6 +10,7 @@ function employeeRow(overrides: Record<string, unknown> = {}) {
     lastName: 'Cruz',
     jobRoleId: 2,
     branchId: null,
+    companyId: null,
     restDays: [0],
     hiredOn: at('2026-01-05'),
     separatedOn: null,
@@ -24,6 +25,7 @@ function employeeRow(overrides: Record<string, unknown> = {}) {
     deletedAt: null,
     jobRole: { id: 2, name: 'Baker' },
     branch: null,
+    company: null,
     user: null,
     rates: [{ id: 5, dailyRate: 600, effectiveOn: at('2026-01-05') }],
     ...overrides,
@@ -37,11 +39,13 @@ describe('EmployeesService', () => {
   beforeEach(() => {
     prisma = {
       jobRole: { findUnique: jest.fn().mockResolvedValue({ id: 2, name: 'Baker', isActive: true }) },
+      company: { findUnique: jest.fn().mockResolvedValue({ id: 3, name: 'Louella Bakeshop Inc.', isActive: true }) },
       employee: {
         create: jest.fn().mockResolvedValue(employeeRow()),
         findFirst: jest.fn().mockResolvedValue(employeeRow()),
         findMany: jest.fn().mockResolvedValue([employeeRow()]),
         update: jest.fn().mockResolvedValue(employeeRow()),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       employeeRate: {
         create: jest.fn().mockResolvedValue({ id: 9, dailyRate: 650, effectiveOn: at('2026-09-16'), createdAt: at('2026-09-10') }),
@@ -234,6 +238,61 @@ describe('EmployeesService', () => {
       expect(prisma.employeeRate.update.mock.calls[0][0]).toMatchObject({
         where: { id: 9 },
         data: { deletedAt: expect.any(Date) },
+      });
+    });
+  });
+
+  describe('company', () => {
+    const base = { firstName: 'Ana', lastName: 'Cruz', jobRoleId: 2, hiredOn: '2026-01-05', dailyRate: 600 };
+
+    it('stores the company on create', async () => {
+      await service.create({ ...base, companyId: 3 }, 7);
+      expect(prisma.employee.create.mock.calls[0][0].data).toMatchObject({ companyId: 3 });
+    });
+
+    it('refuses a retired company on create and update', async () => {
+      prisma.company.findUnique.mockResolvedValue({ id: 3, name: 'Old', isActive: false });
+      await expect(service.create({ ...base, companyId: 3 }, 7)).rejects.toThrow(BadRequestException);
+      await expect(service.update(1, { companyId: 3 }, 7)).rejects.toThrow(BadRequestException);
+    });
+
+    it('clears the company with null without looking one up', async () => {
+      prisma.employee.findFirst.mockResolvedValue(employeeRow({ companyId: 3 }));
+      await service.update(1, { companyId: null }, 7);
+      expect(prisma.company.findUnique).not.toHaveBeenCalled();
+      expect(prisma.employee.update.mock.calls[0][0].data).toMatchObject({ companyId: null });
+    });
+
+    it('returns the company on the employee view', () => {
+      const view = toEmployeeView(employeeRow({ companyId: 3, company: { id: 3, name: 'Louella Bakeshop Inc.' } }) as never);
+      expect(view.company).toEqual({ id: 3, name: 'Louella Bakeshop Inc.' });
+    });
+
+    describe('assignCompany', () => {
+      beforeEach(() => {
+        prisma.employee.findMany.mockResolvedValue([employeeRow({ id: 1 }), employeeRow({ id: 2, companyId: 3 })]);
+      });
+
+      it('assigns only the employees whose company changes, and audits each', async () => {
+        await expect(service.assignCompany([1, 2], 3, 7)).resolves.toEqual({ updated: 1 });
+        expect(prisma.employee.updateMany).toHaveBeenCalledWith({ where: { id: { in: [1] } }, data: { companyId: 3 } });
+        expect(prisma.auditEvent.createMany).toHaveBeenCalled();
+      });
+
+      it('refuses a retired company and changes nobody', async () => {
+        prisma.company.findUnique.mockResolvedValue({ id: 3, name: 'Old', isActive: false });
+        await expect(service.assignCompany([1, 2], 3, 7)).rejects.toThrow(BadRequestException);
+        expect(prisma.employee.updateMany).not.toHaveBeenCalled();
+      });
+
+      it('404s when an employee is missing or deleted', async () => {
+        await expect(service.assignCompany([1, 2, 9], 3, 7)).rejects.toThrow(NotFoundException);
+        expect(prisma.employee.updateMany).not.toHaveBeenCalled();
+      });
+
+      it('clears with null', async () => {
+        await expect(service.assignCompany([1, 2], null, 7)).resolves.toEqual({ updated: 1 });
+        expect(prisma.employee.updateMany).toHaveBeenCalledWith({ where: { id: { in: [2] } }, data: { companyId: null } });
       });
     });
   });

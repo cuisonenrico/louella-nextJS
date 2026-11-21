@@ -23,6 +23,7 @@ export type AuditEntity =
   | 'RecurringDeductionSkip'
   | 'PayrollRun'
   | 'ExpenseCategory'
+  | 'Company'
   | 'BranchExpense'
   | 'BranchVale'
   | 'BranchCashDay'
@@ -45,7 +46,7 @@ export const AUDITED_FIELDS: Record<AuditEntity, readonly string[]> = {
   MaterialInventory: ['quantity', 'delivery', 'used', 'notes', 'supplierId', 'batchNumber'],
   Production: ['yield', 'notes', 'branchId', 'productId', 'date'],
   InventoryAdjustment: ['inventoryId', 'type', 'value', 'notes', 'transferStatus', 'transferToInventoryId', 'linkedAdjustmentId', 'deletedAt'],
-  Employee: ['firstName', 'lastName', 'jobRoleId', 'branchId', 'restDays', 'hiredOn', 'separatedOn', 'userId', 'phone', 'address'],
+  Employee: ['firstName', 'lastName', 'jobRoleId', 'branchId', 'restDays', 'hiredOn', 'separatedOn', 'userId', 'phone', 'address', 'companyId'],
   EmployeeRate: ['dailyRate', 'effectiveOn', 'deletedAt'],
   RecurringDeduction: ['name', 'employeeShare', 'employerShare', 'isActive'],
   Absence: ['employeeId', 'date', 'note', 'deletedAt'],
@@ -53,6 +54,7 @@ export const AUDITED_FIELDS: Record<AuditEntity, readonly string[]> = {
   RecurringDeductionSkip: ['recurringDeductionId', 'periodStart', 'deletedAt'],
   PayrollRun: ['status', 'voidReason'],
   ExpenseCategory: ['name', 'sortOrder', 'isActive', 'requiresNote'],
+  Company: ['name', 'isActive'],
   BranchExpense: ['branchId', 'date', 'categoryId', 'amount', 'note', 'deletedAt'],
   BranchVale: ['branchId', 'date', 'employeeId', 'amount', 'note', 'deletedAt'],
   BranchCashDay: ['actualCash', 'note', 'status', 'salesAtVerify', 'expensesAtVerify', 'valeAtVerify'],

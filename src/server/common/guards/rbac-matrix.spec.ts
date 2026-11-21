@@ -35,6 +35,7 @@ import { UsersController } from '../../users/users.controller';
 import { AbsencesController } from '../../employees/absences.controller';
 import { EmployeesController } from '../../employees/employees.controller';
 import { JobRolesController } from '../../employees/job-roles.controller';
+import { CompaniesController } from '../../employees/companies.controller';
 import { PayrollController } from '../../payroll/payroll.controller';
 import { HolidaysController } from '../../payroll/holidays.controller';
 import { BranchCashController } from '../../branch-cash/branch-cash.controller';
@@ -180,6 +181,8 @@ const MATRIX: [string, Target, [string, string, string, string]][] = [
   ['add daily rate',       { controller: EmployeesController, method: 'addRate' },       [D, D, D, A]],
   ['create employee login',{ controller: EmployeesController, method: 'createAccount' }, [D, D, D, A]],
   ['job roles',            { controller: JobRolesController, method: 'findAll' },        [D, D, D, A]],
+  ['companies',            { controller: CompaniesController, method: 'findAll' },       [D, D, D, A]],
+  ['create company',       { controller: CompaniesController, method: 'create' },        [D, D, D, A]],
   ['absences',             { controller: AbsencesController, method: 'findAll' },        [D, D, D, A]],
   ['payroll cutoff',       { controller: PayrollController, method: 'getCutoff' },       [D, D, D, A]],
   ['finalize payroll',     { controller: PayrollController, method: 'finalize' },        [D, D, D, A]],
@@ -280,7 +283,7 @@ describe('RBAC role x endpoint matrix', () => {
  */
 describe('action minRole mirrors the decorators', () => {
   const CONTROLLERS = [
-    EmployeesController, JobRolesController, AbsencesController, PayrollController,
+    EmployeesController, JobRolesController, CompaniesController, AbsencesController, PayrollController,
     BranchCashController,
     BranchesController, DashboardController, InventoryController,
     InventoryAdjustmentsController, InventoryImportController, JobsController,
@@ -338,6 +341,7 @@ describe('payroll stays admin-only', () => {
   const PAYROLL_CONTROLLERS = [
     [EmployeesController, 'employees'],
     [JobRolesController, 'employees'],
+    [CompaniesController, 'employees'],
     [AbsencesController, 'employees'],
     [PayrollController, 'payroll'],
     [HolidaysController, 'payroll'],

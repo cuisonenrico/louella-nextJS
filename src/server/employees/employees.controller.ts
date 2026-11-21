@@ -9,6 +9,7 @@ import { CreateEmployeeAccountDto, LinkEmployeeAccountDto } from './dto/account.
 import { RecurringDeductionsService } from './recurring-deductions.service';
 import { CreateRecurringDeductionDto, UpdateRecurringDeductionDto } from './dto/recurring-deduction.dto';
 import {
+  AssignCompanyDto,
   CreateEmployeeDto,
   CreateRateDto,
   ListEmployeesQuery,
@@ -40,6 +41,11 @@ export class EmployeesController {
   @Post()
   create(@Body() dto: CreateEmployeeDto, @CurrentUser() user: Actor) {
     return this.employees.create(dto, user.id);
+  }
+
+  @Post('company')
+  assignCompany(@Body() dto: AssignCompanyDto, @CurrentUser() user: Actor) {
+    return this.employees.assignCompany(dto.employeeIds, dto.companyId, user.id);
   }
 
   @Get(':id')

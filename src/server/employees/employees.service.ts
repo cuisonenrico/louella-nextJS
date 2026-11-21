@@ -18,6 +18,7 @@ import { assertValeWithinEmployment } from './vale-window.util';
 export const EMPLOYEE_INCLUDE = {
   jobRole: { select: { id: true, name: true } },
   branch: { select: { id: true, name: true } },
+  company: { select: { id: true, name: true } },
   user: { select: { id: true, email: true, role: true, isActive: true } },
   rates: { where: { deletedAt: null }, orderBy: { effectiveOn: 'desc' } },
 } satisfies Prisma.EmployeeInclude;
@@ -35,6 +36,7 @@ export function toEmployeeView(e: EmployeeRow, today: string = manilaToday()) {
     fullName: `${e.firstName} ${e.lastName}`,
     jobRole: e.jobRole,
     branch: e.branch,
+    company: e.company,
     restDays: e.restDays,
     hiredOn: day(e.hiredOn),
     separatedOn,
@@ -83,6 +85,7 @@ export class EmployeesService {
   create(dto: CreateEmployeeDto, userId: number) {
     return this.prisma.$transaction(async (tx) => {
       await this.assertActiveJobRole(tx, dto.jobRoleId);
+      if (dto.companyId != null) await this.assertActiveCompany(tx, dto.companyId);
       const hiredOn = toUtcDay(dto.hiredOn);
       const created = await tx.employee.create({
         data: {
@@ -90,6 +93,7 @@ export class EmployeesService {
           lastName: dto.lastName.trim(),
           jobRoleId: dto.jobRoleId,
           branchId: dto.branchId ?? null,
+          companyId: dto.companyId ?? null,
           restDays: normalizeRestDays(dto.restDays ?? [0]),
           hiredOn,
           phone: dto.phone?.trim() || null,
@@ -112,6 +116,9 @@ export class EmployeesService {
       const before = await this.requireEmployee(id, tx);
       if (dto.jobRoleId !== undefined && dto.jobRoleId !== before.jobRoleId) {
         await this.assertActiveJobRole(tx, dto.jobRoleId);
+      }
+      if (dto.companyId != null && dto.companyId !== before.companyId) {
+        await this.assertActiveCompany(tx, dto.companyId);
       }
       if (dto.hiredOn !== undefined && before.separatedOn && dto.hiredOn > day(before.separatedOn)) {
         throw new BadRequestException('The hire date cannot be after the separation date');
@@ -138,6 +145,7 @@ export class EmployeesService {
           lastName: dto.lastName?.trim(),
           jobRoleId: dto.jobRoleId,
           branchId: dto.branchId === undefined ? undefined : dto.branchId,
+          companyId: dto.companyId === undefined ? undefined : dto.companyId,
           restDays: dto.restDays === undefined ? undefined : normalizeRestDays(dto.restDays),
           hiredOn: dto.hiredOn === undefined ? undefined : toUtcDay(dto.hiredOn),
           phone: dto.phone === undefined ? undefined : dto.phone?.trim() || null,
@@ -150,6 +158,35 @@ export class EmployeesService {
       });
       await recordChanges(tx, [{ entity: 'Employee', entityId: id, before, after }], userId);
       return toEmployeeView(after);
+    });
+  }
+
+  /**
+   * Set the company of several employees in one transaction. The company does
+   * not affect pay and finalized payslips keep their own snapshot of it, so
+   * no payroll lock is taken.
+   */
+  assignCompany(employeeIds: number[], companyId: number | null, userId: number) {
+    return this.prisma.$transaction(async (tx) => {
+      if (companyId !== null) await this.assertActiveCompany(tx, companyId);
+      const before = await tx.employee.findMany({
+        where: { id: { in: employeeIds }, deletedAt: null },
+        include: EMPLOYEE_INCLUDE,
+      });
+      if (before.length !== employeeIds.length) {
+        const found = new Set(before.map((e) => e.id));
+        const missing = employeeIds.filter((id) => !found.has(id));
+        throw new NotFoundException(`Employee not found: ${missing.join(', ')}`);
+      }
+      const changing = before.filter((e) => e.companyId !== companyId);
+      if (changing.length === 0) return { updated: 0 };
+      await tx.employee.updateMany({ where: { id: { in: changing.map((e) => e.id) } }, data: { companyId } });
+      await recordChanges(
+        tx,
+        changing.map((e) => ({ entity: 'Employee' as const, entityId: e.id, before: e, after: { ...e, companyId } })),
+        userId,
+      );
+      return { updated: changing.length };
     });
   }
 
@@ -249,6 +286,11 @@ export class EmployeesService {
   private async assertActiveJobRole(tx: Prisma.TransactionClient, jobRoleId: number) {
     const role = await tx.jobRole.findUnique({ where: { id: jobRoleId } });
     if (!role || !role.isActive) throw new BadRequestException('Choose an active job role');
+  }
+
+  private async assertActiveCompany(tx: Prisma.TransactionClient, companyId: number) {
+    const company = await tx.company.findUnique({ where: { id: companyId } });
+    if (!company || !company.isActive) throw new BadRequestException('Choose an active company');
   }
 
   /** Rates dated on or before the employee's last finalized day are fixed. */
