@@ -11,6 +11,7 @@ import { useCan } from '@/lib/rbac/useHasFeature';
 import type { Branch, CashDayTotals, CashSummaryRow } from '@/types';
 import BranchCashPanel from '@/components/branch-cash/BranchCashPanel';
 import QueryError from '@/components/QueryError';
+import { TableSkeleton } from '@/components/loading/Skeletons';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -104,7 +105,9 @@ export default function CashReportsPage() {
 
       {summaryQuery.isError ? (
         <QueryError error={summaryQuery.error} onRetry={() => summaryQuery.refetch()} />
-      ) : !summary ? null : (
+      ) : !summary ? (
+        summaryQuery.isLoading ? <TableSkeleton rows={6} columns={7} /> : null
+      ) : (
         <>
           <p className="text-sm text-muted-foreground">
             {summary.totals.unverifiedDays} of {summary.totals.days} days unverified
