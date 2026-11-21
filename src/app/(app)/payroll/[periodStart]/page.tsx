@@ -127,7 +127,7 @@ export default function CutoffPage() {
         <Stat label="Additions" value={peso(totals.additions)} />
         <Stat label="Deductions" value={peso(totals.deductions)} />
         <Stat label="Net pay" value={peso(totals.netPay)} tone={totals.netPay < 0 ? 'danger' : undefined} />
-        <Stat label="Employer share" value={peso(totals.employerShare)} hint="recorded, not deducted" />
+        <Stat label="Employer share" value={peso(totals.employerShare)} />
       </div>
 
       <HolidaysPanel

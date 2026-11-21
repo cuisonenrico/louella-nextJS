@@ -40,6 +40,8 @@ export default function PayrollPage() {
   });
   const summary = useMemo(() => summarizePayrollYear(cutoffs, today), [cutoffs, today]);
   const attention = summary.overdue.length + summary.unpaid.length;
+  // Cutoffs that have started; later ones have nothing to show yet.
+  const started = useMemo(() => cutoffs.filter((c) => c.periodStart <= today), [cutoffs, today]);
 
   return (
     <div className="space-y-4">
@@ -73,7 +75,11 @@ export default function PayrollPage() {
               <>
                 <Stat label="Net pay" value={peso(summary.netPay)} hint={`finalized runs in ${year}`} />
                 <Stat label="Employer share" value={peso(summary.employerShare)} hint="recorded, not deducted" />
-                <Stat label="Cutoffs finalized" value={`${summary.finalized} of ${summary.ended}`} hint="of the cutoffs that have ended" />
+                <Stat
+                  label="Cutoffs finalized"
+                  value={String(summary.finalized)}
+                  hint={summary.overdue.length ? `${summary.overdue.length} ended and still open` : 'none overdue'}
+                />
                 <Stat label="Paid" value={`${summary.paid} of ${summary.finalized}`} hint="finalized runs marked paid" />
               </>
             )}
@@ -104,14 +110,14 @@ export default function PayrollPage() {
             </Card>
           )}
 
-          <div className="grid gap-4 xl:grid-cols-5">
+          <div className="grid items-start gap-4 xl:grid-cols-5">
             {/* Net pay per cutoff */}
             <Card className="gap-2 p-4 xl:col-span-2">
               <h3 className="font-semibold">Net pay per cutoff, {year}</h3>
               {isLoading ? (
                 <Skeleton className="h-[240px]" />
               ) : summary.trend.length === 0 ? (
-                <p className="flex h-[240px] items-center justify-center text-center text-sm text-muted-foreground">
+                <p className="py-10 text-center text-sm text-muted-foreground">
                   No payroll finalized in {year} yet.
                 </p>
               ) : (
@@ -122,7 +128,7 @@ export default function PayrollPage() {
             {/* Every cutoff */}
             <Card className="gap-0 overflow-x-auto p-0 xl:col-span-3">
               <h3 className="px-4 pt-4 pb-2 font-semibold">All cutoffs</h3>
-              <Table>
+              <Table className="hidden md:table">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Cutoff</TableHead>
@@ -136,7 +142,7 @@ export default function PayrollPage() {
                   {isLoading ? (
                     <TableRowsSkeleton rows={8} columns={5} />
                   ) : (
-                    cutoffs.map((c) => (
+                    started.map((c) => (
                       <TableRow key={c.periodStart} className={cn(c.periodStart === current.periodStart && 'bg-accent/40')}>
                         <TableCell className="font-medium">
                           <Link href={`/payroll/${c.periodStart}`} className="hover:underline">{formatCutoff(c)}</Link>
@@ -154,6 +160,32 @@ export default function PayrollPage() {
                   )}
                 </TableBody>
               </Table>
+              {/* Phones: one line per cutoff. */}
+              <ul className="divide-y border-t md:hidden">
+                {started.map((c) => (
+                  <li key={c.periodStart}>
+                    <Link
+                      href={`/payroll/${c.periodStart}`}
+                      className={cn('flex items-center justify-between gap-3 px-4 py-3', c.periodStart === current.periodStart && 'bg-accent/40')}
+                    >
+                      <span className="min-w-0">
+                        <span className="block font-medium">{formatCutoff(c)}</span>
+                        <span className="block text-xs text-muted-foreground">
+                          {c.periodStart === current.periodStart ? 'current · ' : ''}
+                          {c.employeeCount === null ? 'not finalized' : `${c.employeeCount} employees`}
+                        </span>
+                      </span>
+                      <span className="flex shrink-0 items-center gap-2">
+                        {c.totalNetPay !== null && <span className="text-sm font-semibold tabular-nums">{peso(c.totalNetPay)}</span>}
+                        <RunStatusBadge status={c.status} />
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+              {!isLoading && started.length === 0 && (
+                <p className="px-4 py-8 text-center text-sm text-muted-foreground">No cutoff of {year} has started yet.</p>
+              )}
             </Card>
           </div>
         </>

@@ -25,7 +25,7 @@ test.describe('payroll dashboard', () => {
     const year = manilaToday().slice(0, 4);
     const soFar = page.getByRole('region', { name: `${year} so far` });
     await expect(soFar.getByRole('group', { name: 'Net pay' })).toContainText('₱');
-    await expect(soFar.getByRole('group', { name: 'Cutoffs finalized' })).toContainText(/\d+ of \d+/);
+    await expect(soFar.getByRole('group', { name: 'Cutoffs finalized' })).toContainText(/\d+(none overdue|\d+ ended and still open)$/);
     await expect(page.getByRole('heading', { name: `Net pay per cutoff, ${year}` })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'All cutoffs' })).toBeVisible();
 
