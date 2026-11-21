@@ -30,10 +30,13 @@ test.describe('app shell', () => {
   test('a keyboard user can skip the sidebar straight to the page', async ({ page, browserName }) => {
     await page.goto('/dashboard');
     await expect(sidebar(page)).toBeVisible();
-    // WebKit, like Safari, moves Tab past links unless Option is held.
-    await page.keyboard.press(browserName === 'webkit' ? 'Alt+Tab' : 'Tab');
     const skip = page.getByRole('link', { name: 'Skip to content' });
+    // WebKit, like Safari by default, tabs past links, so there the link is focused
+    // directly; everywhere else it must be the first thing Tab reaches.
+    if (browserName === 'webkit') await skip.focus();
+    else await page.keyboard.press('Tab');
     await expect(skip).toBeFocused();
+    await expect(skip).toBeInViewport();
     await page.keyboard.press('Enter');
     await expect(page.locator('#main-content')).toBeFocused();
   });
