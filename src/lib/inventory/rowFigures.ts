@@ -23,6 +23,21 @@ export interface RowFigures {
   revenue: number;
   /** On hand at that day's price. */
   stockValue: number;
+  /** Delivery, leftover and reject at that day's price, for viewing only. */
+  deliveryValue: number;
+  leftoverValue: number;
+  rejectValue: number;
+}
+
+/**
+ * A quantity at a price, in pesos to the centavo. A missing or non-numeric
+ * quantity or price counts as 0, so a row never shows NaN.
+ */
+export function pesoValue(qty: number | null | undefined, price: number | null | undefined): number {
+  const q = Number(qty);
+  const p = Number(price);
+  if (!Number.isFinite(q) || !Number.isFinite(p)) return 0;
+  return Math.round(q * p * 100) / 100 || 0;
 }
 
 /**
@@ -55,5 +70,8 @@ export function rowFigures(inv: Inventory, pending: CountFields | undefined, pro
     price,
     revenue: sold * price,
     stockValue: totalStock * price,
+    deliveryValue: pesoValue(merged.delivery, price),
+    leftoverValue: pesoValue(leftover, price),
+    rejectValue: pesoValue(reject, price),
   };
 }

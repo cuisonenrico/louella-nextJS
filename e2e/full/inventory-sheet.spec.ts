@@ -75,8 +75,11 @@ test.describe('inventory sheet @stress', () => {
     const sold = 8 + 5;
     const revenue = 8 * a.price + 5 * b.price;
     const subtotal = page.getByRole('row').filter({ has: page.getByRole('cell', { name: 'Bread subtotal', exact: true }) });
-    await expect(subtotal.getByRole('cell').nth(2)).toHaveText(String(sold));
-    await expect(subtotal.getByRole('cell').nth(3)).toHaveText(`₱${revenue.toLocaleString()}`);
+    // Sold and Revenue are the last two cells; the blank runs before them are merged.
+    await expect(subtotal.getByRole('cell').nth(-2)).toHaveText(String(sold));
+    await expect(subtotal.getByRole('cell').last()).toHaveText(`₱${revenue.toLocaleString()}`);
+    // Delivery ₱ adds up both products at their own prices.
+    await expect(subtotal.getByRole('cell', { name: `₱${(10 * a.price + 6 * b.price).toLocaleString()}`, exact: true })).toBeVisible();
 
     const day = await api.get<SalesDay>(`/sales/branch/${world.branch.id}/date`, { date: today() });
     const mine = day.breakdown.filter((r) => r.product.id === a.id || r.product.id === b.id);
@@ -152,6 +155,30 @@ test.describe('inventory sheet @stress', () => {
     // The summary under the sheet: 8 sold at the day's price.
     const summary = page.getByRole('region', { name: 'Day summary' });
     await expect(summary.getByRole('group', { name: 'Sales' })).toContainText(`₱${(8 * p.price).toLocaleString()}`);
+  });
+
+  test('delivery, leftover and reject show their pesos at the Stock ₱ price, live while typing', async ({ api, page }) => {
+    const world = await buildWorld(api, { products: 1 });
+    const p = world.products[0];
+    const peso = (n: number) => `₱${n.toLocaleString()}`;
+    const sheet = new InventorySheet(page);
+
+    await sheet.open(world.branch.name, today(), [p.name]);
+    await sheet.enter(p.name, { delivery: 15, leftover: 4, reject: 2 });
+    // Same price as Stock ₱: on hand (15, a new branch opens at 0) × price.
+    await expect(sheet.cell(p.name, 'Stock ₱')).toHaveText(peso(15 * p.price));
+    await expect(sheet.cell(p.name, 'Delivery ₱')).toHaveText(peso(15 * p.price));
+    await expect(sheet.cell(p.name, 'Leftover ₱')).toHaveText(peso(4 * p.price));
+    await expect(sheet.cell(p.name, 'Reject ₱')).toHaveText(peso(2 * p.price));
+    // The category subtotal adds them up (one product here).
+    const subtotal = page.getByRole('row', { name: /subtotal/ }).first();
+    for (const n of [15, 4, 2]) await expect(subtotal.getByRole('cell', { name: peso(n * p.price), exact: true })).toBeVisible();
+
+    // Unsaved edits move them at once; nothing is editable in the peso cells.
+    await sheet.fill(p.name, { delivery: 20, reject: 3 });
+    await expect(sheet.cell(p.name, 'Delivery ₱')).toHaveText(peso(20 * p.price));
+    await expect(sheet.cell(p.name, 'Reject ₱')).toHaveText(peso(3 * p.price));
+    await expect(sheet.cell(p.name, 'Delivery ₱').locator('input')).toHaveCount(0);
   });
 
   test('a branch manager sees the stock value but no revenue', async ({ api, browser }) => {
@@ -253,8 +280,10 @@ test.describe('inventory sheet day summary', () => {
 
     const summary = page.getByRole('region', { name: 'Day summary' });
     await expect(summary).toBeVisible();
-    // Below the table, not above it.
-    expect((await summary.boundingBox())!.y).toBeGreaterThan((await sheet.row(bad.name).boundingBox())!.y);
+    // Below the table, not above it. Measured against the table's scroll box: a row can sit
+    // further down inside it than the summary does on the page when the sheet has many products.
+    const box = (await page.locator('table').first().locator('xpath=..').boundingBox())!;
+    expect((await summary.boundingBox())!.y).toBeGreaterThanOrEqual(box.y + box.height);
 
     const tile = (name: string) => summary.getByRole('group', { name, exact: true });
     await expect(tile('Sales')).toContainText(`₱${(7 * good.price + bad.price).toLocaleString()}`);
