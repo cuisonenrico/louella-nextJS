@@ -31,6 +31,8 @@ const nestPackages = [
   "passport-jwt",
   "reflect-metadata",
   "xlsx",
+  // Server-only: writes the formatted, printable export workbooks.
+  "exceljs",
 ];
 
 /**

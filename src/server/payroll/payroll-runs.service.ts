@@ -8,7 +8,7 @@ import { toUtcDay } from '../common/utils/date-range.util';
 import { recordChanges } from '../common/utils/audit.util';
 import { PayrollDraftService } from './payroll-draft.service';
 import { day, lockCutoff, lockEmployeeInputs } from './payroll-lock.util';
-import * as XLSX from 'xlsx';
+import { writePrintableWorkbook } from '../common/utils/printable-workbook';
 import { buildPayrollWorkbook, slug, type CompanyDetails, type WorkbookSlip } from './payroll-workbook';
 
 /** The `company` query value meaning payslips with no company. */
@@ -282,7 +282,8 @@ export class PayrollRunsService {
     const wb = buildPayrollWorkbook({ id: run.id, periodStart, periodEnd: day(run.periodEnd) }, slips, details, only);
     const suffix = only === undefined ? 'all' : only.company === null ? 'no-company' : slug(only.company);
     return {
-      buffer: XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer,
+      // Formatted for print: the paper sheet's borders, bold columns, landscape on long paper.
+      buffer: await writePrintableWorkbook(wb),
       fileName: `payroll-${periodStart}-${suffix}.xlsx`,
     };
   }

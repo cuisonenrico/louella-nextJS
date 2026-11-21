@@ -4,6 +4,7 @@ import { test, expect } from '../fixtures/test';
 import type { Api } from '../fixtures/api';
 import { today, yesterday } from '../fixtures/dates';
 import { buildWorld, managerPage, type World } from '../fixtures/world';
+import { expectPrintable } from '../support/printable';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const sheetName = (date: string) => `${MONTHS[Number(date.slice(5, 7)) - 1]} ${date.slice(8, 10)}`;
@@ -26,12 +27,12 @@ function rowOf(ws: XLSX.WorkSheet, label: string): number {
 }
 
 test.describe('inventory XLSX export', () => {
-  test('a sheet per day at current prices, then a summary', async ({ api, page }) => {
+  test("today's pricelist, a sheet per day at that day's prices, then a summary", async ({ api, page }) => {
     const world = await buildWorld(api, { products: 1 });
     const p = world.products[0];
     await countedDay(api, world, p.id, yesterday(), 30, 5); // sold 25
     await countedDay(api, world, p.id, today(), 10, 3); // opening 5 → sold 12
-    // A raise today: yesterday's sheet must still use it, because the export follows current prices.
+    // A raise today: the Pricelist and today's sheet show it; yesterday keeps the price it had.
     const price = p.price + 7;
     await api.patch(`/products/${p.id}`, { price });
 
@@ -42,29 +43,41 @@ test.describe('inventory XLSX export', () => {
     await page.getByRole('option', { name: world.branch.name, exact: true }).click();
     await dialog.getByLabel('From').fill(yesterday());
     await dialog.getByLabel('To').fill(today());
-    await expect(dialog.getByText('2 day sheets + Summary')).toBeVisible();
+    await expect(dialog.getByText('Pricelist + 2 day sheets + Summary')).toBeVisible();
 
     const downloading = page.waitForEvent('download');
     await dialog.getByRole('button', { name: 'Download XLSX' }).click();
     const download = await downloading;
     expect(download.suggestedFilename()).toMatch(/\.xlsx$/);
-    const wb = XLSX.read(readFileSync((await download.path())!), { type: 'buffer' });
+    const file = readFileSync((await download.path())!);
+    const wb = XLSX.read(file, { type: 'buffer' });
 
-    expect(wb.SheetNames).toEqual([sheetName(yesterday()), sheetName(today()), 'Summary']);
+    expect(wb.SheetNames).toEqual(['Pricelist', sheetName(yesterday()), sheetName(today()), 'Summary']);
+    await expectPrintable(file, 'Pricelist', { paper: 'letter', header: 'PRICES', orientation: 'portrait' });
+    const list = wb.Sheets.Pricelist;
+    const lr = rowOf(list, p.name);
+    expect(list[`B${lr}`].v).toBe(price);
+    // Ready to print like the paper sheet: landscape, one page wide, bold bordered headings.
+    await expectPrintable(file, sheetName(today()), { paper: 'letter', header: 'PRODUCTS' });
+    await expectPrintable(file, 'Summary', { paper: 'letter', header: 'PRODUCTS' });
 
     const y = wb.Sheets[sheetName(yesterday())];
     const r = rowOf(y, p.name);
-    expect(y[`B${r}`].v).toBe(price);
+    // Yesterday's own price is written in, not linked to today's list.
+    expect(y[`B${r}`].v).toBe(p.price);
+    expect(y[`B${r}`].f).toBeUndefined();
     expect(y[`I${r}`].v).toBe(25); // PCS SOLD
-    expect(y[`M${r}`].v).toBe(25 * price); // SALES at today's price
+    expect(y[`M${r}`].v).toBe(25 * p.price); // SALES at yesterday's price
 
     const t = wb.Sheets[sheetName(today())];
     expect(t[`J${rowOf(t, p.name)}`].v).toBe(5); // yesterday's leftover opens today
+    expect(t[`B${rowOf(t, p.name)}`]).toMatchObject({ f: `Pricelist!B${lr}`, v: price }); // today: linked to the list
 
     const sum = wb.Sheets.Summary;
     const s = rowOf(sum, p.name);
     expect(sum[`G${s}`].v).toBe(25 + 12);
-    expect(sum[`H${s}`].v).toBe((25 + 12) * price);
+    expect(sum[`B${s}`].v).toBe(price); // today's price, from the list
+    expect(sum[`H${s}`].v).toBe(25 * p.price + 12 * price); // each day at its own price
     expect(sum[`I${s}`].v).toBe(3); // leftover at the end of the range
     await expect(dialog).toBeHidden();
   });

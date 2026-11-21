@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { num } from '../common/utils/decimal.util';
+import { getEffectivePrice, loadPriceHistory } from '../common/utils/price-history.util';
 import {
   assertDateRange,
   eachDayInclusive,
@@ -63,6 +64,8 @@ export class InventoryWorkbookService {
     const products: WorkbookProduct[] = productRecords
       .filter((p) => TYPE_ORDER.includes(p.type))
       .map((p) => ({ id: p.id, name: p.name, type: p.type, price: num(p.price), isEquipment: p.isEquipment }));
+    // Each day is priced as it was, the same lookup the sales page uses.
+    const history = await loadPriceHistory(this.prisma, products.map((p) => p.id));
 
     const rowsByDay = new Map<string, WorkbookRow[]>();
     for (const r of rows) {
@@ -107,10 +110,11 @@ export class InventoryWorkbookService {
     const days: WorkbookDay[] = eachDayInclusive(gte, lte).map((d) => ({
       date: day(d),
       rows: rowsByDay.get(day(d)) ?? [],
+      prices: Object.fromEntries(products.map((p) => [p.id, getEffectivePrice(p.id, d, p.price, history)])),
       cash: cashByDay.get(day(d)) ?? { expenses: 0, vale: 0, actualCash: null, status: 'OPEN' },
     }));
 
-    const buffer = writeInventoryWorkbook({
+    const buffer = await writeInventoryWorkbook({
       branchName: branch.name,
       from,
       to,
