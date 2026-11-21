@@ -18,10 +18,7 @@ import QueryError from '@/components/QueryError';
 import { DashboardSkeleton } from '@/components/loading/Skeletons';
 import { PRODUCT_TYPE_COLORS } from '@/lib/productTypeColors';
 import type { ProductType } from '@/types';
-import {
-  Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer,
-  Tooltip as RechartsTooltip, XAxis, YAxis,
-} from 'recharts';
+import { DailyRevenueChart } from '@/components/charts/lazy';
 
 function getDayStatus(sold: number, allSold: number[]): { label: string; className: string } {
   if (allSold.length === 0) return { label: 'STABLE', className: 'bg-muted text-muted-foreground' };
@@ -313,37 +310,14 @@ export default function SalesPage() {
                   </p>
                 </CardHeader>
                 <CardContent>
-                  <ResponsiveContainer width="100%" height={260}>
-                    <ComposedChart
-                      data={dashboard.dailyBreakdown.map((d) => ({
-                        ...d,
-                        revenue: Number(d.revenue),
-                        label: dayjs(d.date).format('MMM D'),
-                      }))}
-                      margin={{ top: 4, right: 8, left: 8, bottom: 0 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(33 30% 88%)" />
-                      <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 11 }} />
-                      <YAxis
-                        yAxisId="rev"
-                        tickLine={false}
-                        axisLine={false}
-                        tick={{ fontSize: 11 }}
-                        width={52}
-                        tickFormatter={(v: number) => `₱${v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}`}
-                      />
-                      <YAxis yAxisId="sold" orientation="right" tickLine={false} axisLine={false} tick={{ fontSize: 11 }} width={40} />
-                      <RechartsTooltip
-                        formatter={(value, name) =>
-                          name === 'Revenue'
-                            ? [`₱${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, name]
-                            : [Number(value).toLocaleString(), name]
-                        }
-                      />
-                      <Bar yAxisId="rev" dataKey="revenue" name="Revenue" fill="#F4780B" radius={[4, 4, 0, 0]} maxBarSize={36} />
-                      <Line yAxisId="sold" type="monotone" dataKey="sold" name="Sold" stroke="#6B3FA0" strokeWidth={2} dot={false} />
-                    </ComposedChart>
-                  </ResponsiveContainer>
+                  <DailyRevenueChart
+                    height={260}
+                    data={dashboard.dailyBreakdown.map((d) => ({
+                      revenue: Number(d.revenue),
+                      sold: d.sold,
+                      label: dayjs(d.date).format('MMM D'),
+                    }))}
+                  />
                 </CardContent>
               </Card>
             )}

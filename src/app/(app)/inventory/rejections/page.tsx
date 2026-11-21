@@ -4,10 +4,7 @@ import { Suspense, useState } from 'react';
 import { usePageHeader } from '@/components/layout/usePageHeader';
 import { useSearchParams } from 'next/navigation';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
-  Legend, ResponsiveContainer,
-} from 'recharts';
+import { RejectionsBarChart } from '@/components/charts/lazy';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { manilaToday } from '@/lib/manilaDate';
 import { branchesApi, inventoryApi } from '@/lib/apiServices';
@@ -119,17 +116,7 @@ function RejectionsReport() {
         <>
           <Card>
             <CardContent className="p-6">
-              <ResponsiveContainer width="100%" height={260}>
-                <BarChart data={chartData} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11 }} tickFormatter={(v: string) => truncate(v)} />
-                  <YAxis tick={{ fontSize: 11 }} />
-                  <RechartsTooltip />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Bar dataKey="On hand" fill="#6B3FA0" radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="Rejected" fill="#d32f2f" radius={[3, 3, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              <RejectionsBarChart data={chartData} height={260} formatName={truncate} />
 
               <div className="mt-4">
                 {pageItems.map((item) => (
