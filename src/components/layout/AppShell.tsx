@@ -44,6 +44,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen">
+      {/* First stop for keyboard users: past the sidebar, straight to the page. */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[100] focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-primary-foreground focus:shadow-lg print:hidden"
+      >
+        Skip to content
+      </a>
       <div className="contents print:hidden">
         <Sidebar collapsed={collapsed} onToggle={handleToggle} />
       </div>
@@ -69,7 +76,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <Header onOpenNav={() => setDrawerOpen(true)} />
         </div>
         {/* pb-24 below md keeps the phone tab bar from covering the end of a page. */}
-        <main className="flex-1 bg-background p-4 pb-24 md:p-6 print:bg-white print:p-0">
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className="flex-1 bg-background p-4 pb-24 outline-none md:p-6 print:bg-white print:p-0"
+        >
           <RouteGuard>{children}</RouteGuard>
         </main>
       </div>
