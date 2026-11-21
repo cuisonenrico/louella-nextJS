@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { usePageHeader } from '@/components/layout/usePageHeader';
 import dayjs from 'dayjs';
+import { addDays, manilaToday } from '@/lib/manilaDate';
 import Link from 'next/link';
 import {
   Store, ArrowRight, ClipboardList, CheckCircle2, FileEdit, Factory,
@@ -27,8 +28,8 @@ import {
 
 export default function DashboardPage() {
   usePageHeader({ title: 'Dashboard' });
-  const today = dayjs().format('YYYY-MM-DD');
-  const weekAgo = dayjs().subtract(6, 'day').format('YYYY-MM-DD');
+  const today = manilaToday();
+  const weekAgo = addDays(manilaToday(), -6);
 
   // Each card is a panel permission. The server omits the data for panels the
   // account does not hold, so these flags decide layout — they are not the
@@ -89,7 +90,7 @@ export default function DashboardPage() {
     <>
         <div className="mb-6">
           <h2 className="font-display text-2xl font-semibold tracking-tight">Welcome back</h2>
-          <p className="text-muted-foreground">{dayjs().format('dddd, MMMM D, YYYY')}</p>
+          <p className="text-muted-foreground">{dayjs(today).format('dddd, MMMM D, YYYY')}</p>
         </div>
 
         {/* Transfers waiting for a branch to accept (decision 2026-09-19).

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { ArrowRight, Loader2 } from 'lucide-react';
-import dayjs from 'dayjs';
+import { addDays, manilaToday } from '@/lib/manilaDate';
 import { inventoryApi } from '@/lib/apiServices';
 import type { RejectionByProductItem, ProductType } from '@/types';
 import { Card, CardContent } from '@/components/ui/card';
@@ -55,16 +55,17 @@ export default function RejectionByProductCard({
   branches = [],
 }: Props) {
   // useState so today can be updated at midnight without remount
-  const [today, setToday] = useState(() => dayjs().format('YYYY-MM-DD'));
+  const [today, setToday] = useState(() => manilaToday());
   const [internalFrom, setInternalFrom] = useState(today);
   const [internalTo, setInternalTo] = useState(today);
   const [internalBranch, setInternalBranch] = useState('all');
 
   // reset today + internal dates when the calendar day rolls over
   useEffect(() => {
-    const msUntilMidnight = dayjs().add(1, 'day').startOf('day').diff(dayjs());
+    // Manila's midnight, not the device's: the day rolls over at 00:00 +08:00.
+    const msUntilMidnight = Date.parse(`${addDays(today, 1)}T00:00:00+08:00`) - Date.now();
     const timer = setTimeout(() => {
-      const newToday = dayjs().format('YYYY-MM-DD');
+      const newToday = manilaToday();
       setToday(newToday);
       setInternalFrom(newToday);
       setInternalTo(newToday);

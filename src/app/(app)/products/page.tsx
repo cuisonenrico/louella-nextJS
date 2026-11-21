@@ -5,6 +5,7 @@ import { usePageHeader } from '@/components/layout/usePageHeader';
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 import dayjs from 'dayjs';
+import { manilaToday } from '@/lib/manilaDate';
 import { Plus, Pencil, Trash2, Search, Loader2 } from 'lucide-react';
 import { productsApi } from '@/lib/apiServices';
 import type { Product, ProductPriceHistory, ProductType } from '@/types';
@@ -41,7 +42,7 @@ const defaultForm: ProductFormData = {
   price: '0',
   isActive: true,
   isEquipment: false,
-  date: dayjs().format('YYYY-MM-DD'),
+  date: manilaToday(),
 };
 
 function ProductPriceHistoryTab({ productId }: { productId: number }) {
@@ -135,7 +136,7 @@ export default function ProductsPage() {
       price: p.price.toString(),
       isActive: p.isActive,
       isEquipment: p.isEquipment ?? false,
-      date: p.date ? dayjs(p.date).format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'),
+      date: p.date ? p.date.slice(0, 10) : manilaToday(),
     });
     setFormError('');
     setActiveTab('details');

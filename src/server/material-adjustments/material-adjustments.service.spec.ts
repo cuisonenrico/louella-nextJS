@@ -17,6 +17,7 @@ function makePrisma(): Record<string, any> {
       create: jest.fn(),
       update: jest.fn(),
     },
+    auditEvent: { createMany: jest.fn() },
   };
   prisma.$transaction = jest.fn((fn: (tx: unknown) => unknown) => fn(prisma));
   // Chain locks (pg_advisory_xact_lock); ordering is covered on FakeStockDb.
@@ -129,6 +130,21 @@ describe('MaterialAdjustmentsService', () => {
       expect(prisma.materialAdjustment.update).toHaveBeenCalledWith({
         where: { id: 1 },
         data: { deletedAt: expect.any(Date) },
+      });
+    });
+
+    it('records the delete, with who did it, in the change history', async () => {
+      const row = { id: 1, materialInventoryId: 4, type: 'ANOMALY', value: 2, notes: null, deletedAt: null };
+      prisma.materialAdjustment.findFirst.mockResolvedValue({
+        ...row,
+        materialInventory: { materialId: 3, date: new Date('2026-09-02') },
+      });
+      prisma.materialAdjustment.update.mockResolvedValue({ ...row, deletedAt: new Date('2026-09-03') });
+
+      await service.remove(1, 42);
+
+      expect(prisma.auditEvent.createMany).toHaveBeenCalledWith({
+        data: [expect.objectContaining({ entity: 'MaterialAdjustment', entityId: 1, action: 'delete', userId: 42 })],
       });
     });
   });

@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react';
 import { usePageHeader } from '@/components/layout/usePageHeader';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import dayjs from 'dayjs';
+import { addDays, manilaToday } from '@/lib/manilaDate';
 import { productionApi, branchesApi } from '@/lib/apiServices';
 import type { Branch, ProductionEfficiencyItem } from '@/types';
 import { Input } from '@/components/ui/input';
@@ -18,8 +18,8 @@ import { TableRowsSkeleton } from '@/components/loading/Skeletons';
 
 export default function ProductionEfficiencyPage() {
   usePageHeader({ title: 'Production Efficiency' });
-  const today = dayjs().format('YYYY-MM-DD');
-  const weekAgo = dayjs().subtract(7, 'day').format('YYYY-MM-DD');
+  const today = manilaToday();
+  const weekAgo = addDays(manilaToday(), -7);
   const [startDate, setStartDate] = useState(weekAgo);
   const [endDate, setEndDate] = useState(today);
   const [branchId, setBranchId] = useState('');

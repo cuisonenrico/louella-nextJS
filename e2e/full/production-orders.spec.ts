@@ -96,4 +96,64 @@ test.describe('production orders @stress', () => {
     await expect(page.getByText('Access to this branch is not permitted')).toHaveCount(0);
     await page.context().close();
   });
+
+  // Regression: the branch picker was enabled only for role ADMIN, but the server lets anyone
+  // holding `all-branches` (the kitchen) order for any branch. A non-admin kitchen user got a
+  // locked picker and could only order for their own branch.
+  test('a non-admin user with all-branches can pick the branch to order for', async ({ api, browser }) => {
+    const world = await buildWorld(api, { products: 1 });
+    await api.put(`/permissions/users/${world.manager.id}`, { featureKey: 'all-branches', enabled: true });
+
+    const page = await managerPage(browser, world);
+    await page.goto('/production/orders');
+    const picker = page.getByRole('combobox').filter({ hasText: world.branch.name });
+    await expect(picker).toBeEnabled();
+    await expect(page.getByText(`Branch view: ${world.branch.name}`)).toHaveCount(0);
+    await page.context().close();
+  });
+});
+
+// A finalize and a cancel sent at the same moment (the kitchen phone finalizing while
+// the desktop cancels) used to be able to both succeed: the cancel checked the status
+// before its transaction, so it could cancel an order whose stock the finalize had just booked.
+// A race cannot be driven through one page, so both requests go through the API; the
+// rule checked is the one users see — a cancelled order never moves stock.
+test.describe('production orders under concurrent requests', () => {
+  test('a finalize racing a cancel leaves either a finalized order with its stock, or a cancelled one without', async ({
+    api,
+  }) => {
+    const world = await buildWorld(api, { products: 1 });
+    const product = world.products[0];
+    const date = today();
+    const deliveryBefore = await branchDelivery(api, world.branch.id, product.id, date);
+
+    const ROUNDS = 6;
+    const YIELD = 3;
+    let finalized = 0;
+    for (let i = 0; i < ROUNDS; i++) {
+      const order = await api.post<{ id: number }>('/production-orders', {
+        branchId: world.branch.id,
+        date,
+        items: [{ productId: product.id, yield: YIELD }],
+      });
+      const [fin, cancel] = await Promise.all([
+        api.raw('PATCH', `/production-orders/${order.id}`, { status: 'FINALIZED' }),
+        // The page's Cancel button sends this same PATCH (pages/production-orders.page.ts).
+        api.raw('PATCH', `/production-orders/${order.id}`, { status: 'CANCELLED' }),
+      ]);
+      // Exactly one of them wins; the loser is refused, never silently applied.
+      expect([fin.ok(), cancel.ok()].filter(Boolean)).toHaveLength(1);
+
+      const listed = await api.get<Array<{ id: number; status: string }>>('/production-orders/by-date', {
+        date,
+        branchId: world.branch.id,
+      });
+      const status = listed.find((o) => o.id === order.id)?.status;
+      expect(status).toBe(fin.ok() ? 'FINALIZED' : 'CANCELLED');
+      if (status === 'FINALIZED') finalized++;
+    }
+
+    // Only finalized orders delivered stock.
+    expect(await branchDelivery(api, world.branch.id, product.id, date)).toBe(deliveryBefore + finalized * YIELD);
+  });
 });

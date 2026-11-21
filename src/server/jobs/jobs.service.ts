@@ -3,6 +3,7 @@ import { JobStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { MaterialInventoryService } from '../material-inventory/material-inventory.service';
 import { addDays, manilaToday } from '@/lib/manilaDate';
+import { lockInventoryChains } from '../common/utils/stock-chain';
 
 /**
  * What caused a job to run, recorded on the JobRun row.
@@ -166,10 +167,6 @@ export class JobsService {
       existingInvKeys,
       existingProdKeys,
     );
-    const priorLeftoverMap = await this.fetchPriorLeftovers(
-      missingInvPairs,
-      date,
-    );
 
     // One batched INSERT ... ON CONFLICT DO NOTHING per table instead of one
     // upsert per branch × product pair. With a cross-region database, per-pair
@@ -178,21 +175,23 @@ export class JobsService {
     let inventoryCreated = 0;
     let productionCreated = 0;
     if (missingInvPairs.length > 0 || missingProdPairs.length > 0) {
-      const [invResult, prodResult] = await this.prisma.$transaction([
-        this.prisma.inventory.createMany({
-          data: this.buildInventoryRows(
-            missingInvPairs,
-            priorLeftoverMap,
-            date,
-            dateStr,
-          ),
-          skipDuplicates: true,
-        }),
-        this.prisma.production.createMany({
-          data: this.buildProductionRows(missingProdPairs, date, dateStr),
-          skipDuplicates: true,
-        }),
-      ]);
+      // The new rows open on the previous close. Read it under the chains'
+      // lock (one batched statement), so a leftover saved at the same moment
+      // is either seen here or walks forward onto these rows afterwards.
+      const [invResult, prodResult] = await this.prisma.$transaction(async (tx) => {
+        await lockInventoryChains(tx, missingInvPairs);
+        const priorLeftoverMap = await this.fetchPriorLeftovers(tx, missingInvPairs, date);
+        return Promise.all([
+          tx.inventory.createMany({
+            data: this.buildInventoryRows(missingInvPairs, priorLeftoverMap, date, dateStr),
+            skipDuplicates: true,
+          }),
+          tx.production.createMany({
+            data: this.buildProductionRows(missingProdPairs, date, dateStr),
+            skipDuplicates: true,
+          }),
+        ]);
+      }, { timeout: 60_000, maxWait: 10_000 });
       inventoryCreated = invResult.count;
       productionCreated = prodResult.count;
     }
@@ -229,6 +228,7 @@ export class JobsService {
   }
 
   private async fetchPriorLeftovers(
+    tx: Prisma.TransactionClient,
     missingInvPairs: Array<{ branchId: number; productId: number }>,
     date: Date,
   ): Promise<Map<string, number>> {
@@ -240,7 +240,7 @@ export class JobsService {
     // DISTINCT ON keeps only the newest prior row per pair server-side; the
     // previous findMany shipped the pairs' entire history (grows ~500 rows/day)
     // to the app just to keep the first hit per pair.
-    const priorEntries = await this.prisma.$queryRaw<
+    const priorEntries = await tx.$queryRaw<
       Array<{ branchId: number; productId: number; leftover: number }>
     >`
       SELECT DISTINCT ON ("branchId", "productId")

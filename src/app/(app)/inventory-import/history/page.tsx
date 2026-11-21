@@ -5,7 +5,6 @@ import { usePageHeader } from '@/components/layout/usePageHeader';
 import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Trash2, Loader2, History } from 'lucide-react';
 import { importLogsApi, branchesApi } from '@/lib/apiServices';
-import { useAuth } from '@/contexts/AuthContext';
 import type { Branch, ImportLog } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -26,6 +25,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import { useCan } from '@/lib/rbac/useHasFeature';
 
 function extractError(err: unknown): string {
   const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
@@ -34,8 +34,8 @@ function extractError(err: unknown): string {
 
 export default function ImportHistoryPage() {
   usePageHeader({ title: 'Import History' });
-  const { user } = useAuth();
-  const isAdmin = user?.role === 'ADMIN';
+  // The key DELETE /import-logs/:id checks, so the button never leads to a 403.
+  const canDeleteLog = useCan('inventory-import:delete-log');
   const [branchId, setBranchId] = useState('');
   const [page, setPage] = useState(1);
   const [error, setError] = useState('');
@@ -119,7 +119,7 @@ export default function ImportHistoryPage() {
                     <TableHead className="text-right">Skipped</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Imported By</TableHead>
-                    {isAdmin && <TableHead />}
+                    {canDeleteLog && <TableHead />}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -145,7 +145,7 @@ export default function ImportHistoryPage() {
                       <TableCell className="text-sm text-muted-foreground">
                         {log.importedByUser?.email ?? '—'}
                       </TableCell>
-                      {isAdmin && (
+                      {canDeleteLog && (
                         <TableCell>
                           <AlertDialog>
                             <AlertDialogTrigger asChild>

@@ -135,8 +135,9 @@ export class ProductionOrdersController {
   @Roles(UserRole.MANAGER)
   remove(
     @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: { id: number },
     @Query('branchId') branchId?: string,
   ) {
-    return this.service.remove(id, this.parseOptionalBranchId(branchId));
+    return this.service.remove(id, this.parseOptionalBranchId(branchId), user?.id);
   }
 }

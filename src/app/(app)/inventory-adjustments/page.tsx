@@ -5,6 +5,7 @@ import { usePageHeader } from '@/components/layout/usePageHeader';
 import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Loader2, ChevronDown, ChevronRight, ChevronLeft, Plus, Trash2 } from 'lucide-react';
 import dayjs from 'dayjs';
+import { manilaToday } from '@/lib/manilaDate';
 import { toast } from 'sonner';
 import { inventoryApi, inventoryAdjustmentsApi, branchesApi } from '@/lib/apiServices';
 import type { Branch, Inventory, InventoryAdjustment, AdjustmentType } from '@/types';
@@ -35,7 +36,7 @@ const ADJ_TYPES: AdjustmentType[] = ['PULL_IN', 'PULL_OUT', 'ANOMALY'];
 export default function InventoryAdjustmentsPage() {
   usePageHeader({ title: 'Inventory Adjustments' });
   const qc = useQueryClient();
-  const today = dayjs().format('YYYY-MM-DD');
+  const today = manilaToday();
   const [branchId, setBranchId] = useState('');
   // RouteGuard only checks the page key, so the actions on it need their own —
   // the endpoints behind them enforce these exact keys.

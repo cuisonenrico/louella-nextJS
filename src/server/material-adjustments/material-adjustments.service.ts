@@ -11,6 +11,7 @@ import {
 } from '../common/utils/stock-chain';
 import { CreateMaterialAdjustmentDto } from './dto/create-material-adjustment.dto';
 import { num, q4 } from '../common/utils/decimal.util';
+import { recordChanges } from '../common/utils/audit.util';
 
 @Injectable()
 export class MaterialAdjustmentsService {
@@ -59,6 +60,11 @@ export class MaterialAdjustmentsService {
           createdById: userId ?? null,
         },
       });
+      await recordChanges(
+        tx,
+        [{ entity: 'MaterialAdjustment', entityId: created.id, before: null, after: created }],
+        userId,
+      );
       // Spoilage or a restock moves this card's close; the next days follow.
       await reconcileMaterialChains(tx, [
         { materialId: inv.materialId, fromDate: inv.date },
@@ -81,7 +87,7 @@ export class MaterialAdjustmentsService {
     });
   }
 
-  async remove(id: number) {
+  async remove(id: number, userId?: number) {
     const existing = await this.prisma.materialAdjustment.findFirst({
       where: { id, deletedAt: null },
       include: { materialInventory: { select: { materialId: true, date: true } } },
@@ -89,10 +95,18 @@ export class MaterialAdjustmentsService {
     if (!existing) throw new NotFoundException('Adjustment not found');
     return this.prisma.$transaction(async (tx) => {
       await lockMaterialChains(tx, [existing.materialInventory.materialId]);
+      // Re-read under the lock: a concurrent delete is seen, not repeated.
+      const before = await tx.materialAdjustment.findFirst({ where: { id, deletedAt: null } });
+      if (!before) throw new NotFoundException('Adjustment not found');
       const removed = await tx.materialAdjustment.update({
         where: { id },
         data: { deletedAt: new Date() },
       });
+      await recordChanges(
+        tx,
+        [{ entity: 'MaterialAdjustment', entityId: id, before, after: removed, action: 'delete' }],
+        userId,
+      );
       await reconcileMaterialChains(tx, [
         {
           materialId: existing.materialInventory.materialId,

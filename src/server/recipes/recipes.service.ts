@@ -13,7 +13,7 @@ import {
 } from '../common/utils/unit-conversion.util';
 import { CreateRecipeDto } from './dto/create-recipe.dto';
 import { UpdateRecipeDto } from './dto/update-recipe.dto';
-import { costCentavos, num, pesos, q4 } from '../common/utils/decimal.util';
+import { costCentavos, num, pesos, q4, centavos } from '../common/utils/decimal.util';
 
 const recipeInclude = {
   product: true,
@@ -350,7 +350,8 @@ export class RecipesService {
       };
     });
 
-    const totalBatchCost = itemCosts.reduce((sum, i) => sum + i.cost, 0);
+    // Added in whole centavos, so the batch total is exact (no 12.300000000000001).
+    const totalBatchCost = pesos(itemCosts.reduce((sum, i) => sum + centavos(i.cost), 0));
     const costPerUnit = totalBatchCost / num(recipe.recipeYield);
     const productPrice = Number(recipe.product.price);
     const grossProfitPerUnit = productPrice - costPerUnit;

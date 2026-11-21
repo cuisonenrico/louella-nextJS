@@ -29,6 +29,7 @@ import QueryError from '@/components/QueryError';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { manilaToday } from '@/lib/manilaDate';
 import OrdersPhone from './components/phone/OrdersPhone';
+import { useCan } from '@/lib/rbac/useHasFeature';
 
 const PRODUCT_TYPE_ORDER: ProductType[] = ['BREAD', 'CAKE', 'SPECIAL', 'MISCELLANEOUS'];
 
@@ -52,7 +53,8 @@ export default function ProductionOrdersPage() {
   const [finalizeTarget, setFinalizeTarget] = useState<ProductionOrder | null>(null);
   const [cancelTarget, setCancelTarget] = useState<ProductionOrder | null>(null);
 
-  const isAdmin = user?.role === 'ADMIN';
+  // Same key BranchGuard checks: the kitchen picks any branch, not only an ADMIN.
+  const seesAllBranches = useCan('all-branches');
 
   const invalidateProductionViews = useCallback(() => {
     qc.invalidateQueries({ queryKey: ['production-orders'] });
@@ -252,7 +254,7 @@ export default function ProductionOrdersPage() {
           today={today}
           filterDate={filterDate}
           onDateChange={setFilterDate}
-          isAdmin={isAdmin}
+          seesAllBranches={seesAllBranches}
           activeBranches={activeBranches}
           activeBranchId={activeBranchId}
           onBranchChange={setSelectedBranchId}
@@ -301,7 +303,7 @@ export default function ProductionOrdersPage() {
                   <Select
                     value={activeBranchId ? String(activeBranchId) : undefined}
                     onValueChange={(value) => setSelectedBranchId(Number.parseInt(value, 10))}
-                    disabled={!isAdmin}
+                    disabled={!seesAllBranches}
                   >
                     <SelectTrigger className="h-9">
                       <SelectValue placeholder="Select branch" />
@@ -320,7 +322,7 @@ export default function ProductionOrdersPage() {
             </Button>
           </div>
 
-          {!isAdmin && activeBranch ? (
+          {!seesAllBranches && activeBranch ? (
             <div className="mb-3 text-xs text-muted-foreground">Branch view: <span className="font-semibold text-foreground">{activeBranch.name}</span></div>
           ) : null}
 
