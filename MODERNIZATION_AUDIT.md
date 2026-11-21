@@ -193,7 +193,7 @@ Screenshots: `ux-review/` (desktop 1366 px and phone 412 px; key routes, loading
 
 ## Needs human decision
 
-- **Next.js 16.4.4 → 16.4.6** (patch, security advisories; `next build` stops on every other run).
+- ~~Next.js 16.4.4 → 16.4.6~~ — done 2026-11-21 (branch `chore/next-16.4.6`). One advisory applied: the image optimizer SVG bypass, since `remotePatterns` allows any `*.supabase.co` public `landing` bucket.
 - **Brand orange contrast**: white text on `--primary` is ~2.9:1 (Lighthouse flags the login button).
   Fixing it changes the brand colour.
 - **Server-side data fetching** for app pages: needs cookie-based auth on the server.
