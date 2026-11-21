@@ -93,25 +93,49 @@ alongside `branchName`. The draft (`computePayslip` input/output) carries the
 company name through, so the snapshot is taken in the same transaction as the
 rest.
 
-### Export
+### Export — the client's paper payroll sheet
 
-- `GET /payroll/runs/:id/export?companyName=<name>` (ADMIN, `payroll` feature),
-  returns an `.xlsx`. Allowed for `FINALIZED` and `PAID` runs; `VOIDED` → 409
-  (a voided run is not the payroll of record).
-  - Without `companyName`: one workbook, one sheet per company (sorted by name,
-    "No company" last).
-  - With `companyName` (or `companyName=` empty for "No company"): a workbook
-    holding only that company's sheet — a file that can go to that business
-    without showing anyone else's pay.
-- Built by a pure function `src/server/payroll/payroll-workbook.ts` (SheetJS,
-  same style as `inventory-workbook.ts`), unit-tested without a database.
-- Each sheet: title rows (company name, cutoff `periodStart – periodEnd`, run
-  id), then one row per employee sorted by name:
-  Employee · Job role · Branch · Days worked · Absences · Basic pay ·
-  Holiday pay · Additions · Deductions · Net pay · Employer share,
-  then a **Total** row (Excel `SUM` formulas carrying computed values, as in the
-  inventory workbook). Money summed in centavos.
-- Filename: `payroll-<periodStart>-<company-slug|all>.xlsx`.
+Revised 2026-11-21 after the client sent their sheets
+(`Documents/PAYROLL/Payroll-<company>-Nov15-2026.pdf`): one sheet per
+business, including CONTRACTUAL and INCOMPLETE groups. Each of those is
+simply its own company here.
+
+- `GET /payroll/runs/:id/export?company=<name>` (ADMIN, `payroll` feature).
+  `FINALIZED` and `PAID` runs only; `VOIDED` → 409; a company with no payslip in
+  the run → 404. No `company` = one tab per company ("No company" last);
+  `company=__none__` = the payslips with no company.
+- Pure builder `src/server/payroll/payroll-workbook.ts` (SheetJS). Layout:
+  `P A Y R O L L`, "For the period of November 1-15, 2026", "WE HEREBY
+  ACKNOWLEDGE to have received from <company>, <address>…", a two-row header,
+  one numbered row per employee ("Last, First"), a TOTAL of net salary, and the
+  paymaster / approved-for-payment footer with the company's two signatories.
+- Columns and where each payslip line goes:
+
+  | Column | Source |
+  |---|---|
+  | DAYS WORKED | `daysWorked` |
+  | DAILY RATE | latest BASIC line's rate |
+  | BASIC RATE | Σ BASIC lines |
+  | OVERTIME HRS / AMT | hours blank (not recorded); amount = additions with category `OVERTIME` |
+  | HOLIDAY PAY | regular-holiday lines + `HOLIDAY` additions |
+  | SPEC'L DAY PAY | special-holiday lines |
+  | REST DAY PAY | holiday lines on a rest day |
+  | NSD PAY | additions with the new category `NIGHT_DIFF` |
+  | OTHER PAY *(not on paper)* | other additions (bonus, allowance, other) |
+  | GROSS PAY | formula: sum of the above |
+  | SSS / Philhealth / Pag-ibig / SSS Loan | recurring deductions, matched by name |
+  | C.A. | vale (`BranchVale`) |
+  | OTHER DED. *(not on paper)* | other deductions (offense, other, unmatched recurring) |
+  | NET SALARY | formula: gross − deductions |
+  | SIGNATURE | blank |
+
+  The two extra columns keep gross and net adding up whenever a payslip
+  carries a bonus or a penalty.
+- `Company` gains `address`, `paymasterName`, `approverName` (optional). The
+  sheet uses the company's current address and signatories; the name is the
+  payslip snapshot. `Payslip.companyId` is stored alongside `companyName` to find them.
+- SheetJS community edition writes no cell styles: no bold, borders or
+  colours. The layout, merges, number formats and formulas are there.
 
 ### UI
 
@@ -121,9 +145,10 @@ rest.
   Row checkboxes + "Assign company" action → pick a company (or none) → bulk endpoint.
 - **Employee form** (`EmployeeFormDialog`, profile tab): Company select,
   active companies only, plus "None".
-- **Run page** (`RunActions`): "Export XLSX" dropdown — "All companies (one tab
-  each)" and one item per company present in that run. Hidden on voided runs.
-- **Payslip view:** shows the company name when set.
+- **Run page** (`RunActions`): "Export payroll sheet" menu — one item per company
+  present in that run, then "All companies (one tab each)". Hidden on voided runs.
+- **Payslip view:** headed by the company it was finalized under (else "Louella Bakery").
+- **Adjustments:** new addition category "Night differential" (`NIGHT_DIFF`).
 
 ### Tests
 
@@ -151,3 +176,8 @@ rest.
   said "XLSX per company"; this covers both readings at little cost.
 - `PAID` runs export too; `VOIDED` do not.
 - Company change takes no payroll lock.
+- From the client's sheets: OTHER PAY and OTHER DED. columns added; overtime
+  hours left blank; recurring deductions sorted into SSS / PhilHealth /
+  Pag-IBIG / SSS Loan by name, so they must be named that way; a
+  `NIGHT_DIFF` adjustment category for the NSD column; the address and
+  signatories are the company's current ones, not snapshotted.

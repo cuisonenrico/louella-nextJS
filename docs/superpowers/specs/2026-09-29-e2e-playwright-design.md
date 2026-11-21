@@ -529,10 +529,10 @@ marked "sweep v1" is covered by the route sweep only.
 | `/suppliers` | suppliers | sweep v1; v2 | CRUD |
 | `/unit-conversions` | unit-conversions | sweep v1; v2 | Creating KG→G also shows G→KG |
 | `/config/product-order` | products | sweep v1; v2 | Reorder persists and changes sheet row order |
-| `/employees` | employees | sweep v1; v2 | Create employee with rate; admin-only (a manager is redirected to their first permitted route) |
+| `/employees` | employees | sweep v1; companies **done** (`full/payroll.spec.ts` › payroll by company); v2 | Companies: add with address + signatories, bulk-assign selected employees (API confirms), manager 403 on `/companies`. v2: create employee with rate; admin-only (a manager is redirected to their first permitted route) |
 | `/employees/[id]` | employees | sweep v1; v2 | Rate history; rest days; hire/separation change crossing a finalized cutoff refused |
 | `/payroll` | payroll | v1 | Cutoff list; §6.5 entry point |
-| `/payroll/[periodStart]` | payroll | v1 | §6.5 |
+| `/payroll/[periodStart]` | payroll | v1 | §6.5; export payroll sheet per company (only that company's sheet, client layout, NET total = API payslips; snapshot survives a company rename; voided run → 409) |
 | `/payroll/payslips/[id]` | payroll | v1 | §6.5 |
 | `/payroll/runs/[id]/print` | payroll | v1 | §6.5: print view lists one payslip per employee in the run |
 | `/branch-cash` | branch-cash | v1 | §6.4 |

@@ -1,4 +1,7 @@
+import { readFileSync } from 'node:fs';
+import * as XLSX from 'xlsx';
 import { test, expect } from '../fixtures/test';
+import { Api } from '../fixtures/api';
 import { addDays, cutoffBefore, previousCutoff, workingDays, type Cutoff } from '../fixtures/dates';
 import { buildWorld, type World } from '../fixtures/world';
 import { PayrollCutoffPage } from '../pages/payroll-cutoff.page';
@@ -133,4 +136,104 @@ test.describe('payroll', () => {
       });
     });
   }
+});
+
+// Companies: each branch trades under its own business name, and a finalized run exports one payroll sheet
+// per company, laid out like the client's paper payroll. Uses a third, older cutoff so it never races the two
+// above (this file is serial, and a run covers everyone in its cutoff).
+test.describe('payroll by company', () => {
+  const cutoff = cutoffBefore(cutoffBefore(previousCutoff()));
+  let world: World;
+  let company: { id: number; name: string };
+  const ADDRESS = '#29 Gov. Sison St., Lingayen, Pangasinan';
+
+  test.beforeAll(async ({ api }) => {
+    const existing = await api.get<CutoffDetail>(`/payroll/cutoffs/${cutoff.periodStart}`);
+    if (existing.run) await api.post(`/payroll/runs/${existing.run.id}/void`, { reason: 'e2e cleanup' });
+    world = await buildWorld(api, { employees: 2, hireDate: addDays(cutoff.periodStart, -30), dailyRate: 500, restDays: [0] });
+  });
+
+  test('an admin adds a company and assigns employees to it from the list', async ({ page, api }) => {
+    const name = `E2E${world.id} BAKESHOP (main)`;
+    await page.goto('/employees');
+    await page.getByRole('button', { name: 'Companies' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Companies' });
+    const form = dialog.getByRole('form', { name: 'New company' });
+    await form.getByLabel('Company name').fill(name);
+    await form.getByLabel('Address').fill(ADDRESS);
+    await form.getByLabel('Paymaster (in-charge)').fill('MARILOU C. SISON');
+    await form.getByLabel('Approved by (manager)').fill('LESLEY MAULEON CUISON');
+    await form.getByRole('button', { name: 'Add company' }).click();
+    await expect(dialog.getByText(name, { exact: true })).toBeVisible();
+    await page.keyboard.press('Escape');
+
+    await page.getByPlaceholder('Search employees…').fill(`E2E${world.id}`);
+    for (const e of world.employees) {
+      await page.getByRole('checkbox', { name: `Select ${e.firstName} ${e.lastName}` }).check();
+    }
+    await page.getByRole('button', { name: 'Assign company (2)' }).click();
+    const assign = page.getByRole('dialog', { name: 'Assign company' });
+    await assign.getByRole('combobox', { name: 'Company to assign' }).click();
+    await page.getByRole('option', { name, exact: true }).click();
+    const saved = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith('/api/v1/employees/company'));
+    await assign.getByRole('button', { name: 'Assign' }).click();
+    expect((await saved).ok()).toBe(true);
+    for (const e of world.employees) {
+      await expect(page.getByRole('row').filter({ hasText: `${e.firstName} ${e.lastName}` })).toContainText(name);
+    }
+
+    const companies = await api.get<Array<{ id: number; name: string; address: string }>>('/companies');
+    const created = companies.find((c) => c.name === name)!;
+    expect(created.address).toBe(ADDRESS);
+    company = { id: created.id, name };
+    for (const e of world.employees) {
+      expect((await api.get<{ company: { id: number } | null }>(`/employees/${e.id}`)).company?.id).toBe(company.id);
+    }
+  });
+
+  test('a finalized run exports the company payroll sheet, and renaming the company later does not move it', async ({ page, api }) => {
+    const payroll = new PayrollCutoffPage(page);
+    await payroll.open(cutoff.periodStart);
+    const runId = await payroll.finalize(cutoff.periodStart);
+
+    const detail = await api.get<CutoffDetail>(`/payroll/cutoffs/${cutoff.periodStart}`);
+    const ours = detail.run!.payslips.filter((s) => world.employees.some((e) => e.id === s.employeeId));
+    expect(ours).toHaveLength(2);
+    const expectedTotal = ours.reduce((sum, s) => sum + Math.round(s.netPay * 100), 0) / 100;
+
+    await page.getByRole('button', { name: 'Export payroll sheet' }).click();
+    const downloading = page.waitForEvent('download');
+    await page.getByRole('menuitem', { name: company.name, exact: true }).click();
+    const download = await downloading;
+    expect(download.suggestedFilename()).toMatch(new RegExp(`^payroll-${cutoff.periodStart}-.+\\.xlsx$`));
+    const wb = XLSX.read(readFileSync((await download.path())!), { type: 'buffer' });
+    // Only this company: its file shows nobody else's pay.
+    expect(wb.SheetNames).toHaveLength(1);
+    const rows = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[wb.SheetNames[0]], { header: 1, blankrows: true, defval: null });
+    const flat = rows.flat();
+    expect(flat).toContain('P A Y R O L L');
+    expect(flat).toContain(`WE HEREBY ACKNOWLEDGE to have received from ${company.name}, ${ADDRESS}`);
+    expect(flat).toContain('MARILOU C. SISON');
+    expect(flat).toContain('LESLEY MAULEON CUISON');
+    for (const e of world.employees) expect(flat).toContain(`${e.lastName}, ${e.firstName}`);
+    const total = rows.find((r) => r[1] === 'TOTAL')!;
+    expect(total[19]).toBe(expectedTotal); // NET SALARY column
+
+    // The payslip snapshot keeps the name it was finalized under.
+    await api.patch(`/companies/${company.id}`, { name: `${company.name} RENAMED` });
+    const res = await api.raw('GET', `/payroll/runs/${runId}/export`, undefined, { company: company.name });
+    expect(res.status()).toBe(200);
+    expect(XLSX.read(await res.body(), { type: 'buffer' }).SheetNames).toHaveLength(1);
+
+    await payroll.voidRun('e2e: leave the cutoff open');
+    expect((await api.raw('GET', `/payroll/runs/${runId}/export`)).status()).toBe(409);
+  });
+
+  test('a manager cannot read or manage companies', async ({ playwright }) => {
+    const request = await playwright.request.newContext({ baseURL: 'http://localhost:4100' });
+    const manager = await Api.login(request, { email: world.manager.email, password: world.manager.password });
+    expect((await manager.raw('GET', '/companies')).status()).toBe(403);
+    expect((await manager.raw('POST', '/companies', { name: 'Nope' })).status()).toBe(403);
+    await request.dispose();
+  });
 });
