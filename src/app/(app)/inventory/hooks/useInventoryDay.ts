@@ -6,7 +6,7 @@ import dayjs from 'dayjs';
 import { toast } from 'sonner';
 import { useCan } from '@/lib/rbac/useHasFeature';
 import { useAuth } from '@/contexts/AuthContext';
-import { manilaToday } from '@/lib/manilaDate';
+import { addDays, manilaToday } from '@/lib/manilaDate';
 import { branchesApi, inventoryApi, productsApi } from '@/lib/apiServices';
 import type { Branch, Inventory, InventorySummaryData, Product, ProductType } from '@/types';
 import { extractError } from '@/lib/errors';
@@ -97,9 +97,21 @@ export function useInventoryDay({ requireBranch = false }: { requireBranch?: boo
     enabled: !requireBranch || filterBranch !== '',
   });
 
-  const summaryQuery = useQuery<InventorySummaryData>({
-    queryKey: ['inventory-summary', filterDateFrom, filterDateTo, filterBranch],
-    queryFn: () => inventoryApi.summary(filterDateFrom, filterDateTo, filterBranch || undefined).then((r) => r.data),
+  // The summary under the sheet is worked out from the rows themselves; the
+  // server is asked only for the period it is compared with: the same weekday
+  // last week for one day, the same number of days just before for a range.
+  const comparisonPeriod = useMemo(() => {
+    if (!isRange) {
+      const day = addDays(filterDateFrom, -7);
+      return { from: day, to: day };
+    }
+    const days = Math.round((Date.parse(`${filterDateTo}T00:00:00Z`) - Date.parse(`${filterDateFrom}T00:00:00Z`)) / 86_400_000) + 1;
+    return { from: addDays(filterDateFrom, -days), to: addDays(filterDateFrom, -1) };
+  }, [isRange, filterDateFrom, filterDateTo]);
+  const comparisonQuery = useQuery<InventorySummaryData>({
+    queryKey: ['inventory-summary', comparisonPeriod.from, comparisonPeriod.to, filterBranch],
+    queryFn: () =>
+      inventoryApi.summary(comparisonPeriod.from, comparisonPeriod.to, filterBranch || undefined).then((r) => r.data),
     placeholderData: keepPreviousData,
     // The phone and cash views show no summary; skipping it keeps each save to
     // one write and one read under the per-IP rate limit.
@@ -249,7 +261,7 @@ export function useInventoryDay({ requireBranch = false }: { requireBranch?: boo
 
   return {
     today, dateMode, draftFrom, draftTo, filterDateFrom, filterDateTo, filterBranch, selectedBranchId, isRange,
-    branches, products, productById, invQuery, summaryQuery, rows, displayRows, rowsByType, uninitializedCount,
+    branches, products, productById, invQuery, comparisonQuery, comparisonPeriod, rows, displayRows, rowsByType, uninitializedCount,
     bulkCreateMutation, pendingUpdates, handleCellChange, discardPending, savePendingMutation, totalPending,
     isEditable, canAdjust, canEditInventory, canCreateInventory, canImport, canSeeCash, canSeeRevenue,
     commitDates, changeBranch, stepDate, handleDateModeChange, setDraftFrom, setDraftTo,

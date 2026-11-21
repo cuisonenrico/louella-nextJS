@@ -1,12 +1,21 @@
 'use client';
 
-import { ChevronLeft, ChevronRight, Calendar, CalendarRange, CalendarDays, Download, Upload } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, Calendar, CalendarRange, CalendarDays, Download, Upload } from 'lucide-react';
 import type { Branch } from '@/types';
 import { addDays } from '@/lib/manilaDate';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+
+const ALL = 'all';
+
+/** A branch tab: larger than a chip; the selected one is solid brand colour, not the faint default. */
+const BRANCH_TAB =
+  'gap-1.5 px-4 font-semibold md:h-10 bg-background border border-transparent text-foreground ' +
+  'hover:border-border hover:bg-background hover:text-foreground ' +
+  'data-[state=on]:bg-primary data-[state=on]:text-primary-foreground data-[state=on]:shadow-md ' +
+  'data-[state=on]:ring-2 data-[state=on]:ring-primary/30 data-[state=on]:hover:bg-primary/90 data-[state=on]:hover:text-primary-foreground';
 
 interface InventoryFilterBarProps {
   dateMode: 'date' | 'range';
@@ -45,6 +54,34 @@ export default function InventoryFilterBar({
 
   return (
     <TooltipProvider>
+      {/* Branch tabs: the branch is which paper sheet you are on, so it leads the page.
+          The chosen one is filled in the brand colour with a check, readable at a glance. */}
+      <div className="mb-3 rounded-lg border bg-muted/40 p-1.5">
+        <ToggleGroup
+          type="single"
+          // "All" is the empty filter, but Radix reads an empty value as "nothing selected",
+          // so the tab never looked chosen. It gets its own value here.
+          value={filterBranch || ALL}
+          onValueChange={(val) => onBranchChange(!val || val === ALL ? '' : val)}
+          aria-label="Branch"
+          className="flex-wrap gap-1.5 justify-start"
+        >
+          <ToggleGroupItem value={ALL} className={BRANCH_TAB}>
+            {filterBranch === '' && <Check className="h-4 w-4" aria-hidden />}
+            All
+          </ToggleGroupItem>
+          {branches.map((b) => {
+            const id = b.id.toString();
+            return (
+              <ToggleGroupItem key={b.id} value={id} className={BRANCH_TAB}>
+                {filterBranch === id && <Check className="h-4 w-4" aria-hidden />}
+                {b.name}
+              </ToggleGroupItem>
+            );
+          })}
+        </ToggleGroup>
+      </div>
+
       {/* Date navigation */}
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         {/* Mode toggle */}
@@ -151,16 +188,6 @@ export default function InventoryFilterBar({
 
       </div>
 
-      {/* Branch selector */}
-      <div className="mb-3">
-        <p className="text-xs font-semibold text-muted-foreground tracking-wider mb-1">BRANCH</p>
-        <ToggleGroup type="single" value={filterBranch} onValueChange={(val) => onBranchChange(val ?? '')} className="flex-wrap gap-1 justify-start">
-          <ToggleGroupItem value="" size="sm">All</ToggleGroupItem>
-          {branches.map((b) => (
-            <ToggleGroupItem key={b.id} value={b.id.toString()} size="sm">{b.name}</ToggleGroupItem>
-          ))}
-        </ToggleGroup>
-      </div>
     </TooltipProvider>
   );
 }

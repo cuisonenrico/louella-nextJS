@@ -74,7 +74,7 @@ test.describe('inventory XLSX export', () => {
     const page = await managerPage(browser, world);
     await page.goto('/inventory/details');
     await expect(page.locator('input[type="date"]').first()).toBeVisible();
-    await expect(page.getByRole('button', { name: /Day Summary/ })).toBeVisible();
+    await expect(page.getByRole('radio', { name: 'All', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Export XLSX' })).toHaveCount(0);
     await page.context().close();
   });

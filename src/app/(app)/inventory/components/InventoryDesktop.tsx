@@ -12,7 +12,7 @@ import { TableSkeleton } from '@/components/loading/Skeletons';
 import BranchCashPanel from '@/components/branch-cash/BranchCashPanel';
 // import RejectionByProductCard from '@/components/analytics/RejectionByProductCard';
 import InventoryFilterBar from './InventoryFilterBar';
-import InventorySummaryPanel from './InventorySummaryPanel';
+import InventorySheetSummary from './InventorySheetSummary';
 import PendingTransfersPanel from './PendingTransfersPanel';
 import InventoryTypeTables from './InventoryTypeTables';
 import InventoryAdjustmentsDialog from './InventoryAdjustmentsDialog';
@@ -24,7 +24,7 @@ export default function InventoryDesktop({ day }: { day: InventoryDay }) {
   const router = useRouter();
   const {
     today, dateMode, draftFrom, draftTo, filterDateFrom, filterDateTo, filterBranch, selectedBranchId, isRange,
-    branches, productById, invQuery, summaryQuery, rows, displayRows, rowsByType, uninitializedCount,
+    branches, productById, invQuery, comparisonQuery, comparisonPeriod, rows, displayRows, rowsByType, uninitializedCount,
     bulkCreateMutation, pendingUpdates, handleCellChange, discardPending, savePendingMutation, totalPending,
     isEditable, canAdjust, canCreateInventory, canImport, canSeeCash, canSeeRevenue,
     commitDates, changeBranch, stepDate, handleDateModeChange, setDraftFrom, setDraftTo,
@@ -63,14 +63,6 @@ export default function InventoryDesktop({ day }: { day: InventoryDay }) {
           ) : null}
 
           <PendingTransfersPanel branchId={selectedBranchId} />
-
-          <InventorySummaryPanel
-            summary={summaryQuery.data ?? null}
-            isLoading={summaryQuery.isLoading || summaryQuery.isFetching}
-            filterDateFrom={filterDateFrom}
-            filterDateTo={filterDateTo}
-            showRevenue={canSeeRevenue}
-          />
 
           {/* Reject products card temporarily removed to keep the page focused on the table.
           <div className="mb-4">
@@ -141,6 +133,21 @@ export default function InventoryDesktop({ day }: { day: InventoryDay }) {
               showRevenue={canSeeRevenue}
               onAdjustmentsOpen={setAdjRow}
               onCellChange={handleCellChange}
+            />
+          )}
+
+          {/* After the table: the day read back, once the figures are in. */}
+          {!invQuery.isLoading && !invQuery.isError && rows.length > 0 && (
+            <InventorySheetSummary
+              rows={rows}
+              pendingUpdates={pendingUpdates}
+              productById={productById}
+              from={filterDateFrom}
+              to={filterDateTo}
+              branchName={filterBranch === '' ? null : (branches.find((b) => String(b.id) === filterBranch)?.name ?? null)}
+              comparison={comparisonQuery.data}
+              comparisonPeriod={comparisonPeriod}
+              showRevenue={canSeeRevenue}
             />
           )}
 
