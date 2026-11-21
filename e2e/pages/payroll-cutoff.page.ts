@@ -8,6 +8,7 @@ import { expect, type Locator, type Page } from '@playwright/test';
  *    then a bar with "Finalize payroll" → confirm dialog → "Finalize".
  *  - FINALIZED cutoff: the frozen payslips plus "Print payslips", "Mark as paid" and "Void run".
  *    Voiding asks for a reason (required) and reopens the cutoff.
+ *  - OPEN cutoff rows expand to "Absences & rates", a dialog with the employee's inputs.
  * The two "Void run" buttons (trigger and confirm) are told apart by scoping to the dialog.
  */
 export class PayrollCutoffPage {
@@ -29,6 +30,23 @@ export class PayrollCutoffPage {
   /** The row's Net pay cell (the last column). */
   net(employeeName: string): Locator {
     return this.row(employeeName).getByRole('cell').last();
+  }
+
+  /** The row's Absent cell (chevron, Employee, Working days, Absent, …). */
+  absent(employeeName: string): Locator {
+    return this.row(employeeName).getByRole('cell').nth(3);
+  }
+
+  /**
+   * Expands the employee's row and clicks "Absences & rates", which opens their absences / rates /
+   * deductions in a dialog over the cutoff (no navigation). Returns the dialog.
+   */
+  async openInputs(employeeName: string): Promise<Locator> {
+    await this.row(employeeName).click();
+    await this.page.getByRole('button', { name: 'Absences & rates' }).first().click();
+    const dialog = this.page.getByRole('dialog', { name: employeeName });
+    await expect(dialog.getByRole('tab', { name: 'Absences', selected: true })).toBeVisible();
+    return dialog;
   }
 
   /** Finalize the open cutoff through the UI; returns the new run's id. */

@@ -20,9 +20,10 @@ function shiftMonth(month: string, delta: number): string {
   return new Date(Date.UTC(y, m - 1 + delta, 1)).toISOString().slice(0, 7);
 }
 
-export function AbsencesTab({ employee }: { employee: Employee }) {
+/** `initialMonth` (YYYY-MM) opens the calendar on that month instead of this one. */
+export function AbsencesTab({ employee, initialMonth }: { employee: Employee; initialMonth?: string }) {
   const qc = useQueryClient();
-  const [month, setMonth] = useState(() => manilaToday().slice(0, 7));
+  const [month, setMonth] = useState(() => initialMonth ?? manilaToday().slice(0, 7));
   const from = `${month}-01`;
   const to = cutoffOf(`${month}-16`).periodEnd;
   const year = Number(month.slice(0, 4));
