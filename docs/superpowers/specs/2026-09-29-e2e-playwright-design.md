@@ -506,7 +506,7 @@ marked "sweep v1" is covered by the route sweep only.
 | `/register` | auth | v2 | Registration form validates; new user cannot reach admin pages |
 | `/change-password` | auth | v1 | §6.1 |
 | `/no-access` | permissions | sweep v1 | Only for an account with no permitted route; a denied page redirects to the first permitted route instead (§6.1) |
-| `/dashboard` | dashboard | sweep v1; v2 | Figures for a world branch match the sales API for the day |
+| `/dashboard` | dashboard | sweep v1; lazy chart **done**; v2 | Figures for a world branch match the sales API for the day. Revenue chart loads after the page and draws (`full/app-shell-ux.spec.ts`) |
 | `/sales` | sales | sweep v1; Manila today **done**; v2 | Branch/day sales equals Σ sold × effective price; uncounted rows shown. Opens on Manila's last 7 days on a device in another zone (`full/manila-today.spec.ts`) |
 | `/inventory` | inventory | sweep v1; v2 | Branch overview lists the world's products with today's figures |
 | `/inventory/details` | inventory, branch-cash | v1; phone **done** | §6.2, §6.4; Stock ₱ column and revenue hidden from managers, sold green/red by sign, per-category sold/revenue subtotals, range shortcuts "This Month"/"Last 7d" in Manila, branch tabs above the dates with the chosen one (including "All") filled, day summary under the table (sales, sold of stock, rejects, leftover, not-counted and over-count warnings, best/slow/most-rejected, live with unsaved edits, no ₱ for managers) (`full/inventory-sheet.spec.ts`); XLSX export — day sheets at current prices + summary, hidden without revenue (`full/inventory-export.spec.ts`); equipment carries its count, never blocks the day, drop charged as missing, never orderable, product-form flag (`full/equipment.spec.ts`); phone count, delivery correction, offline queue, reload, refused count, logout guard, keypad Next/Done bar (`full/phone/phone-count.spec.ts`); phone adjustments and transfers (`full/phone/phone-transfers.spec.ts`); tab bar and `?view=cash` (`full/phone/shell.spec.ts`) |
@@ -531,15 +531,15 @@ marked "sweep v1" is covered by the route sweep only.
 | `/config/product-order` | products | sweep v1; v2 | Reorder persists and changes sheet row order |
 | `/employees` | employees | sweep v1; companies **done** (`full/payroll.spec.ts` › payroll by company); v2 | Companies: add with address + signatories, bulk-assign selected employees (API confirms), manager 403 on `/companies`. v2: create employee with rate; admin-only (a manager is redirected to their first permitted route) |
 | `/employees/[id]` | employees | sweep v1; v2 | Rate history; rest days; hire/separation change crossing a finalized cutoff refused |
-| `/payroll` | payroll | v1 | Cutoff list; §6.5 entry point |
+| `/payroll` | payroll | v1; dashboard **done** | Cutoff list; §6.5 entry point. Dashboard: current cutoff (employees, projected net pay, opens the cutoff), year so far, cutoff page totals, status steps and search (`full/payroll-dashboard.spec.ts`) |
 | `/payroll/[periodStart]` | payroll | v1 | §6.5; export payroll sheet per company (only that company's sheet, client layout, NET total = API payslips; snapshot survives a company rename; voided run → 409) |
 | `/payroll/payslips/[id]` | payroll | v1 | §6.5 |
 | `/payroll/runs/[id]/print` | payroll | v1 | §6.5: print view lists one payslip per employee in the run |
-| `/branch-cash` | branch-cash | v1 | §6.4 |
+| `/branch-cash` | branch-cash | v1 | §6.4. Placeholder table while the summary loads; category controls wait for their write (`full/app-shell-ux.spec.ts`) |
 | `/settings/users` | users | sweep v1; v2 | Create user, change role/branch, deactivate → cannot log in |
 | `/settings/permissions` | permissions | sweep v1; v2 | Revoking a feature hides the nav item and redirects the user to their first permitted route |
 | `/settings/jobs` | jobs | sweep v1; v2 | Job runs listed with `trigger: 'auto'` after an autofill |
-| `/settings/payroll` | payroll | sweep v1; v2 | Holiday multipliers editable; used by drafts only |
+| `/settings/payroll` | payroll | sweep v1; delete pending **done**; v2 | Holiday multipliers editable; used by drafts only. A holiday delete cannot be sent twice (`full/app-shell-ux.spec.ts`) |
 | `/settings/landing` | landing | sweep v1; v3 | Edit draft, publish, `/` shows it; restore revision (needs Storage for images) |
 
 "sweep v1" means the route is covered in v1 only by the route sweep (§6.6).

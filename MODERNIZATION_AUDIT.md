@@ -1,7 +1,7 @@
 # Modernization audit — louella-nextJS
 
 Audit date: 2026-11-21. Branch: `chore/modernization` (from master `97d1630`).
-Status: **Phase 1 complete; Phase 2 in progress** (see `PROGRESS.md`).
+Status: **complete** (see `PROGRESS.md`). Rebased onto master `7e4370b` (payroll companies) on 2026-11-21.
 
 ## Stack (detected)
 
@@ -109,37 +109,97 @@ Heaviest client modules (`next analyze`, compressed, deduplicated across chunks)
 runtime peer of `@nestjs/passport`). Next 16.4.4 has a patch advisory (fixed in 16.4.6). `npm audit`
 flags `prisma` (ReDoS in its CLI) with a major-version fix only.
 
-## Phased plan (as executed)
+## What changed (Phase 2)
 
-1. **Foundations** — measurement script; ignore scratch output. No config/API fixes needed.
-2. **Server/client boundaries** — no change (see Needs human decision).
-3. **Loading** — `(app)/loading.tsx` content skeleton inside the shell, shown after a short delay;
-   `/branch-cash` skeleton; pending guards in CategoriesDialog and HolidaysCard.
-4. **Errors** — `(app)/error.tsx` that keeps the shell and offers retry.
-5. **Performance** — lazy-load recharts on the three chart pages.
-6. **UX/a11y** — `aria-current`, skip link, per-page document titles, prefetch sidebar routes on
-   hover/focus, reduced-motion for animations.
-7. **Cleanup** — remove what the above makes dead.
+| Phase | Change | Files |
+|---|---|---|
+| 1 Foundations | First Load JS measurement (Next 16 prints no sizes); root `error.tsx` reads 16.4's `retry` prop | `scripts/measure-first-load.mjs`, `src/app/error.tsx` |
+| 2 Boundaries/data | No change — see *Needs human decision* | — |
+| 3 Loading | Sidebar click shows a spinner on its item until the next page renders (`useTransition` around `router.push`), screen-reader "Loading page"; prefetch on hover/focus. `/branch-cash` placeholder table. Category controls and holiday delete disabled while their write is in flight. Holiday list skeleton. | `src/components/layout/SidebarContent.tsx`, `src/app/(app)/branch-cash/page.tsx`, `…/_components/CategoriesDialog.tsx`, `src/app/(app)/settings/payroll/_components/HolidaysCard.tsx` |
+| 4 Errors | `(app)/error.tsx`: a crashing page keeps sidebar + header, retry also drops the query cache | `src/app/(app)/error.tsx` |
+| 5 Performance | Recharts loads after the page via `next/dynamic`, same-height placeholders | `src/components/charts/*`, dashboard, sales, rejections pages |
+| 6 UX/a11y | `aria-current="page"` on the active nav item; skip-to-content link; browser tab titled per page; reduced motion makes transitions/decorative animation instant (spinners keep turning) | `SidebarContent.tsx`, `AppShell.tsx`, `Header.tsx`, `globals.css` |
+| Payroll (requested mid-run) | `/payroll` is a dashboard: current cutoff (projected net pay, employees, holidays, blocking/review counts, days left), year so far, *Waiting on you* (ended cutoffs still open since payroll began; runs not marked paid), net pay per cutoff chart, started cutoffs (phone list). Cutoff page: Open → Finalized → Paid steps, totals of the payslips on screen, search / company / warnings-only filters, finalize bar kept in reach. | `src/app/(app)/payroll/**`, `src/lib/payroll/dashboard.ts`, `src/components/charts/PayrollTrendChart.tsx` |
+| Bug found by the run | **Deadlock** between on-demand autofill and a production-order finalize (Postgres 40P01): autofill locked inventory chains, then inserted production rows without the production lock. It now takes production keys first, the fixed order in `stock-chain.ts`. This came from the 2026-11 audit fix already on master. | `src/server/jobs/jobs.service.ts` |
+
+Tests added: `e2e/full/app-shell-ux.spec.ts` (8), `e2e/full/payroll-dashboard.spec.ts` (2),
+`src/lib/payroll/dashboard.spec.ts` (12), autofill lock-order unit test.
+
+## Before / after
+
+First Load JS (gzip kB, `scripts/measure-first-load.mjs`):
+
+| Route | Before | After | Δ |
+|---|---:|---:|---:|
+| `/dashboard` | 416.1 | 308.3 | **−107.7** |
+| `/sales` | 415.2 | 307.1 | **−108.1** |
+| `/inventory/rejections` | 410.3 | 305.8 | **−104.5** |
+| `/payroll` | 293.8 | 299.7 | +5.9 (dashboard; its chart is lazy) |
+| `/inventory/details` | 330.6 | 331.9 | +1.4 |
+| other app pages (`/branches`, `/branch-cash`, …) | ~293–310 | +1.3–1.4 | shell additions |
+| `/`, `/login` | 249.5, 254.2 | 249.6, 254.3 | ±0.1 |
+
+Routes: 38 static / 4 dynamic before and after. All client JS: 728.5 → 746.9 kB gzip — more,
+but split: the charts (and the payroll dashboard and the companies feature that arrived with the
+rebase) are separate chunks fetched only where used.
+
+Lighthouse (mobile preset, simulated throttling, single run each — treat ±5 as noise):
+
+| Route | Perf | A11y | LCP | CLS | TBT |
+|---|---|---|---|---|---|
+| `/login` before → after | 78 → 83 | 96 → 96 | 4.8 s → 4.8 s | 0 → 0 | 260 → 60 ms |
+| `/` before → after | 70 → 78 | 100 → 100 | 6.0 s → 5.9 s | 0 → 0 | 350 → 60 ms |
+
+Authenticated pages can't be audited by the Lighthouse CLI (the token is memory-only); the
+chart pages' gain is the First Load JS table above. Verification on the final build: typecheck,
+lint, Vitest 622, Jest 1,395, Playwright desktop 92 / iPad 81 / phone 31 — all passing.
+Screenshots: `ux-review/` (desktop 1366 px and phone 412 px; key routes, loading, error, 404).
+
+## Deliberately left alone
+
+- **Optimistic updates**: counts and payroll are guarded by server locks; optimistic UI would
+  show a write the server then refuses.
+- **`(app)/loading.tsx`**: tried and removed. With the segment-cache router a sibling navigation
+  keeps the old page until the new one is ready, so it never showed; the sidebar spinner is the feedback.
+- **Landing page LCP**: it comes from Lighthouse's simulated slow 4G (render delay of server-rendered
+  text, no data wait); nothing in the page holds it back.
+
+## Remaining P2 / next steps
+
+- Open Graph metadata for the public page.
+- A history screen for the audit trail (production orders, adjustments).
+- Phone drawer navigation gives no pending feedback (the drawer closes at once).
+
+## Manual QA (risky changes)
+
+1. **Autofill vs finalize** (lock order): open `/production/orders` on two devices; finalize an order
+   while another opens `/inventory/details` for a new day. Both succeed; no "Internal server error".
+2. **Error boundary**: any page that fails to render now shows *This page ran into a problem* with the
+   menu still there; *Try again* reloads its data.
+3. **Payroll dashboard**: the figures match the cutoff page and the runs; *Waiting on you* lists only
+   cutoffs since payroll started plus the one just ended.
+4. **Reduced motion** (OS setting on): dialogs and sheets open without animation; spinners still turn.
 
 ## Decisions made
 
 - Autonomy mode: Phase 1 did not stop for approval (second instruction overrides the first).
 - Work on branch `chore/modernization`, one commit per task, not pushed. Unrelated uncommitted seed
-  files are left out of every commit.
+  files are left out of every commit. Rebased onto master after the user asked.
 - Builds and measurements use `.env.e2e` (local throwaway DB), never `.env` (production).
-- Page titles set from the existing `usePageHeader` hook (`document.title`) rather than a
-  `layout.tsx` with `metadata` per route: 37 pages are client components and the header title is
-  already the single source of truth.
+- Port 4100 was held by another checkout's e2e server (`louella-nextJS-payroll-companies`); runs used
+  4200 through temporary, uncommitted edits, now reverted.
+- Page titles from the existing `usePageHeader` store (`document.title`), not per-route `layout.tsx`.
+- Payroll chart bars use `#C2570A`: the brand orange is 2.7:1 against the card (validator), under 3:1.
 
 ## Needs human decision
 
-- **Next.js 16.4.4 → 16.4.6** (patch, security advisories). Not done: dependency change.
-- **Server-side data fetching** for app pages: requires cookie-based auth on the server (the access
-  token is deliberately memory-only). Auth/data-layer change.
-- **Sidebar as `<Link>`**: real links would give middle-click/open-in-new-tab, but navigation goes
-  through `guardNavigation` (unsaved-changes guard). Changing it touches that guard on every page.
+- **Next.js 16.4.4 → 16.4.6** (patch, security advisories; `next build` stops on every other run).
+- **Brand orange contrast**: white text on `--primary` is ~2.9:1 (Lighthouse flags the login button).
+  Fixing it changes the brand colour.
+- **Server-side data fetching** for app pages: needs cookie-based auth on the server.
+- **Sidebar as `<Link>`**: would add open-in-new-tab, but touches the unsaved-changes guard.
 - **Content-Security-Policy**: still off (documented in `next.config.ts`); needs a nonce design.
 
 ## Blocked
 
-(none yet)
+(none)

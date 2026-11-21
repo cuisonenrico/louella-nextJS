@@ -10,8 +10,10 @@ Audit and decisions: `MODERNIZATION_AUDIT.md`.
 - [x] T4 Errors — `(app)/error.tsx` keeps the shell, retry
 - [x] T5 Performance — lazy-load recharts (dashboard, sales, rejections)
 - [x] T6 UX/a11y — aria-current, skip link, document titles, prefetch on hover/focus, reduced motion
-- [ ] T7 Cleanup
-- [ ] Verification — typecheck, lint, unit, build, e2e; after-metrics table
-- [ ] `/ux-review/` screenshots (mobile + desktop, loading + error states)
-- [ ] Lighthouse before/after (login + landing)
-- [ ] Final deliverable in `MODERNIZATION_AUDIT.md`
+- [x] T7 Cleanup
+- [x] Verification — typecheck, lint, unit, build, e2e; after-metrics table
+- [x] `/ux-review/` screenshots (mobile + desktop, loading + error states)
+- [x] Lighthouse before/after (login + landing)
+- [x] Final deliverable in `MODERNIZATION_AUDIT.md`
+- [x] Payroll UI revamp + dashboard (requested mid-run)
+- [x] Deadlock fix (autofill lock order)
