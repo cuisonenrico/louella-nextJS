@@ -110,7 +110,7 @@ export class InventoryWorkbookService {
       cash: cashByDay.get(day(d)) ?? { expenses: 0, vale: 0, actualCash: null, status: 'OPEN' },
     }));
 
-    const buffer = writeInventoryWorkbook({
+    const buffer = await writeInventoryWorkbook({
       branchName: branch.name,
       from,
       to,

@@ -4,6 +4,7 @@ import { test, expect } from '../fixtures/test';
 import type { Api } from '../fixtures/api';
 import { today, yesterday } from '../fixtures/dates';
 import { buildWorld, managerPage, type World } from '../fixtures/world';
+import { expectPrintable } from '../support/printable';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const sheetName = (date: string) => `${MONTHS[Number(date.slice(5, 7)) - 1]} ${date.slice(8, 10)}`;
@@ -48,9 +49,13 @@ test.describe('inventory XLSX export', () => {
     await dialog.getByRole('button', { name: 'Download XLSX' }).click();
     const download = await downloading;
     expect(download.suggestedFilename()).toMatch(/\.xlsx$/);
-    const wb = XLSX.read(readFileSync((await download.path())!), { type: 'buffer' });
+    const file = readFileSync((await download.path())!);
+    const wb = XLSX.read(file, { type: 'buffer' });
 
     expect(wb.SheetNames).toEqual([sheetName(yesterday()), sheetName(today()), 'Summary']);
+    // Ready to print like the paper sheet: landscape, one page wide, bold bordered headings.
+    await expectPrintable(file, sheetName(today()), { paper: 'letter', header: 'PRODUCTS' });
+    await expectPrintable(file, 'Summary', { paper: 'letter', header: 'PRODUCTS' });
 
     const y = wb.Sheets[sheetName(yesterday())];
     const r = rowOf(y, p.name);

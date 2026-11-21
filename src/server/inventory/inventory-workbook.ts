@@ -18,6 +18,7 @@
  */
 import * as XLSX from 'xlsx';
 import { centavos, pesos } from '../common/utils/decimal.util';
+import { setLayout, writePrintableWorkbook, type CellLook, type Region, type SheetLayout } from '../common/utils/printable-workbook';
 
 export type ProductType = 'BREAD' | 'CAKE' | 'SPECIAL' | 'MISCELLANEOUS';
 
@@ -117,6 +118,23 @@ const formula = (f: string, v: number, z?: string): Cell => ({ t: 'n', f, v, ...
 /** A sparse sheet writer: `put(row, col, cell)` with 1-based rows and 0-based columns. */
 class SheetBuilder {
   readonly ws: XLSX.WorkSheet = {};
+  readonly looks: SheetLayout['looks'] = [];
+  readonly frames: Region[] = [];
+
+  /** Style rows r1..r2, columns c1..c2 (inclusive) when printed. */
+  look(r1: number, r2: number, c1: number, c2: number, look: CellLook) {
+    if (r2 >= r1) this.looks.push({ r1, r2, c1, c2, look });
+  }
+
+  frame(r1: number, r2: number, c1: number, c2: number) {
+    if (r2 >= r1) this.frames.push({ r1, r2, c1, c2 });
+  }
+
+  /** Merge columns c1..c2 of one row (1-based row, 0-based columns). */
+  merge(row: number, c1: number, c2: number) {
+    const merges = (this.ws['!merges'] ??= []);
+    merges.push({ s: { r: row - 1, c: c1 }, e: { r: row - 1, c: c2 } });
+  }
   private maxRow = 1;
   private maxCol = 0;
 
@@ -127,7 +145,8 @@ class SheetBuilder {
     this.maxCol = Math.max(this.maxCol, col);
   }
 
-  finish(widths: number[]): XLSX.WorkSheet {
+  finish(widths: number[], page?: SheetLayout['page'], rowHeights?: Record<number, number>): XLSX.WorkSheet {
+    if (page) setLayout(this.ws, { looks: this.looks, frames: this.frames, page, rowHeights });
     this.ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: this.maxRow - 1, c: this.maxCol } });
     this.ws['!cols'] = widths.map((wch) => ({ wch }));
     return this.ws;
@@ -145,6 +164,7 @@ const DAY_HEADERS = [
   'PRODUCTS', 'PRICES', 'DELIVERY', 'TOTAL', 'LEFTOVER', 'TOTAL', 'REJECT', 'TOTAL',
   'PCS SOLD', 'YESTERDAY LO', 'PULL IN', 'PULL OUT', 'SALES', 'NOTE',
 ];
+const DAY_LAST = 13;
 const DAY_WIDTHS = [28, 9, 10, 11, 10, 11, 9, 10, 10, 13, 9, 10, 12, 12];
 
 function groupProducts(products: WorkbookProduct[]) {
@@ -186,13 +206,18 @@ function buildDaySheet(input: WorkbookInput, day: WorkbookDay) {
   s.put(1, 0, text(`BRANCH: ${input.branchName}`));
   s.put(1, 5, text('DATE:'));
   s.put(1, 6, number(serial(day.date), DATE));
+  s.merge(1, 6, 8); // wide enough for the date in bold
+  s.look(1, 1, 0, DAY_LAST, 'heading');
 
   let r = 3;
   const categories: CategoryTotals[] = [];
   for (const group of groupProducts(input.products)) {
     s.put(r, 0, text(TYPE_LABELS[group.type]));
+    s.look(r, r, 0, DAY_LAST, 'section');
     r += 1;
     DAY_HEADERS.forEach((h, c) => s.put(r, c, text(h)));
+    s.look(r, r, 0, DAY_LAST, 'header');
+    const headerRow = r;
     r += 1;
 
     const first = r;
@@ -246,6 +271,12 @@ function buildDaySheet(input: WorkbookInput, day: WorkbookDay) {
     }
     const last = r - 1;
 
+    s.look(first, r - 1, 0, DAY_LAST, 'body');
+    s.look(first, r - 1, C.sold, C.sold, 'bodyStrong');
+    s.look(first, r - 1, C.sales, C.sales, 'bodyStrong');
+    s.look(first, r - 1, C.note, C.note, 'muted');
+    s.look(r, r, 0, DAY_LAST, 'total');
+    s.frame(headerRow, r, 0, DAY_LAST);
     s.put(r, 0, text('TOTAL'));
     const sumOf = (c: number, v: number, z: string) =>
       s.put(r, c, formula(`SUM(${col(c)}${first}:${col(c)}${last})`, v, z));
@@ -273,6 +304,8 @@ function buildDaySheet(input: WorkbookInput, day: WorkbookDay) {
   // SUMMARY — one line per category, in pesos at current prices.
   const sumHeaders = ['SUMMARY', 'L/O START', 'DELIVERY', 'PULL IN', 'PULL OUT', 'REJECT', 'L/O END', 'SALES'];
   sumHeaders.forEach((h, c) => s.put(r, c, text(h)));
+  s.look(r, r, 0, 7, 'header');
+  const summaryHeader = r;
   r += 1;
   const summaryFirst = r;
   const range = (cat: CategoryTotals, c: number) => `${col(c)}${cat.first}:${col(c)}${cat.last}`;
@@ -289,6 +322,9 @@ function buildDaySheet(input: WorkbookInput, day: WorkbookDay) {
     r += 1;
   }
   const summaryLast = r - 1;
+  s.look(summaryFirst, summaryLast, 0, 7, 'body');
+  s.look(r, r, 0, 7, 'grandTotal');
+  s.frame(summaryHeader, r, 0, 7);
   s.put(r, 0, text('TOTAL'));
   const totalOf = (pick: (c: CategoryTotals) => number) =>
     pesos(categories.reduce((n, c) => n + centavos(pick(c)), 0));
@@ -301,42 +337,59 @@ function buildDaySheet(input: WorkbookInput, day: WorkbookDay) {
     const f = categories.length ? `SUM(${col(c)}${summaryFirst}:${col(c)}${summaryLast})` : '0';
     s.put(r, c, formula(f, totalOf(pick), PESO));
   });
-  const salesCell = `B${r + 2}`;
   const salesTotal = totalOf((c) => c.sales);
   const totalsRow = r;
-  r += 2;
+  // The drawer block sits beside the summary (labels J–L, figures M), so the
+  // bottom of the sheet is one short band that prints together.
+  r = summaryHeader;
+  const LBL = 9;
+  const VAL = C.sales;
+  const salesCell = `${col(VAL)}${r}`;
 
   // The bottom of the paper sheet: expected sales, then the drawer.
   const { expenses, vale, actualCash, status } = day.cash;
   const expected = pesos(centavos(salesTotal) - centavos(expenses) - centavos(vale));
-  s.put(r, 0, text('EXPECTED SALES (DAPAT BENTA)'));
-  s.put(r, 1, formula(`H${totalsRow}`, salesTotal, PESO));
+  s.put(r, LBL, text('EXPECTED SALES (DAPAT BENTA)'));
+  s.put(r, VAL, formula(`H${totalsRow}`, salesTotal, PESO));
   const cells: DayCells = {
     sheet: sheetNameFor(day.date),
     sales: salesCell,
-    expenses: `B${r + 1}`,
-    vale: `B${r + 2}`,
-    expected: `B${r + 3}`,
-    actual: `B${r + 4}`,
-    overShort: `B${r + 5}`,
+    expenses: `${col(VAL)}${r + 1}`,
+    vale: `${col(VAL)}${r + 2}`,
+    expected: `${col(VAL)}${r + 3}`,
+    actual: `${col(VAL)}${r + 4}`,
+    overShort: `${col(VAL)}${r + 5}`,
   };
-  s.put(r + 1, 0, text('LESS: EXPENSES'));
-  s.put(r + 1, 1, number(expenses, PESO));
-  s.put(r + 2, 0, text('LESS: VALE'));
-  s.put(r + 2, 1, number(vale, PESO));
-  s.put(r + 3, 0, text('EXPECTED CASH'));
-  s.put(r + 3, 1, formula(`${cells.sales}-${cells.expenses}-${cells.vale}`, expected, PESO));
-  s.put(r + 4, 0, text('ACTUAL CASH'));
-  if (actualCash !== null) s.put(r + 4, 1, number(actualCash, PESO));
-  else s.put(r + 4, 2, text('Not counted'));
-  s.put(r + 5, 0, text('SHORT / OVER'));
+  s.put(r + 1, LBL, text('LESS: EXPENSES'));
+  s.put(r + 1, VAL, number(expenses, PESO));
+  s.put(r + 2, LBL, text('LESS: VALE'));
+  s.put(r + 2, VAL, number(vale, PESO));
+  s.put(r + 3, LBL, text('EXPECTED CASH'));
+  s.put(r + 3, VAL, formula(`${cells.sales}-${cells.expenses}-${cells.vale}`, expected, PESO));
+  s.put(r + 4, LBL, text('ACTUAL CASH'));
+  if (actualCash !== null) s.put(r + 4, VAL, number(actualCash, PESO));
+  else s.put(r + 4, VAL, text('Not counted'));
+  s.put(r + 5, LBL, text('SHORT / OVER'));
   if (actualCash !== null) {
-    s.put(r + 5, 1, formula(`${cells.actual}-${cells.expected}`, pesos(centavos(actualCash) - centavos(expected)), PESO));
+    s.put(r + 5, VAL, formula(`${cells.actual}-${cells.expected}`, pesos(centavos(actualCash) - centavos(expected)), PESO));
   }
-  s.put(r + 6, 0, text('CASH DAY'));
-  s.put(r + 6, 1, text(status === 'VERIFIED' ? 'Verified' : 'Open'));
+  s.put(r + 6, LBL, text('CASH DAY'));
+  s.put(r + 6, VAL, text(status === 'VERIFIED' ? 'Verified' : 'Open'));
+  for (let i = 0; i <= 6; i++) s.merge(r + i, LBL, VAL - 1);
+  // The drawer block: labels bold, the two figures that settle the day stand out.
+  s.look(r, r + 6, LBL, VAL, 'body');
+  s.look(r, r + 6, LBL, VAL - 1, 'emphasis');
+  s.look(r + 3, r + 3, LBL, VAL, 'total');
+  s.look(r + 5, r + 5, LBL, VAL, 'grandTotal');
+  s.frame(r, r + 6, LBL, VAL);
 
-  return { ws: s.finish(DAY_WIDTHS), cells, salesTotal, expected };
+  const page: SheetLayout['page'] = {
+    orientation: 'landscape',
+    paper: 'letter',
+    repeatRows: [1, 1],
+    footer: [input.branchName, sheetNameFor(day.date), 'Page &P of &N'],
+  };
+  return { ws: s.finish(DAY_WIDTHS, page, { 1: 22 }), cells, salesTotal, expected };
 }
 
 const SUMMARY_WIDTHS = [28, 9, 10, 9, 10, 9, 10, 13, 13, 13];
@@ -352,6 +405,8 @@ function buildSummarySheet(
   s.put(2, 2, text('TO'));
   s.put(2, 3, number(serial(input.to), DATE));
   s.put(3, 0, text(`Prices as of ${input.pricedOn} (current prices on every day)`));
+  s.look(1, 1, 0, 9, 'heading');
+  s.look(2, 2, 0, 3, 'emphasis');
 
   // Per product, across the range.
   const byProduct = new Map<number, WorkbookRow[]>();
@@ -370,8 +425,11 @@ function buildSummarySheet(
   const totalRows: number[] = [];
   for (const group of groupProducts(input.products)) {
     s.put(r, 0, text(TYPE_LABELS[group.type]));
+    s.look(r, r, 0, 8, 'section');
     r += 1;
     headers.forEach((h, c) => s.put(r, c, text(h)));
+    s.look(r, r, 0, 8, 'header');
+    const headerRow = r;
     r += 1;
     const first = r;
     const acc = { delivery: 0, pullIn: 0, pullOut: 0, reject: 0, sold: 0, sales: 0, leftover: 0 };
@@ -407,6 +465,10 @@ function buildSummarySheet(
       r += 1;
     }
     const last = r - 1;
+    s.look(first, last, 0, 8, 'body');
+    s.look(first, last, 6, 7, 'bodyStrong');
+    s.look(r, r, 0, 8, 'total');
+    s.frame(headerRow, r, 0, 8);
     s.put(r, 0, text(`${TYPE_LABELS[group.type]} TOTAL`));
     const sum = (c: number, v: number, z?: string) => s.put(r, c, formula(`SUM(${col(c)}${first}:${col(c)}${last})`, v, z));
     sum(2, acc.delivery);
@@ -423,6 +485,8 @@ function buildSummarySheet(
   // Grand total of the category totals.
   if (totalRows.length) {
     s.put(r, 0, text('GRAND TOTAL'));
+    s.look(r, r, 0, 8, 'grandTotal');
+    s.frame(r, r, 0, 8);
     for (let c = 2; c <= 8; c++) {
       const f = totalRows.map((tr) => `${col(c)}${tr}`).join('+');
       const v = totalRows.reduce((n, tr) => {
@@ -437,6 +501,8 @@ function buildSummarySheet(
   // Per day: the cash block of each day sheet.
   const dayHeaders = ['DATE', 'SALES', 'EXPENSES', 'VALE', 'EXPECTED CASH', 'ACTUAL CASH', 'SHORT / OVER', 'CASH DAY'];
   dayHeaders.forEach((h, c) => s.put(r, c, text(h)));
+  s.look(r, r, 0, 7, 'header');
+  const dayHeader = r;
   r += 1;
   const firstDay = r;
   const acc = { sales: 0, expenses: 0, vale: 0, expected: 0, actual: 0, overShort: 0 };
@@ -465,6 +531,9 @@ function buildSummarySheet(
     r += 1;
   }
   const lastDayRow = r - 1;
+  s.look(firstDay, lastDayRow, 0, 7, 'body');
+  s.look(r, r, 0, 7, 'grandTotal');
+  s.frame(dayHeader, r, 0, 7);
   s.put(r, 0, text('TOTAL'));
   const daySum = (c: number, v: number) =>
     s.put(r, c, formula(days.length ? `SUM(${col(c)}${firstDay}:${col(c)}${lastDayRow})` : '0', pesos(v), PESO));
@@ -475,7 +544,16 @@ function buildSummarySheet(
   daySum(5, acc.actual);
   daySum(6, acc.overShort);
 
-  return s.finish(SUMMARY_WIDTHS);
+  return s.finish(
+    SUMMARY_WIDTHS,
+    {
+      orientation: 'landscape',
+      paper: 'letter',
+      repeatRows: [1, 3],
+      footer: [input.branchName, `Summary ${input.from} to ${input.to}`, 'Page &P of &N'],
+    },
+    { 1: 22 },
+  );
 }
 
 export function buildInventoryWorkbook(input: WorkbookInput): XLSX.WorkBook {
@@ -486,6 +564,7 @@ export function buildInventoryWorkbook(input: WorkbookInput): XLSX.WorkBook {
   return wb;
 }
 
-export function writeInventoryWorkbook(input: WorkbookInput): Buffer {
-  return XLSX.write(buildInventoryWorkbook(input), { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+/** The workbook as a formatted .xlsx, set up to print landscape, one page wide. */
+export function writeInventoryWorkbook(input: WorkbookInput): Promise<Buffer> {
+  return writePrintableWorkbook(buildInventoryWorkbook(input));
 }

@@ -27,6 +27,7 @@
  */
 import * as XLSX from 'xlsx';
 import { centavos, pesos } from '../common/utils/decimal.util';
+import { setLayout, type SheetLayout } from '../common/utils/printable-workbook';
 
 export const NO_COMPANY = 'No company';
 
@@ -207,7 +208,10 @@ const HEADER_BOTTOM: [number, string][] = [
 ];
 
 const MONEY = '#,##0.00;-#,##0.00;"-"';
-const WIDTHS = [4, 26, 8, 9, 11, 7, 10, 10, 10, 10, 10, 10, 12, 9, 10, 9, 9, 10, 10, 12, 20];
+/** The paper sheet always has this many numbered lines, blank ones left for hand entry. */
+export const MIN_ROWS = 24;
+// The signature column is wide enough to sign in, and to hold the period line above it.
+const WIDTHS = [4, 26, 8, 9, 11, 7, 10, 10, 10, 10, 10, 10, 12, 9, 10, 9, 9, 10, 10, 12, 28];
 
 const letter = (c: number) => XLSX.utils.encode_col(c);
 
@@ -267,7 +271,10 @@ function buildSheet(run: WorkbookRun, group: CompanyGroup, details: CompanyDetai
     });
   });
 
-  const last = first + group.slips.length - 1;
+  // Numbered blank lines up to the paper sheet's 24, as the client prints it.
+  const lines = Math.max(group.slips.length, MIN_ROWS);
+  for (let i = group.slips.length; i < lines; i++) put(first + i, COL.no, { t: 'n', v: i + 1 });
+  const last = first + lines - 1;
   const totalRow = last + 1;
   text(totalRow, COL.name, 'TOTAL');
   const netTotal = pesos(group.slips.reduce((acc, s) => acc + centavos(registerRow(s).net), 0));
@@ -289,6 +296,45 @@ function buildSheet(run: WorkbookRun, group: CompanyGroup, details: CompanyDetai
   ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: foot + 4, c: LAST_COL } });
   ws['!cols'] = WIDTHS.map((wch) => ({ wch }));
   ws['!merges'] = merges;
+
+  const all = (r1: number, r2: number, look: SheetLayout['looks'][number]['look']) => ({ r1, r2, c1: 0, c2: LAST_COL, look });
+  const cols = (r1: number, r2: number, c1: number, c2: number, look: SheetLayout['looks'][number]['look']) => ({ r1, r2, c1, c2, look });
+  setLayout(ws, {
+    looks: [
+      all(1, 1, 'title'),
+      cols(2, 2, COL.net, LAST_COL, 'headingRight'),
+      cols(4, 5, COL.name, LAST_COL, 'emphasis'),
+      all(top, top + 1, 'header'),
+      // The cells the paper sheet fills in blue.
+      ...[COL.name, COL.days].map((c) => cols(top, top + 1, c, c, 'headerAccent')),
+      cols(top, top + 1, COL.otHours, COL.overtime, 'headerAccent'),
+      cols(top, top + 1, COL.sss, COL.otherDeductions, 'headerAccent'),
+      all(first, last, 'body'),
+      // Bold on paper: who, basic, gross and what they take home.
+      ...[COL.name, COL.basic, COL.gross, COL.net].map((c) => cols(first, last, c, c, 'bodyStrong')),
+      all(totalRow, totalRow, 'grandTotal'),
+      cols(foot, foot + 2, 0, LAST_COL, 'emphasis'),
+      cols(foot + 4, foot + 4, COL.name, COL.name, 'signName'),
+      cols(foot + 4, foot + 4, COL.net, COL.net, 'signName'),
+      cols(foot + 5, foot + 5, COL.name, COL.name, 'signNote'),
+      cols(foot + 5, foot + 5, COL.net, COL.net, 'signNote'),
+      cols(foot + 4, foot + 4, COL.holiday, COL.holiday, 'signNote'),
+    ],
+    frames: [
+      { r1: top, r2: top + 1, c1: 0, c2: LAST_COL },
+      { r1: top, r2: totalRow, c1: 0, c2: LAST_COL },
+    ],
+    rowHeights: { 1: 30, [top]: 16, [top + 1]: 16 },
+    page: {
+      orientation: 'landscape',
+      // Long paper, as the client prints the payroll.
+      paper: 'legal',
+      // No repeated header rows: the 24-line sheet fits one long page, and the
+      // company name (often with an apostrophe) would break the print-titles name.
+      footer: [company, periodLabel(run.periodStart, run.periodEnd), 'Page &P of &N'],
+      freeze: { rows: top + 1, cols: COL.name + 1 },
+    },
+  });
   return ws;
 }
 

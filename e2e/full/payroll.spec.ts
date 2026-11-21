@@ -4,6 +4,7 @@ import { test, expect } from '../fixtures/test';
 import { Api } from '../fixtures/api';
 import { addDays, cutoffBefore, previousCutoff, workingDays, type Cutoff } from '../fixtures/dates';
 import { buildWorld, type World } from '../fixtures/world';
+import { expectPrintable } from '../support/printable';
 import { PayrollCutoffPage } from '../pages/payroll-cutoff.page';
 import { PayslipPage, PayslipPrintPage } from '../pages/payslip.page';
 import { money } from '../support/format';
@@ -206,9 +207,12 @@ test.describe('payroll by company', () => {
     await page.getByRole('menuitem', { name: company.name, exact: true }).click();
     const download = await downloading;
     expect(download.suggestedFilename()).toMatch(new RegExp(`^payroll-${cutoff.periodStart}-.+\\.xlsx$`));
-    const wb = XLSX.read(readFileSync((await download.path())!), { type: 'buffer' });
+    const file = readFileSync((await download.path())!);
+    const wb = XLSX.read(file, { type: 'buffer' });
     // Only this company: its file shows nobody else's pay.
     expect(wb.SheetNames).toHaveLength(1);
+    // Printed like the client's paper payroll: landscape on long paper, bold bordered headings.
+    await expectPrintable(file, wb.SheetNames[0], { paper: 'legal', header: 'SALARY' });
     const rows = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[wb.SheetNames[0]], { header: 1, blankrows: true, defval: null });
     const flat = rows.flat();
     expect(flat).toContain('P A Y R O L L');

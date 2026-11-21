@@ -27,11 +27,11 @@ const input: WorkbookInput = {
   ],
 };
 
-/** The row whose column A reads `label` (1-based row number), on a sheet. */
+/** The row whose column A (or J, the cash block's labels) reads `label` (1-based row number), on a sheet. */
 function rowOf(ws: XLSX.WorkSheet, label: string): number {
   const range = XLSX.utils.decode_range(ws['!ref']!);
   for (let r = range.s.r; r <= range.e.r; r++) {
-    if (ws[XLSX.utils.encode_cell({ r, c: 0 })]?.v === label) return r + 1;
+    for (const c of [0, 9]) if (ws[XLSX.utils.encode_cell({ r, c })]?.v === label) return r + 1;
   }
   throw new Error(`no row "${label}"`);
 }
@@ -69,16 +69,18 @@ describe('buildInventoryWorkbook', () => {
     expect(v(oct30, `M${totals[1]}`)).toBe(6 * 28);
     const sales = 270 + 168;
     const r = rowOf(oct30, 'EXPECTED SALES (DAPAT BENTA)');
-    expect(v(oct30, `B${r}`)).toBe(sales);
-    expect(v(oct30, `B${rowOf(oct30, 'EXPECTED CASH')}`)).toBe(sales - 100.5 - 50);
-    expect(v(oct30, `B${rowOf(oct30, 'SHORT / OVER')}`)).toBe(400 - (sales - 150.5));
-    expect(v(oct30, `B${rowOf(oct30, 'CASH DAY')}`)).toBe('Verified');
+    // The drawer block sits beside the summary: labels in J, figures in M.
+    expect(r).toBe(rowOf(oct30, 'SUMMARY'));
+    expect(v(oct30, `M${r}`)).toBe(sales);
+    expect(v(oct30, `M${rowOf(oct30, 'EXPECTED CASH')}`)).toBe(sales - 100.5 - 50);
+    expect(v(oct30, `M${rowOf(oct30, 'SHORT / OVER')}`)).toBe(400 - (sales - 150.5));
+    expect(v(oct30, `M${rowOf(oct30, 'CASH DAY')}`)).toBe('Verified');
   });
 
   it('a day without rows still gets its sheet, cash not counted', () => {
     const oct31 = wb.Sheets['Oct 31'];
-    expect(v(oct31, `B${rowOf(oct31, 'EXPECTED SALES (DAPAT BENTA)')}`)).toBe(0);
-    expect(v(oct31, `C${rowOf(oct31, 'ACTUAL CASH')}`)).toBe('Not counted');
+    expect(v(oct31, `M${rowOf(oct31, 'EXPECTED SALES (DAPAT BENTA)')}`)).toBe(0);
+    expect(v(oct31, `M${rowOf(oct31, 'ACTUAL CASH')}`)).toBe('Not counted');
   });
 
   it('summarises the range per product and per day', () => {
@@ -88,7 +90,7 @@ describe('buildInventoryWorkbook', () => {
     expect(v(sum, `H${p}`)).toBe(270);
     expect(v(sum, `H${rowOf(sum, 'GRAND TOTAL')}`)).toBe(438);
     const days = rowOf(sum, 'DATE');
-    expect(sum[`B${days + 1}`]).toMatchObject({ f: expect.stringMatching(/^'Oct 30'!B\d+$/), v: 438 });
+    expect(sum[`B${days + 1}`]).toMatchObject({ f: expect.stringMatching(/^'Oct 30'!M\d+$/), v: 438 });
     expect(v(sum, `F${days + 2}`)).toBe('Not counted');
   });
 
@@ -119,8 +121,17 @@ describe('buildInventoryWorkbook', () => {
     expect(v(d2, `N${r2}`)).toBe('Equipment');
   });
 
-  it('writes a readable xlsx', () => {
-    const back = XLSX.read(writeInventoryWorkbook(input), { type: 'buffer' });
+  it('writes a readable xlsx, formulas keeping their values', async () => {
+    const back = XLSX.read(await writeInventoryWorkbook(input), { type: 'buffer' });
     expect(back.SheetNames).toEqual(['Oct 30', 'Oct 31', 'Summary']);
+    // Every formula still carries the figure computed here, as the builder wrote it.
+    const built = buildInventoryWorkbook(input).Sheets['Oct 30'];
+    const day = back.Sheets['Oct 30'];
+    const formulas = Object.entries(built).filter(([k, c]) => !k.startsWith('!') && (c as XLSX.CellObject).f);
+    expect(formulas.length).toBeGreaterThan(10);
+    for (const [addr, c] of formulas) {
+      expect(day[addr].f).toBe((c as XLSX.CellObject).f);
+      expect(day[addr].v).toBe((c as XLSX.CellObject).v);
+    }
   });
 });

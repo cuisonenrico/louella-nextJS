@@ -156,9 +156,12 @@ describe('buildPayrollWorkbook', () => {
     expect(rows[7][12]).toBe(7800.1); // gross
     expect(rows[7][19]).toBe(7800.1); // net
     expect(rows[8].slice(0, 4)).toEqual([2, 'Diaz, Ben', 12.5, 520]);
-    expect(rows[9][1]).toBe('TOTAL');
-    expect(rows[9][19]).toBe(14300.3);
-    expect(ws['T10'].f).toBe('SUM(T8:T9)');
+    // Numbered blank lines fill the sheet to the paper's 24, then the total.
+    expect(rows[9].slice(0, 2)).toEqual([3, null]);
+    expect(rows[30][0]).toBe(24);
+    expect(rows[31][1]).toBe('TOTAL');
+    expect(rows[31][19]).toBe(14300.3);
+    expect(ws['T32'].f).toBe('SUM(T8:T31)');
     expect(ws['M8'].f).toBe('SUM(E8:L8)');
     expect(ws['T8'].f).toBe('M8-SUM(N8:S8)');
     const flat = rows.flat();
