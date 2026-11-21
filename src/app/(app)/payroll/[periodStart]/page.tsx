@@ -24,6 +24,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import QueryError from '@/components/QueryError';
 import { AdjustmentDialog, type AdjustmentInput } from '../_components/AdjustmentDialog';
 import { CutoffTable, type SlipRow } from '../_components/CutoffTable';
+import { EmployeeInputsDialog, type EmployeeInputsTarget } from '../_components/EmployeeInputsDialog';
 import { FinalizeBar } from '../_components/FinalizeBar';
 import { HolidaysPanel } from '../_components/HolidaysPanel';
 import { RunActions } from '../_components/RunActions';
@@ -42,6 +43,7 @@ export default function CutoffPage() {
   const [query, setQuery] = useState('');
   const [company, setCompany] = useState('');
   const [warningsOnly, setWarningsOnly] = useState(false);
+  const [inputsTarget, setInputsTarget] = useState<EmployeeInputsTarget | null>(null);
   usePageHeader({ title: valid ? `Payroll · ${formatCutoff(cutoffOf(periodStart))}` : 'Payroll' });
 
   const { data, isLoading, isError, error, refetch } = useQuery({
@@ -184,6 +186,7 @@ export default function CutoffPage() {
               onAdd: (row, kind) => setTarget({ employeeId: row.employeeId, employeeName: row.employeeName, kind }),
               onRemoveAdjustment: (id) => removeAdjustment.mutate(id),
               onToggleSkip: (row, recurring) => toggleSkip.mutate({ employeeId: row.employeeId, recurring }),
+              onEditInputs: (row, tab) => setInputsTarget({ employeeId: row.employeeId, employeeName: row.employeeName, tab }),
             }}
           />
           {/* Stays in reach at the end of a long list; totals are always the whole cutoff. */}
@@ -195,6 +198,10 @@ export default function CutoffPage() {
 
       {data.run && (
         <CutoffTable rows={rows} emptyText={filtered ? 'No employee matches these filters.' : undefined} />
+      )}
+
+      {inputsTarget && (
+        <EmployeeInputsDialog target={inputsTarget} periodStart={periodStart} onClose={() => setInputsTarget(null)} />
       )}
 
       {target && (

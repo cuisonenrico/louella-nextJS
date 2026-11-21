@@ -4,6 +4,7 @@ import { Fragment, useState } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, ChevronDown, ChevronRight, Minus, Plus, Trash2 } from 'lucide-react';
 import type { DraftPayslip, PayslipLineView, PayslipWarning } from '@/types';
+import type { EmployeeInputsTab } from './EmployeeInputsDialog';
 import { peso } from '@/lib/payroll/format';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -36,19 +37,31 @@ export interface CutoffTableActions {
   onAdd: (row: SlipRow, kind: 'ADDITION' | 'DEDUCTION') => void;
   onRemoveAdjustment: (adjustmentId: number) => void;
   onToggleSkip: (row: SlipRow, recurring: DraftPayslip['recurring'][number]) => void;
+  /** Opens the employee's absences / rates / deductions over the page. */
+  onEditInputs: (row: SlipRow, tab: EmployeeInputsTab) => void;
   busy: boolean;
 }
 
-function WarningBadges({ row }: { row: SlipRow }) {
+function WarningBadges({ row, actions }: { row: SlipRow; actions?: CutoffTableActions }) {
   return (
     <>
       {(row.warnings ?? []).map((w) =>
         w.code === 'MISSING_RATE' ? (
           <Badge key={w.code} variant="destructive" className="gap-1">
             <AlertTriangle className="h-3 w-3" />
-            <Link href={`/employees/${row.employeeId}`} onClick={(e) => e.stopPropagation()}>
-              No rate for {w.dates.length} day{w.dates.length === 1 ? '' : 's'}
-            </Link>
+            {actions ? (
+              <button
+                type="button"
+                className="underline-offset-2 hover:underline"
+                onClick={(e) => { e.stopPropagation(); actions.onEditInputs(row, 'rates'); }}
+              >
+                No rate for {w.dates.length} day{w.dates.length === 1 ? '' : 's'}
+              </button>
+            ) : (
+              <Link href={`/employees/${row.employeeId}`} onClick={(e) => e.stopPropagation()}>
+                No rate for {w.dates.length} day{w.dates.length === 1 ? '' : 's'}
+              </Link>
+            )}
           </Badge>
         ) : w.code === 'NEGATIVE_NET' ? (
           <Badge key={w.code} variant="destructive">Net pay below zero</Badge>
@@ -127,7 +140,7 @@ function LineDetails({ row, actions }: { row: SlipRow; actions?: CutoffTableActi
         <div className="flex flex-wrap gap-2 border-t pt-2">
           <Button size="sm" variant="outline" onClick={() => actions.onAdd(row, 'ADDITION')}><Plus className="mr-1 h-4 w-4" />Addition</Button>
           <Button size="sm" variant="outline" onClick={() => actions.onAdd(row, 'DEDUCTION')}><Minus className="mr-1 h-4 w-4" />Deduction</Button>
-          <Button size="sm" variant="ghost" asChild><Link href={`/employees/${row.employeeId}`}>Absences &amp; rates</Link></Button>
+          <Button size="sm" variant="ghost" onClick={() => actions.onEditInputs(row, 'absences')}>Absences &amp; rates</Button>
         </div>
       ) : (
         row.payslipId !== undefined && (
@@ -194,7 +207,7 @@ export function CutoffTable({
                         {row.branchName ? ` · ${row.branchName}` : ''}
                         {row.companyName ? ` · ${row.companyName}` : ''}
                       </div>
-                      <div className="mt-1 flex flex-wrap gap-1"><WarningBadges row={row} /></div>
+                      <div className="mt-1 flex flex-wrap gap-1"><WarningBadges row={row} actions={actions} /></div>
                     </TableCell>
                     <TableCell className="text-right tabular-nums">{row.workingDays}</TableCell>
                     <TableCell className="text-right tabular-nums">{row.absenceDays}</TableCell>
@@ -240,7 +253,7 @@ export function CutoffTable({
                 </span>
                 <span className={cn('font-semibold tabular-nums', row.netPay < 0 && 'text-destructive')}>{peso(row.netPay)}</span>
               </button>
-              <div className="mt-1 flex flex-wrap gap-1"><WarningBadges row={row} /></div>
+              <div className="mt-1 flex flex-wrap gap-1"><WarningBadges row={row} actions={actions} /></div>
               {expanded && <div className="mt-3 border-t pt-3"><LineDetails row={row} actions={actions} /></div>}
             </div>
           );

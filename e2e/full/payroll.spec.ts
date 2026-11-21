@@ -95,6 +95,44 @@ test.describe('payroll', () => {
         await expect(payroll.net(c.employeeName)).toHaveText(money(c.expectedNet));
       });
 
+      if (index === 0) {
+        test('absences & rates open over the cutoff, and the draft follows each change', async ({ page }) => {
+          const c = cases[index];
+          const employee = c.world.employees[0];
+          const day = workingDays(cutoff, employee.restDays)[2]; // not the absence or the holiday set up above
+          const payroll = new PayrollCutoffPage(page);
+          await payroll.open(cutoff.periodStart);
+          await expect(payroll.absent(c.employeeName)).toHaveText('1');
+
+          let dialog = await payroll.openInputs(c.employeeName);
+          await expect(page).toHaveURL(new RegExp(`/payroll/${cutoff.periodStart}$`)); // stayed on the cutoff
+          const marked = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith('/api/v1/absences'));
+          await dialog.getByRole('button', { name: day, exact: true }).click(); // the calendar opens on the cutoff's month
+          expect((await marked).ok()).toBe(true);
+          await expect(dialog.getByRole('button', { name: day, exact: true })).toHaveAttribute('aria-pressed', 'true');
+          await page.keyboard.press('Escape');
+          await expect(dialog).toBeHidden();
+
+          // Back where the admin left off — same page, row still expanded, no reload — and the draft has
+          // already moved: one more absent day, one daily rate less.
+          await expect(page).toHaveURL(new RegExp(`/payroll/${cutoff.periodStart}$`));
+          await expect(page.getByRole('button', { name: 'Absences & rates' })).toBeVisible();
+          await expect(payroll.absent(c.employeeName)).toHaveText('2');
+          await expect(payroll.net(c.employeeName)).toHaveText(money(c.expectedNet - employee.dailyRate));
+
+          // Clear it again the same way, leaving the cutoff as the other tests expect it.
+          await page.getByRole('button', { name: 'Absences & rates' }).click();
+          dialog = page.getByRole('dialog', { name: c.employeeName });
+          const cleared = page.waitForResponse((r) => r.request().method() === 'DELETE' && /\/api\/v1\/absences\/\d+$/.test(r.url()));
+          await dialog.getByRole('button', { name: day, exact: true }).click();
+          expect((await cleared).ok()).toBe(true);
+          await page.keyboard.press('Escape');
+          await expect(dialog).toBeHidden();
+          await expect(payroll.absent(c.employeeName)).toHaveText('1');
+          await expect(payroll.net(c.employeeName)).toHaveText(money(c.expectedNet));
+        });
+      }
+
       test('finalize freezes the payslip, and the print page lists it', async ({ page, api }) => {
         const c = cases[index];
         const payroll = new PayrollCutoffPage(page);
