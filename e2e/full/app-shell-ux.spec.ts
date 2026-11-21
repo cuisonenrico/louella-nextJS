@@ -27,10 +27,11 @@ test.describe('app shell', () => {
     await expect(page).toHaveTitle('Suppliers · Louella Bakery');
   });
 
-  test('a keyboard user can skip the sidebar straight to the page', async ({ page }) => {
+  test('a keyboard user can skip the sidebar straight to the page', async ({ page, browserName }) => {
     await page.goto('/dashboard');
     await expect(sidebar(page)).toBeVisible();
-    await page.keyboard.press('Tab');
+    // WebKit, like Safari, moves Tab past links unless Option is held.
+    await page.keyboard.press(browserName === 'webkit' ? 'Alt+Tab' : 'Tab');
     const skip = page.getByRole('link', { name: 'Skip to content' });
     await expect(skip).toBeFocused();
     await page.keyboard.press('Enter');
