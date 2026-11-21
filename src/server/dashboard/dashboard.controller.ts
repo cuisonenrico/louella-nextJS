@@ -1,5 +1,6 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
+import { manilaToday } from '@/lib/manilaDate';
 import { DashboardService } from './dashboard.service';
 import { DashboardQueryDto } from './dto/dashboard-query.dto';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -25,7 +26,8 @@ export class DashboardController {
     @Query() query: DashboardQueryDto,
     @Query('branchId') branchIdStr?: string,
   ) {
-    const date = query.date ?? new Date().toISOString().slice(0, 10);
+    // Manila's day: Vercel runs in UTC, which is yesterday until 08:00 Manila.
+    const date = query.date ?? manilaToday();
     // BranchGuard injects the manager's own branchId; admins/head-office may
     // pass one explicitly. Production figures are scoped to it when present.
     const branchId =

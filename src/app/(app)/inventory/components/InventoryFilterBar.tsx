@@ -2,6 +2,7 @@
 
 import { ChevronLeft, ChevronRight, Calendar, CalendarRange, CalendarDays, Download, Upload } from 'lucide-react';
 import type { Branch } from '@/types';
+import { addDays } from '@/lib/manilaDate';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
@@ -121,13 +122,13 @@ export default function InventoryFilterBar({
         {dateMode === 'range' && (
           <>
             <Button size="sm" variant="ghost" onClick={() => {
-              const from = new Date(); from.setDate(from.getDate() - 6);
-              const fromStr = from.toISOString().slice(0, 10);
+              // From `today` (Manila) by string arithmetic. A device Date shifted
+              // through toISOString() lands on the previous UTC day in Manila.
+              const fromStr = addDays(today, -6);
               onDraftFromChange(fromStr); onDraftToChange(today); onCommitDates(fromStr, today);
             }}>Last 7d</Button>
             <Button size="sm" variant="ghost" onClick={() => {
-              const now = new Date();
-              const fromStr = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+              const fromStr = `${today.slice(0, 7)}-01`;
               onDraftFromChange(fromStr); onDraftToChange(today); onCommitDates(fromStr, today);
             }}>This Month</Button>
           </>

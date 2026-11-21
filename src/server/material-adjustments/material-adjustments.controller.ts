@@ -42,7 +42,7 @@ export class MaterialAdjustmentsController {
   @Delete(':id')
   @RequireFeature('material-stock:adjust')
   @Roles(UserRole.INVENTORY)
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.service.remove(id);
+  remove(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: { id: number }) {
+    return this.service.remove(id, user?.id);
   }
 }

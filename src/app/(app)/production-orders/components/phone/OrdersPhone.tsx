@@ -18,7 +18,7 @@ interface OrdersPhoneProps {
   today: string;
   filterDate: string;
   onDateChange: (date: string) => void;
-  isAdmin: boolean;
+  seesAllBranches: boolean;
   activeBranches: Branch[];
   activeBranchId: number | null;
   onBranchChange: (id: number) => void;
@@ -73,7 +73,7 @@ export default function OrdersPhone(props: OrdersPhoneProps) {
   return (
     <>
       <div className="-mx-4 -mt-4 mb-3 flex flex-col gap-2 border-b bg-background px-2 py-2">
-        {props.isAdmin && props.activeBranches.length > 1 ? (
+        {props.seesAllBranches && props.activeBranches.length > 1 ? (
           <Select value={props.activeBranchId ? String(props.activeBranchId) : undefined} onValueChange={(v) => props.onBranchChange(Number(v))}>
             <SelectTrigger className="h-11 w-full" aria-label="Branch">
               <SelectValue placeholder="Select branch" />

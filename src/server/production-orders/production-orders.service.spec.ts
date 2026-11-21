@@ -22,6 +22,7 @@ describe('ProductionOrdersService', () => {
       updateMany: jest.Mock;
     };
     $queryRaw: jest.Mock;
+    auditEvent: { createMany: jest.Mock };
     production: { upsert: jest.Mock };
     $transaction: jest.Mock;
   };
@@ -44,6 +45,7 @@ describe('ProductionOrdersService', () => {
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       $queryRaw: jest.fn().mockResolvedValue([]),
+      auditEvent: { createMany: jest.fn() },
       production: { upsert: jest.fn() },
       $transaction: jest
         .fn()
@@ -264,11 +266,96 @@ describe('ProductionOrdersService', () => {
       expect(inventoryService.addDeliveryInTx).not.toHaveBeenCalled();
     });
 
-    it('books nothing on an ordinary edit', async () => {
+    it('books nothing on an ordinary edit, but still claims the order as a DRAFT', async () => {
       await service.update(5, { notes: 'more rolls' } as never);
 
-      expect(prisma.productionOrder.updateMany).not.toHaveBeenCalled();
+      expect(prisma.productionOrder.updateMany).toHaveBeenCalledWith({
+        where: { id: 5, status: 'DRAFT', deletedAt: null },
+        data: { status: 'DRAFT' },
+      });
       expect(productionService.addOrderYield).not.toHaveBeenCalled();
+    });
+
+    // The edit's status check ran before the transaction; a finalize can
+    // commit in between. The edit must not then rewrite the booked items.
+    it('refuses an edit when the order was finalized after the check', async () => {
+      prisma.productionOrder.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.update(5, { items: [{ productId: 1, yield: 80 }] } as never),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.productionOrder.update).not.toHaveBeenCalled();
+    });
+  });
+
+  it("records each version of a draft's lines when it is edited", async () => {
+    prisma.productionOrder.findFirst.mockResolvedValue({
+      id: 7, status: 'DRAFT', branchId: 2, notes: null, date: new Date(0), deletedAt: null,
+      items: [{ productId: 1, yield: 10 }],
+    });
+    prisma.productionOrder.update.mockResolvedValue({
+      id: 7, status: 'DRAFT', branchId: 2, notes: null, date: new Date(0), deletedAt: null,
+      items: [{ productId: 1, yield: 14 }, { productId: 3, yield: 2 }],
+    });
+
+    await service.update(7, { items: [{ productId: 1, yield: 14 }, { productId: 3, yield: 2 }] } as never, undefined, 9);
+
+    expect(prisma.auditEvent.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          entity: 'ProductionOrder',
+          entityId: 7,
+          action: 'update',
+          userId: 9,
+          changes: { items: ['1×10', '1×14, 3×2'] },
+        }),
+      ],
+    });
+  });
+
+  describe('cancel', () => {
+    beforeEach(() => {
+      prisma.productionOrder.findFirst.mockResolvedValue({ id: 5, status: 'DRAFT', branchId: 2 });
+    });
+
+    it('cancels only while the order is still a DRAFT, in one statement', async () => {
+      (prisma.productionOrder as unknown as { findUniqueOrThrow: jest.Mock }).findUniqueOrThrow = jest
+        .fn()
+        .mockResolvedValue({ id: 5, status: 'CANCELLED' });
+
+      await service.remove(5);
+
+      expect(prisma.productionOrder.updateMany).toHaveBeenCalledWith({
+        where: { id: 5, status: 'DRAFT', deletedAt: null },
+        data: { status: 'CANCELLED', deletedAt: expect.any(Date) },
+      });
+      expect(prisma.productionOrder.update).not.toHaveBeenCalled();
+    });
+
+    it('records the cancellation, with who did it, in the change history', async () => {
+      (prisma.productionOrder as unknown as { findUniqueOrThrow: jest.Mock }).findUniqueOrThrow = jest
+        .fn()
+        .mockResolvedValue({ id: 5, status: 'CANCELLED', branchId: 2, notes: null, date: new Date(0), deletedAt: new Date(1), items: [] });
+
+      await service.remove(5, undefined, 42);
+
+      expect(prisma.auditEvent.createMany).toHaveBeenCalledWith({
+        data: [
+          expect.objectContaining({
+            entity: 'ProductionOrder',
+            entityId: 5,
+            action: 'delete',
+            userId: 42,
+            changes: expect.objectContaining({ status: ['DRAFT', 'CANCELLED'] }),
+          }),
+        ],
+      });
+    });
+
+    it('refuses to cancel an order finalized after the check', async () => {
+      prisma.productionOrder.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(service.remove(5)).rejects.toThrow(ConflictException);
     });
   });
 });

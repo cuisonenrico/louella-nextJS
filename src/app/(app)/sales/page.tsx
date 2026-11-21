@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Loader2, TrendingUp, ShoppingCart, Truck, AlertTriangle, Calendar, MapPin, BarChart3, Download, Trophy } from 'lucide-react';
 import dayjs from 'dayjs';
+import { addDays, manilaToday } from '@/lib/manilaDate';
 import { usePageHeader } from '@/components/layout/usePageHeader';
 import { inventoryApi, branchesApi } from '@/lib/apiServices';
 import type { Branch } from '@/types';
@@ -33,8 +34,8 @@ function getDayStatus(sold: number, allSold: number[]): { label: string; classNa
 }
 
 export default function SalesPage() {
-  const today = dayjs().format('YYYY-MM-DD');
-  const weekAgo = dayjs().subtract(7, 'day').format('YYYY-MM-DD');
+  const today = manilaToday();
+  const weekAgo = addDays(manilaToday(), -7);
   const [branchId, setBranchId] = useState('');
   const [startDate, setStartDate] = useState(weekAgo);
   const [endDate, setEndDate] = useState(today);

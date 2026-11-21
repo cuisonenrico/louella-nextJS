@@ -28,7 +28,9 @@ export type AuditEntity =
   | 'BranchCashDay'
   | 'Holiday'
   | 'HolidayRestDayWork'
-  | 'PayrollSettings';
+  | 'PayrollSettings'
+  | 'ProductionOrder'
+  | 'MaterialAdjustment';
 
 export type AuditAction =
   | 'create'
@@ -57,6 +59,10 @@ export const AUDITED_FIELDS: Record<AuditEntity, readonly string[]> = {
   Holiday: ['date', 'name', 'type', 'isClosed', 'deletedAt'],
   HolidayRestDayWork: ['holidayId', 'employeeId', 'deletedAt'],
   PayrollSettings: ['regularHolidayMultiplier', 'specialHolidayMultiplier'],
+  // `items` is a snapshot string (orderAuditRow): a draft's lines are replaced on edit,
+  // so the history keeps what each version ordered.
+  ProductionOrder: ['branchId', 'date', 'status', 'notes', 'items', 'deletedAt'],
+  MaterialAdjustment: ['materialInventoryId', 'type', 'value', 'notes', 'deletedAt'],
 };
 
 type Row = Record<string, unknown> | null | undefined;

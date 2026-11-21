@@ -9,6 +9,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ProductionService } from '../production/production.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { toUtcDay } from '../common/utils/date-range.util';
+import { recordChanges } from '../common/utils/audit.util';
+import { lockInventoryChains } from '../common/utils/stock-chain';
 import { CreateProductionOrderDto } from './dto/create-production-order.dto';
 import { UpdateProductionOrderDto } from './dto/update-production-order.dto';
 
@@ -18,6 +20,31 @@ import { UpdateProductionOrderDto } from './dto/update-production-order.dto';
  * interactive transaction. Prisma's 5 s default is too tight for a full order.
  */
 const FINALIZE_TX_OPTIONS = { timeout: 30_000, maxWait: 10_000 };
+
+type OrderLike = {
+  branchId: number | null;
+  date: Date;
+  status: string;
+  notes: string | null;
+  deletedAt: Date | null;
+  items?: Array<{ productId: number; yield: number }>;
+};
+
+/** What the change history records for an order: its fields plus its lines as one string. */
+export function orderAuditRow(order: OrderLike) {
+  const items = [...(order.items ?? [])]
+    .sort((a, b) => a.productId - b.productId)
+    .map((i) => `${i.productId}×${i.yield}`)
+    .join(', ');
+  return {
+    branchId: order.branchId,
+    date: order.date,
+    status: order.status,
+    notes: order.notes,
+    deletedAt: order.deletedAt,
+    items,
+  };
+}
 
 @Injectable()
 export class ProductionOrdersService {
@@ -55,20 +82,28 @@ export class ProductionOrdersService {
     await this.assertNoEquipment(dto.items);
     await this.ensureInventoryForDate(dto.branchId, dto.date);
 
-    return this.prisma.productionOrder.create({
-      data: {
-        branchId: dto.branchId,
-        date: toUtcDay(dto.date),
-        notes: dto.notes,
-        createdById: userId,
-        items: {
-          create: dto.items.map((item) => ({
-            productId: item.productId,
-            yield: item.yield ?? 0,
-          })),
+    return this.prisma.$transaction(async (tx) => {
+      const order = await tx.productionOrder.create({
+        data: {
+          branchId: dto.branchId,
+          date: toUtcDay(dto.date),
+          notes: dto.notes,
+          createdById: userId,
+          items: {
+            create: dto.items.map((item) => ({
+              productId: item.productId,
+              yield: item.yield ?? 0,
+            })),
+          },
         },
-      },
-      include: this.defaultInclude,
+        include: this.defaultInclude,
+      });
+      await recordChanges(
+        tx,
+        [{ entity: 'ProductionOrder', entityId: order.id, before: null, after: orderAuditRow(order) }],
+        userId,
+      );
+      return order;
     });
   }
 
@@ -141,20 +176,22 @@ export class ProductionOrdersService {
     // Order edit and finalization commit together, so an order can never be
     // FINALIZED without its yield, deliveries and material use booked.
     return this.prisma.$transaction(async (tx) => {
-      if (isBeingFinalized) {
-        // Claim the transition before booking anything. Finalizing *adds*
-        // stock, so a second finalize (a double-click, a retry) must not get
-        // through the status check above, which ran outside this transaction.
-        // Only one request can move the row off DRAFT.
-        const claimed = await tx.productionOrder.updateMany({
-          where: { id, status: ProductionOrderStatus.DRAFT, deletedAt: null },
-          data: { status: ProductionOrderStatus.FINALIZED },
-        });
-        if (claimed.count !== 1) {
-          throw new ConflictException(
-            'This production order was already finalized or cancelled.',
-          );
-        }
+      // Claim the draft before writing anything. The status checks above ran
+      // outside this transaction, so a finalize, an edit and a cancel can all
+      // pass them at once. This conditional update row-locks the order and
+      // matches only while it is still a DRAFT, so exactly one of them wins:
+      // no second finalize books stock twice, and no edit rewrites the items
+      // of an order whose stock was just booked.
+      const claimed = await tx.productionOrder.updateMany({
+        where: { id, status: ProductionOrderStatus.DRAFT, deletedAt: null },
+        data: {
+          status: isBeingFinalized ? ProductionOrderStatus.FINALIZED : ProductionOrderStatus.DRAFT,
+        },
+      });
+      if (claimed.count !== 1) {
+        throw new ConflictException(
+          'This production order was already finalized or cancelled.',
+        );
       }
 
       const order = await tx.productionOrder.update({
@@ -177,6 +214,12 @@ export class ProductionOrdersService {
         },
         include: this.defaultInclude,
       });
+
+      await recordChanges(
+        tx,
+        [{ entity: 'ProductionOrder', entityId: id, before: orderAuditRow(existing), after: orderAuditRow(order) }],
+        userId,
+      );
 
       if (isBeingFinalized) {
         // The order as just saved: its items and, if this same request moved
@@ -224,17 +267,35 @@ export class ProductionOrdersService {
     }
   }
 
-  async remove(id: number, branchScope?: number) {
+  async remove(id: number, branchScope?: number, userId?: number) {
     const existing = await this.findOne(id, branchScope);
     if (existing.status === ProductionOrderStatus.FINALIZED) {
       throw new BadRequestException(
         'Cannot delete a finalized production order',
       );
     }
-    return this.prisma.productionOrder.update({
-      where: { id },
-      data: { status: ProductionOrderStatus.CANCELLED, deletedAt: new Date() },
-      include: this.defaultInclude,
+    // Cancel only while it is still a DRAFT, in one statement: a finalize that
+    // committed after the check above must not be cancelled with its stock booked.
+    return this.prisma.$transaction(async (tx) => {
+      const cancelled = await tx.productionOrder.updateMany({
+        where: { id, status: ProductionOrderStatus.DRAFT, deletedAt: null },
+        data: { status: ProductionOrderStatus.CANCELLED, deletedAt: new Date() },
+      });
+      if (cancelled.count !== 1) {
+        throw new ConflictException(
+          'This production order was already finalized or cancelled.',
+        );
+      }
+      const order = await tx.productionOrder.findUniqueOrThrow({
+        where: { id },
+        include: this.defaultInclude,
+      });
+      await recordChanges(
+        tx,
+        [{ entity: 'ProductionOrder', entityId: id, before: orderAuditRow(existing), after: orderAuditRow(order), action: 'delete' }],
+        userId,
+      );
+      return order;
     });
   }
 
@@ -311,38 +372,43 @@ export class ProductionOrdersService {
     const missing = products.filter((p) => !existingSet.has(p.id));
     if (missing.length === 0) return;
 
-    // Newest live prior row per product, resolved in the database. This used
-    // to fetch every prior row for every missing product, deleted ones
-    // included, so a soft-deleted day could seed the opening balance.
-    const priorEntries = await this.prisma.$queryRaw<
-      Array<{ productId: number; leftover: number }>
-    >`
-      SELECT DISTINCT ON ("productId") "productId", "leftover"
-      FROM "Inventory"
-      WHERE "branchId" = ${branchId}
-        AND "productId" IN (${Prisma.join(missing.map((p) => p.id))})
-        AND "date" < ${date}
-        AND "deletedAt" IS NULL
-      ORDER BY "productId", "date" DESC
-    `;
-    const priorMap = new Map(priorEntries.map((e) => [e.productId, e.leftover]));
+    // Read the previous close under the chains' lock, so a leftover saved at
+    // the same moment is either seen here or walks forward onto these rows.
+    await this.prisma.$transaction(async (tx) => {
+      await lockInventoryChains(tx, missing.map((p) => ({ branchId, productId: p.id })));
+      // Newest live prior row per product, resolved in the database. This used
+      // to fetch every prior row for every missing product, deleted ones
+      // included, so a soft-deleted day could seed the opening balance.
+      const priorEntries = await tx.$queryRaw<
+        Array<{ productId: number; leftover: number }>
+      >`
+        SELECT DISTINCT ON ("productId") "productId", "leftover"
+        FROM "Inventory"
+        WHERE "branchId" = ${branchId}
+          AND "productId" IN (${Prisma.join(missing.map((p) => p.id))})
+          AND "date" < ${date}
+          AND "deletedAt" IS NULL
+        ORDER BY "productId", "date" DESC
+      `;
+      const priorMap = new Map(priorEntries.map((e) => [e.productId, e.leftover]));
 
-    await this.prisma.inventory.createMany({
-      data: missing.map((p) => {
-        const prevLeftover = priorMap.get(p.id) ?? 0;
-        return {
-          branchId,
-          productId: p.id,
-          date,
-          quantity: prevLeftover,
-          delivery: 0,
-          leftover: prevLeftover,
-          reject: 0,
-          isAutoGenerated: true,
-          notes: `Auto-initialized for production order on ${dateStr}`,
-        };
-      }),
-      skipDuplicates: true,
+      await tx.inventory.createMany({
+        data: missing.map((p) => {
+          const prevLeftover = priorMap.get(p.id) ?? 0;
+          return {
+            branchId,
+            productId: p.id,
+            date,
+            quantity: prevLeftover,
+            delivery: 0,
+            leftover: prevLeftover,
+            reject: 0,
+            isAutoGenerated: true,
+            notes: `Auto-initialized for production order on ${dateStr}`,
+          };
+        }),
+        skipDuplicates: true,
+      });
     });
   }
 }

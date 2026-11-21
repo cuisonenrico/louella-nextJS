@@ -4,8 +4,8 @@ import { JobsService } from './jobs.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { MaterialInventoryService } from '../material-inventory/material-inventory.service';
 
-function makePrisma() {
-  return {
+function makePrisma(): Record<string, any> {
+  const prisma: Record<string, any> = {
     inventory: {
       findMany: jest.fn().mockResolvedValue([]),
       findFirst: jest.fn().mockResolvedValue(null),
@@ -33,10 +33,15 @@ function makePrisma() {
       findMany: jest.fn().mockResolvedValue([]),
     },
     $queryRaw: jest.fn().mockResolvedValue([]),
+    // Chain locks (pg_advisory_xact_lock).
+    $executeRaw: jest.fn().mockResolvedValue(1),
     $transaction: jest
       .fn()
-      .mockImplementation((ops: unknown[]) => Promise.all(ops)),
+      .mockImplementation((ops: unknown) =>
+        typeof ops === 'function' ? (ops as (tx: unknown) => unknown)(prisma) : Promise.all(ops as unknown[]),
+      ),
   };
+  return prisma;
 }
 
 describe('JobsService', () => {
@@ -152,6 +157,20 @@ describe('JobsService', () => {
       ];
       expect(invArgs.data).toHaveLength(6);
       expect(prodArgs.data).toHaveLength(6);
+    });
+
+    // A leftover saved while autofill runs must not leave today opening on the old close:
+    // the chains are locked (one batched statement) before the prior close is read.
+    it('locks the chains before it reads the previous close', async () => {
+      prisma.branch.findMany.mockResolvedValue([{ id: 1, name: 'Main' }]);
+      prisma.product.findMany.mockResolvedValue([{ id: 5, name: 'Pandesal' }]);
+
+      await service.autofillMissingEntries('2026-06-13');
+
+      expect(prisma.$executeRaw).toHaveBeenCalledTimes(1);
+      const lockedAt = prisma.$executeRaw.mock.invocationCallOrder[0];
+      const readAt = prisma.$queryRaw.mock.invocationCallOrder[0];
+      expect(lockedAt).toBeLessThan(readAt);
     });
 
     it('is idempotent — existing pairs produce no writes', async () => {

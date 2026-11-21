@@ -5,6 +5,7 @@ import { usePageHeader } from '@/components/layout/usePageHeader';
 import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Loader2, AlertTriangle, CheckCircle } from 'lucide-react';
 import dayjs from 'dayjs';
+import { addDays, manilaToday } from '@/lib/manilaDate';
 import { materialInventoryApi, jobsApi } from '@/lib/apiServices';
 import { extractError } from '@/lib/errors';
 import type { MaterialGapEntry } from '@/types';
@@ -21,8 +22,8 @@ import { TableRowsSkeleton } from '@/components/loading/Skeletons';
 export default function MaterialInventoryGapsPage() {
   usePageHeader({ title: 'Material Stock Gaps' });
   const qc = useQueryClient();
-  const today = dayjs().format('YYYY-MM-DD');
-  const weekAgo = dayjs().subtract(7, 'day').format('YYYY-MM-DD');
+  const today = manilaToday();
+  const weekAgo = addDays(manilaToday(), -7);
   const [startDate, setStartDate] = useState(weekAgo);
   const [endDate, setEndDate] = useState(today);
   const [message, setMessage] = useState('');

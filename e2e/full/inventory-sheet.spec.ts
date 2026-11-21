@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures/test';
-import { today, yesterday } from '../fixtures/dates';
+import { addDays, today, yesterday } from '../fixtures/dates';
 import { buildWorld, managerPage } from '../fixtures/world';
 import { InventorySheet } from '../pages/inventory-sheet.page';
 import type { SalesDay } from '../support/types';
@@ -174,5 +174,26 @@ test.describe('inventory sheet @stress', () => {
     await page.goto('/inventory/details');
     await expect(page.locator('input[type="date"]').first()).toBeVisible();
     await expect(page.getByRole('navigation', { name: 'Phone navigation' })).toBeHidden();
+  });
+});
+
+// The browser runs in Asia/Manila (playwright.config.ts). "This Month" used to build
+// the 1st at local midnight and read it back through toISOString(), which in Manila is
+// 16:00 UTC the day before: the range opened on the last day of the previous month.
+test.describe('inventory sheet range shortcuts', () => {
+  test('"This Month" starts on the 1st and "Last 7d" covers seven days, both ending today', async ({ page }) => {
+    await page.goto('/inventory/details');
+    await expect(page.locator('input[type="date"]').first()).toBeVisible();
+
+    await page.locator('button:has(svg.lucide-calendar-range)').click();
+    const [from, to] = [page.locator('input[type="date"]').nth(0), page.locator('input[type="date"]').nth(1)];
+
+    await page.getByRole('button', { name: 'This Month', exact: true }).click();
+    await expect(from).toHaveValue(`${today().slice(0, 7)}-01`);
+    await expect(to).toHaveValue(today());
+
+    await page.getByRole('button', { name: 'Last 7d', exact: true }).click();
+    await expect(from).toHaveValue(addDays(today(), -6));
+    await expect(to).toHaveValue(today());
   });
 });

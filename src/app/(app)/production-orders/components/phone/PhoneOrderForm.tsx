@@ -5,6 +5,7 @@ import dayjs from 'dayjs';
 import { X } from 'lucide-react';
 import type { Branch, Product, ProductionOrder, ProductType, SuggestionPeriod } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
+import { useCan } from '@/lib/rbac/useHasFeature';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   AlertDialog,
@@ -47,6 +48,7 @@ export default function PhoneOrderForm({
   editTarget, filterDate, activeBranchId, activeBranches, activeProducts, canFinalize, onClose, onSaved,
 }: PhoneOrderFormProps) {
   const { user } = useAuth();
+  const seesAllBranches = useCan('all-branches');
   const form = useOrderForm({ open: true, editTarget, filterDate, activeBranchId, activeProducts });
   const [dirty, setDirty] = useState(false);
   const [restoredFrom, setRestoredFrom] = useState<string | null>(null);
@@ -152,7 +154,7 @@ export default function PhoneOrderForm({
             <AlertDescription>{form.error}</AlertDescription>
           </Alert>
         ) : null}
-        {activeBranches.length > 1 && user?.role === 'ADMIN' ? (
+        {activeBranches.length > 1 && seesAllBranches ? (
           <Select value={form.branchId ? String(form.branchId) : ''} onValueChange={(v) => form.setBranchId(Number(v))}>
             <SelectTrigger className="h-11 w-full" aria-label="Deliver to branch">
               <SelectValue placeholder="Select branch" />

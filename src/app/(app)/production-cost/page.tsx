@@ -5,6 +5,7 @@ import { usePageHeader } from '@/components/layout/usePageHeader';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { DollarSign } from 'lucide-react';
 import dayjs from 'dayjs';
+import { manilaToday } from '@/lib/manilaDate';
 import { productionApi, branchesApi } from '@/lib/apiServices';
 import type { Branch } from '@/types';
 import { Input } from '@/components/ui/input';
@@ -18,7 +19,7 @@ import { CardGridSkeleton } from '@/components/loading/Skeletons';
 
 export default function ProductionCostPage() {
   usePageHeader({ title: 'Production Cost' });
-  const today = dayjs().format('YYYY-MM-DD');
+  const today = manilaToday();
   const [date, setDate] = useState(today);
   const [branchId, setBranchId] = useState('');
 

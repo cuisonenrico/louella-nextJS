@@ -9,7 +9,7 @@ import {
   Legend, ResponsiveContainer,
 } from 'recharts';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import dayjs from 'dayjs';
+import { manilaToday } from '@/lib/manilaDate';
 import { branchesApi, inventoryApi } from '@/lib/apiServices';
 import type { Branch, RejectionByProductItem } from '@/types';
 import { rankByRejection, rejectRateBadge } from '@/components/analytics/RejectionByProductCard';
@@ -30,7 +30,7 @@ const truncate = (v: string, max = 12) => (v.length > max ? `${v.slice(0, max - 
 
 function RejectionsReport() {
   const params = useSearchParams();
-  const today = dayjs().format('YYYY-MM-DD');
+  const today = manilaToday();
 
   const [from, setFrom] = useState(params.get('startDate') ?? today);
   const [to, setTo] = useState(params.get('endDate') ?? today);
