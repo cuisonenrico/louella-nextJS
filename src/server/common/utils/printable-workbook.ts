@@ -27,6 +27,7 @@ export type CellLook =
   | 'body' //         table cells: thin grid
   | 'bodyStrong' //   table cells in a bold column (name, gross, net)
   | 'muted' //        notes in a table (Not counted, Equipment)
+  | 'changed' //      a figure that differs from the reference (a day's own price)
   | 'total' //        a total row: bold, heavier rule above
   | 'grandTotal' //   the last total: bold, double rule, tinted
   | 'signName' //     a signatory's name: bold, centred
@@ -104,6 +105,7 @@ const LOOKS: Record<CellLook, Look> = {
   },
   body: { font: { name: 'Arial', size: 9 }, border: grid },
   bodyStrong: { font: { name: 'Arial', size: 9, bold: true }, border: grid },
+  changed: { font: { name: 'Arial', size: 9, bold: true }, fill: fill('FFFFF2CC'), border: grid },
   muted: { font: { name: 'Arial', size: 8, italic: true, color: { argb: 'FF6B6B6B' } }, border: grid },
   total: {
     font: { name: 'Arial', size: 9, bold: true },

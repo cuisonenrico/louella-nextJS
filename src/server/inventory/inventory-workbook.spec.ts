@@ -41,8 +41,8 @@ describe('buildInventoryWorkbook', () => {
   const wb = buildInventoryWorkbook(input);
   const oct30 = wb.Sheets['Oct 30'];
 
-  it('has one sheet per day, then Summary', () => {
-    expect(wb.SheetNames).toEqual(['Oct 30', 'Oct 31', 'Summary']);
+  it('has the Pricelist, one sheet per day, then Summary', () => {
+    expect(wb.SheetNames).toEqual(['Pricelist', 'Oct 30', 'Oct 31', 'Summary']);
     expect(sheetNameFor('2026-01-05')).toBe('Jan 05');
   });
 
@@ -121,9 +121,40 @@ describe('buildInventoryWorkbook', () => {
     expect(v(d2, `N${r2}`)).toBe('Equipment');
   });
 
+  it("lists today's prices on the Pricelist, and a day at that price links to it", () => {
+    const list = wb.Sheets.Pricelist;
+    const lr = rowOf(list, 'Pandesal');
+    expect(v(list, `B${lr}`)).toBe(3);
+    const r = rowOf(oct30, 'Pandesal');
+    expect(oct30[`B${r}`]).toMatchObject({ f: `Pricelist!B${lr}`, v: 3 });
+    // The summary's PRICES column is today's price, from the same list.
+    expect(wb.Sheets.Summary[`B${rowOf(wb.Sheets.Summary, 'Pandesal')}`]).toMatchObject({ f: `Pricelist!B${lr}` });
+  });
+
+  it('a day with its own price has it written in, and its pesos follow it', () => {
+    // Pandesal was 2.50 on Oct 30; today it is 3.
+    const priced = buildInventoryWorkbook({
+      ...input,
+      days: input.days.map((d) => (d.date === '2026-10-30' ? { ...d, prices: { 1: 2.5 } } : d)),
+    });
+    const day = priced.Sheets['Oct 30'];
+    const r = rowOf(day, 'Pandesal');
+    expect(day[`B${r}`].f).toBeUndefined();
+    expect(v(day, `B${r}`)).toBe(2.5);
+    expect(v(day, `D${r}`)).toBe(250); // 100 delivered × 2.50
+    expect(v(day, `M${r}`)).toBe(225); // 90 sold × 2.50
+    // Spanish Bread had no price of its own that day, so it still links to the list.
+    expect(day[`B${rowOf(day, 'Spanish Bread')}`].f).toMatch(/^Pricelist!B\d+$/);
+    // The summary adds sales at each day's price, while showing today's.
+    const sum = priced.Sheets.Summary;
+    const p = rowOf(sum, 'Pandesal');
+    expect(v(sum, `B${p}`)).toBe(3);
+    expect(v(sum, `H${p}`)).toBe(225);
+  });
+
   it('writes a readable xlsx, formulas keeping their values', async () => {
     const back = XLSX.read(await writeInventoryWorkbook(input), { type: 'buffer' });
-    expect(back.SheetNames).toEqual(['Oct 30', 'Oct 31', 'Summary']);
+    expect(back.SheetNames).toEqual(['Pricelist', 'Oct 30', 'Oct 31', 'Summary']);
     // Every formula still carries the figure computed here, as the builder wrote it.
     const built = buildInventoryWorkbook(input).Sheets['Oct 30'];
     const day = back.Sheets['Oct 30'];

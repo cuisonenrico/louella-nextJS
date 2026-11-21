@@ -50,7 +50,7 @@ interface InventoryExportDialogProps {
 
 /**
  * Download one branch's days as an XLSX laid out like the paper sheet:
- * a sheet per day, then a Summary, at current prices.
+ * today's Pricelist, a sheet per day priced as that day was, then a Summary.
  */
 export default function InventoryExportDialog({ open, onOpenChange, branches, branchId, from, to }: InventoryExportDialogProps) {
   const [branch, setBranch] = useState(branchId ? String(branchId) : branches.length === 1 ? String(branches[0].id) : '');
@@ -91,7 +91,7 @@ export default function InventoryExportDialog({ open, onOpenChange, branches, br
         <ResponsiveDialogHeader>
           <ResponsiveDialogTitle>Export inventory</ResponsiveDialogTitle>
           <ResponsiveDialogDescription>
-            One sheet per day like the paper sheet, then a summary of the range. Uses today&apos;s product prices.
+            Today&apos;s pricelist, one sheet per day like the paper sheet (each at that day&apos;s prices), then a summary of the range.
           </ResponsiveDialogDescription>
         </ResponsiveDialogHeader>
         <div className="flex flex-col gap-4">
@@ -124,7 +124,7 @@ export default function InventoryExportDialog({ open, onOpenChange, branches, br
           </div>
           {days > 0 && !invalid ? (
             <p className="text-sm text-muted-foreground">
-              {days} day sheet{days === 1 ? '' : 's'} + Summary
+              Pricelist + {days} day sheet{days === 1 ? '' : 's'} + Summary
             </p>
           ) : null}
           {invalid && branch ? <p className="text-sm text-destructive">{invalid}</p> : null}

@@ -1,6 +1,7 @@
 /**
  * The branch inventory workbook: one sheet per day in the style of the paper
- * sheet the bakery used (`Oct30-Nov13-2026.xlsx`), then a Summary sheet.
+ * sheet the bakery used (`Oct30-Nov13-2026.xlsx`): a Pricelist sheet first, then one
+ * sheet per day, then a Summary sheet.
  *
  * Pure: it takes plain figures and returns a SheetJS workbook, so the layout
  * is unit-tested without a database.
@@ -10,9 +11,11 @@
  * computed here, so viewers that never recalculate (phone previews, Google
  * Drive's preview) still show the right figures.
  *
- * Prices are the products' **current** prices on every day, by request, so a
- * past day here can differ from the sales page, which prices each day as it
- * was. Sold follows the app: a leftover nobody counted sells nothing, so its
+ * Prices follow the paper workbook: the Pricelist sheet holds today's prices,
+ * and each day sheet's price links to it (`=Pricelist!B5`) unless that day's
+ * own price was different, in which case the day price is written in and
+ * highlighted, as the clerks typed over the link. Every peso figure on a day
+ * uses that day's price, so the workbook agrees with the sales page. Sold follows the app: a leftover nobody counted sells nothing, so its
  * leftover cell holds the derived close (opening + delivery + in − out −
  * reject) and the row is marked "Not counted".
  */
@@ -34,7 +37,7 @@ export interface WorkbookProduct {
   id: number;
   name: string;
   type: ProductType;
-  /** Current price, used on every day. */
+  /** Today's price: the Pricelist sheet, and any day with no price of its own. */
   price: number;
   /** Branch equipment: a drop is missing (charged like a sale), an uncounted day just carries. */
   isEquipment?: boolean;
@@ -61,6 +64,8 @@ export interface WorkbookCash {
 }
 
 export interface WorkbookDay {
+  /** That day's price per product id (price history); a product missing here uses its current price. */
+  prices?: Record<number, number>;
   /** YYYY-MM-DD */
   date: string;
   rows: WorkbookRow[];
@@ -199,7 +204,53 @@ interface DayCells {
   overShort: string;
 }
 
-function buildDaySheet(input: WorkbookInput, day: WorkbookDay) {
+export const PRICELIST = 'Pricelist';
+
+/** The price a product had on a day: its own, or today's when the day has none. */
+const priceOn = (day: WorkbookDay, p: WorkbookProduct) => day.prices?.[p.id] ?? p.price;
+
+/**
+ * Today's prices, by category, as the paper workbook's first sheet. Returns
+ * each product's price cell, which the day sheets link to.
+ */
+function buildPricelistSheet(input: WorkbookInput) {
+  const s = new SheetBuilder();
+  const cellOf = new Map<number, string>();
+  s.put(1, 0, text(`PRICELIST — BRANCH: ${input.branchName}`));
+  s.put(2, 0, text(`Current prices as of ${input.pricedOn}`));
+  s.put(3, 0, text("On a day sheet, a highlighted price is that day's own price, different from this list."));
+  s.look(1, 1, 0, 1, 'heading');
+  let r = 5;
+  for (const group of groupProducts(input.products)) {
+    s.put(r, 0, text(TYPE_LABELS[group.type]));
+    s.look(r, r, 0, 1, 'section');
+    r += 1;
+    s.put(r, 0, text('PRODUCTS'));
+    s.put(r, 1, text('PRICES'));
+    s.look(r, r, 0, 1, 'header');
+    const headerRow = r;
+    r += 1;
+    const first = r;
+    for (const p of group.products) {
+      s.put(r, 0, text(p.name));
+      s.put(r, 1, number(p.price, PESO));
+      cellOf.set(p.id, `${PRICELIST}!B${r}`);
+      r += 1;
+    }
+    s.look(first, r - 1, 0, 1, 'body');
+    s.frame(headerRow, r - 1, 0, 1);
+    r += 1;
+  }
+  const ws = s.finish([32, 12], {
+    orientation: 'portrait',
+    paper: 'letter',
+    repeatRows: [1, 2],
+    footer: [input.branchName, `Prices as of ${input.pricedOn}`, 'Page &P of &N'],
+  });
+  return { ws, cellOf };
+}
+
+function buildDaySheet(input: WorkbookInput, day: WorkbookDay, priceCells: Map<number, string>) {
   const s = new SheetBuilder();
   const rowsById = new Map(day.rows.map((r) => [r.productId, r]));
 
@@ -224,10 +275,17 @@ function buildDaySheet(input: WorkbookInput, day: WorkbookDay) {
     const acc = { openingP: 0, deliveryP: 0, pullInP: 0, pullOutP: 0, rejectP: 0, leftoverP: 0, sales: 0 };
     for (const p of group.products) {
       const row = rowsById.get(p.id);
-      const f = rowFigures(row, p.price);
+      const price = priceOn(day, p);
+      const f = rowFigures(row, price);
       const ref = (c: number) => `${col(c)}${r}`;
       s.put(r, C.product, text(p.name));
-      s.put(r, C.price, number(p.price, PESO));
+      // Today's price links to the Pricelist; a day with its own price has it written in.
+      const listed = priceCells.get(p.id);
+      if (price === p.price && listed) s.put(r, C.price, formula(listed, price, PESO));
+      else {
+        s.put(r, C.price, number(price, PESO));
+        if (price !== p.price) s.look(r, r, C.price, C.price, 'changed');
+      }
       if (row) {
         s.put(r, C.delivery, number(f.delivery));
         s.put(r, C.leftover, number(f.leftover));
@@ -246,9 +304,9 @@ function buildDaySheet(input: WorkbookInput, day: WorkbookDay) {
           ? 'Not counted'
           : undefined;
       if (note) s.put(r, C.note, text(note));
-      s.put(r, C.deliveryP, formula(`${ref(C.price)}*${ref(C.delivery)}`, times(p.price, f.delivery), PESO));
-      s.put(r, C.leftoverP, formula(`${ref(C.price)}*${ref(C.leftover)}`, times(p.price, f.leftover), PESO));
-      s.put(r, C.rejectP, formula(`${ref(C.price)}*${ref(C.reject)}`, times(p.price, f.reject), PESO));
+      s.put(r, C.deliveryP, formula(`${ref(C.price)}*${ref(C.delivery)}`, times(price, f.delivery), PESO));
+      s.put(r, C.leftoverP, formula(`${ref(C.price)}*${ref(C.leftover)}`, times(price, f.leftover), PESO));
+      s.put(r, C.rejectP, formula(`${ref(C.price)}*${ref(C.reject)}`, times(price, f.reject), PESO));
       s.put(
         r,
         C.sold,
@@ -260,12 +318,12 @@ function buildDaySheet(input: WorkbookInput, day: WorkbookDay) {
       );
       s.put(r, C.sales, formula(`${ref(C.price)}*${ref(C.sold)}`, f.sales, PESO));
 
-      acc.openingP += centavos(times(p.price, f.opening));
-      acc.deliveryP += centavos(times(p.price, f.delivery));
-      acc.pullInP += centavos(times(p.price, f.pullIn));
-      acc.pullOutP += centavos(times(p.price, f.pullOut));
-      acc.rejectP += centavos(times(p.price, f.reject));
-      acc.leftoverP += centavos(times(p.price, f.leftover));
+      acc.openingP += centavos(times(price, f.opening));
+      acc.deliveryP += centavos(times(price, f.delivery));
+      acc.pullInP += centavos(times(price, f.pullIn));
+      acc.pullOutP += centavos(times(price, f.pullOut));
+      acc.rejectP += centavos(times(price, f.reject));
+      acc.leftoverP += centavos(times(price, f.leftover));
       acc.sales += centavos(f.sales);
       r += 1;
     }
@@ -280,7 +338,7 @@ function buildDaySheet(input: WorkbookInput, day: WorkbookDay) {
     s.put(r, 0, text('TOTAL'));
     const sumOf = (c: number, v: number, z: string) =>
       s.put(r, c, formula(`SUM(${col(c)}${first}:${col(c)}${last})`, v, z));
-    const counts = group.products.map((p) => rowFigures(rowsById.get(p.id), p.price));
+    const counts = group.products.map((p) => rowFigures(rowsById.get(p.id), priceOn(day, p)));
     sumOf(C.delivery, counts.reduce((n, f) => n + f.delivery, 0), COUNT);
     sumOf(C.deliveryP, pesos(acc.deliveryP), PESO);
     sumOf(C.leftover, counts.reduce((n, f) => n + f.leftover, 0), COUNT);
@@ -301,7 +359,7 @@ function buildDaySheet(input: WorkbookInput, day: WorkbookDay) {
     r += 2;
   }
 
-  // SUMMARY — one line per category, in pesos at current prices.
+  // SUMMARY — one line per category, in pesos at the day's prices.
   const sumHeaders = ['SUMMARY', 'L/O START', 'DELIVERY', 'PULL IN', 'PULL OUT', 'REJECT', 'L/O END', 'SALES'];
   sumHeaders.forEach((h, c) => s.put(r, c, text(h)));
   s.look(r, r, 0, 7, 'header');
@@ -397,6 +455,7 @@ const SUMMARY_WIDTHS = [28, 9, 10, 9, 10, 9, 10, 13, 13, 13];
 function buildSummarySheet(
   input: WorkbookInput,
   days: Array<{ day: WorkbookDay; cells: DayCells; salesTotal: number; expected: number }>,
+  priceCells: Map<number, string>,
 ) {
   const s = new SheetBuilder();
   s.put(1, 0, text(`SUMMARY — BRANCH: ${input.branchName}`));
@@ -404,16 +463,16 @@ function buildSummarySheet(
   s.put(2, 1, number(serial(input.from), DATE));
   s.put(2, 2, text('TO'));
   s.put(2, 3, number(serial(input.to), DATE));
-  s.put(3, 0, text(`Prices as of ${input.pricedOn} (current prices on every day)`));
+  s.put(3, 0, text(`Sales at each day's own price. PRICES: today's, as on the ${PRICELIST} sheet (${input.pricedOn}).`));
   s.look(1, 1, 0, 9, 'heading');
   s.look(2, 2, 0, 3, 'emphasis');
 
   // Per product, across the range.
-  const byProduct = new Map<number, WorkbookRow[]>();
+  const byProduct = new Map<number, Array<{ row: WorkbookRow; day: WorkbookDay }>>();
   for (const { day } of days) {
     for (const row of day.rows) {
       const list = byProduct.get(row.productId) ?? [];
-      list.push(row);
+      list.push({ row, day });
       byProduct.set(row.productId, list);
     }
   }
@@ -435,8 +494,8 @@ function buildSummarySheet(
     const acc = { delivery: 0, pullIn: 0, pullOut: 0, reject: 0, sold: 0, sales: 0, leftover: 0 };
     for (const p of group.products) {
       const t = { delivery: 0, pullIn: 0, pullOut: 0, reject: 0, sold: 0, sales: 0 };
-      for (const row of byProduct.get(p.id) ?? []) {
-        const f = rowFigures(row, p.price);
+      for (const { row, day } of byProduct.get(p.id) ?? []) {
+        const f = rowFigures(row, priceOn(day, p));
         t.delivery += f.delivery;
         t.pullIn += f.pullIn;
         t.pullOut += f.pullOut;
@@ -447,7 +506,8 @@ function buildSummarySheet(
       const endRow = lastRows.get(p.id);
       const leftoverEnd = endRow ? rowFigures(endRow, p.price).leftover : null;
       s.put(r, 0, text(p.name));
-      s.put(r, 1, number(p.price, PESO));
+      const listed = priceCells.get(p.id);
+      s.put(r, 1, listed ? formula(listed, p.price, PESO) : number(p.price, PESO));
       s.put(r, 2, number(t.delivery));
       s.put(r, 3, number(t.pullIn));
       s.put(r, 4, number(t.pullOut));
@@ -558,9 +618,11 @@ function buildSummarySheet(
 
 export function buildInventoryWorkbook(input: WorkbookInput): XLSX.WorkBook {
   const wb = XLSX.utils.book_new();
-  const built = input.days.map((day) => ({ day, ...buildDaySheet(input, day) }));
+  const pricelist = buildPricelistSheet(input);
+  XLSX.utils.book_append_sheet(wb, pricelist.ws, PRICELIST);
+  const built = input.days.map((day) => ({ day, ...buildDaySheet(input, day, pricelist.cellOf) }));
   for (const b of built) XLSX.utils.book_append_sheet(wb, b.ws, b.cells.sheet);
-  XLSX.utils.book_append_sheet(wb, buildSummarySheet(input, built), 'Summary');
+  XLSX.utils.book_append_sheet(wb, buildSummarySheet(input, built, pricelist.cellOf), 'Summary');
   return wb;
 }
 
