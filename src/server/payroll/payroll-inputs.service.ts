@@ -11,7 +11,7 @@ import { CreateAdjustmentDto, CreateSkipDto } from './dto/payroll.dto';
 
 /** Which categories each kind may use. OTHER fits both. */
 const CATEGORIES_BY_KIND: Record<PayrollAdjustmentKind, readonly PayrollAdjustmentCategory[]> = {
-  ADDITION: ['OVERTIME', 'BONUS', 'HOLIDAY', 'ALLOWANCE', 'OTHER'],
+  ADDITION: ['OVERTIME', 'NIGHT_DIFF', 'BONUS', 'HOLIDAY', 'ALLOWANCE', 'OTHER'],
   DEDUCTION: ['OFFENSE', 'OTHER'],
 };
 

@@ -54,7 +54,7 @@ export const AUDITED_FIELDS: Record<AuditEntity, readonly string[]> = {
   RecurringDeductionSkip: ['recurringDeductionId', 'periodStart', 'deletedAt'],
   PayrollRun: ['status', 'voidReason'],
   ExpenseCategory: ['name', 'sortOrder', 'isActive', 'requiresNote'],
-  Company: ['name', 'isActive'],
+  Company: ['name', 'address', 'paymasterName', 'approverName', 'isActive'],
   BranchExpense: ['branchId', 'date', 'categoryId', 'amount', 'note', 'deletedAt'],
   BranchVale: ['branchId', 'date', 'employeeId', 'amount', 'note', 'deletedAt'],
   BranchCashDay: ['actualCash', 'note', 'status', 'salesAtVerify', 'expensesAtVerify', 'valeAtVerify'],

@@ -36,16 +36,18 @@ describe('CompaniesService', () => {
   });
 
   it('creates with a trimmed name and records it', async () => {
-    await service.create('  Louella Bakeshop Inc.  ', 7);
+    await service.create({ name: '  Louella Bakeshop Inc.  ', address: ' #29 Gov. Sison St. ', paymasterName: '' }, 7);
     expect(prisma.company.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { name: 'Louella Bakeshop Inc.' } }),
+      expect.objectContaining({
+        data: { name: 'Louella Bakeshop Inc.', address: '#29 Gov. Sison St.', paymasterName: null, approverName: null },
+      }),
     );
     expect(prisma.auditEvent.createMany).toHaveBeenCalled();
   });
 
   it('refuses a duplicate name with 409', async () => {
     prisma.company.create.mockRejectedValue(uniqueViolation());
-    await expect(service.create('Louella Bakeshop Inc.', 7)).rejects.toBeInstanceOf(ConflictException);
+    await expect(service.create({ name: 'Louella Bakeshop Inc.' }, 7)).rejects.toBeInstanceOf(ConflictException);
   });
 
   it('refuses a rename onto an existing name with 409', async () => {
@@ -61,7 +63,10 @@ describe('CompaniesService', () => {
   it('retires instead of deleting', async () => {
     await service.update(1, { isActive: false }, 7);
     expect(prisma.company.update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 1 }, data: { name: undefined, isActive: false } }),
+      expect.objectContaining({
+        where: { id: 1 },
+        data: { name: undefined, address: undefined, paymasterName: undefined, approverName: undefined, isActive: false },
+      }),
     );
   });
 });

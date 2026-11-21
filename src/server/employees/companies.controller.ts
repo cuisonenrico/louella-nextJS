@@ -22,7 +22,7 @@ export class CompaniesController {
 
   @Post()
   create(@Body() dto: CreateCompanyDto, @CurrentUser() user: Actor) {
-    return this.companies.create(dto.name, user.id);
+    return this.companies.create(dto, user.id);
   }
 
   @Patch(':id')

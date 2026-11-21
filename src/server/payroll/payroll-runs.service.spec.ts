@@ -1,4 +1,5 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import * as XLSX from 'xlsx';
 import { PayrollRunsService } from './payroll-runs.service';
 import type { CutoffDraft } from './payroll-draft.service';
 
@@ -14,6 +15,8 @@ function draft(overrides: Partial<CutoffDraft> = {}): CutoffDraft {
         employeeName: 'Ana Cruz',
         jobRoleName: 'Baker',
         branchName: 'Main',
+        companyId: 4,
+        companyName: 'Louella Bakeshop Inc.',
         workingDays: 13,
         absenceDays: 1,
         daysWorked: 12,
@@ -134,7 +137,7 @@ describe('PayrollRunsService', () => {
         },
       });
       const [payslip] = prisma.payslip.createManyAndReturn.mock.calls[0][0].data;
-      expect(payslip).toMatchObject({ runId: 3, employeeId: 1, employeeName: 'Ana Cruz', netPay: 8950, holidayPay: 1200, daysWorked: 12 });
+      expect(payslip).toMatchObject({ runId: 3, employeeId: 1, employeeName: 'Ana Cruz', companyId: 4, companyName: 'Louella Bakeshop Inc.', netPay: 8950, holidayPay: 1200, daysWorked: 12 });
       const lines = prisma.payslipLine.createMany.mock.calls[0][0].data;
       expect(lines.map((l: { payslipId: number; sortOrder: number; type: string }) => [l.payslipId, l.sortOrder, l.type])).toEqual([
         [20, 0, 'BASIC'],
@@ -246,6 +249,70 @@ describe('PayrollRunsService', () => {
       const view = await service.getCutoff('2026-09-01');
       expect(view.status).toBe('FINALIZED');
       expect(view.holidays).toHaveLength(1);
+    });
+  });
+
+  describe('export', () => {
+    const payslip = (o: Record<string, unknown> = {}) => ({
+      employeeId: 1, employeeName: 'Ana Cruz', jobRoleName: 'Baker', branchName: 'Main',
+      companyId: 4, companyName: 'Louella Bakeshop Inc.', daysWorked: 12, absenceDays: 1,
+      basicPay: 7200, holidayPay: 0, totalAdditions: 400, totalDeductions: 0, netPay: 7600, totalEmployerShare: 0,
+      lines: [
+        { type: 'BASIC', label: 'Basic pay', rate: 600, amount: 7200, sourceType: 'EmployeeRate', sourceId: 10 },
+        { type: 'ADDITION', label: 'OT Nov 3', rate: null, amount: 400, sourceType: 'PayrollAdjustment', sourceId: 77 },
+      ],
+      ...o,
+    });
+    const sheets = (buffer: Buffer) => XLSX.read(buffer, { type: 'buffer' }).SheetNames;
+
+    beforeEach(() => {
+      prisma.payrollRun.findUnique.mockResolvedValue(
+        runRow({ payslips: [payslip(), payslip({ employeeId: 2, employeeName: 'Ben', companyId: null, companyName: null, lines: [] })] }),
+      );
+      prisma.payrollAdjustment = { findMany: jest.fn().mockResolvedValue([{ id: 77, category: 'OVERTIME' }]) };
+      prisma.employee = { findMany: jest.fn().mockResolvedValue([{ id: 1, firstName: 'Ana', lastName: 'Cruz' }]) };
+      prisma.company = {
+        findMany: jest.fn().mockResolvedValue([{ id: 4, address: 'Lingayen', paymasterName: 'M. Sison', approverName: 'L. Cuison' }]),
+      };
+    });
+
+    it('fills the overtime column from the adjustment category and prints "Last, First"', async () => {
+      const { buffer } = await service.exportRun(3, 'Louella Bakeshop Inc.');
+      const ws = XLSX.read(buffer, { type: 'buffer' }).Sheets['Louella Bakeshop Inc.'];
+      const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, blankrows: true, defval: null });
+      expect(rows[3][1]).toBe('WE HEREBY ACKNOWLEDGE to have received from Louella Bakeshop Inc., Lingayen');
+      expect(rows[7][1]).toBe('Cruz, Ana');
+      expect(rows[7][6]).toBe(400);
+      expect(rows[7][19]).toBe(7600);
+    });
+
+    it('exports every company with a sheet each', async () => {
+      const { buffer, fileName } = await service.exportRun(3);
+      expect(fileName).toBe('payroll-2026-09-01-all.xlsx');
+      expect(sheets(buffer)).toEqual(['Louella Bakeshop Inc.', 'No company']);
+    });
+
+    it('exports one company on its own', async () => {
+      const { buffer, fileName } = await service.exportRun(3, 'Louella Bakeshop Inc.');
+      expect(fileName).toBe('payroll-2026-09-01-louella-bakeshop-inc.xlsx');
+      expect(sheets(buffer)).toEqual(['Louella Bakeshop Inc.']);
+      expect(sheets((await service.exportRun(3, '__none__')).buffer)).toEqual(['No company']);
+    });
+
+    it('exports a paid run', async () => {
+      prisma.payrollRun.findUnique.mockResolvedValue(runRow({ status: 'PAID', payslips: [payslip()] }));
+      await expect(service.exportRun(3)).resolves.toBeDefined();
+    });
+
+    it('refuses a voided run', async () => {
+      prisma.payrollRun.findUnique.mockResolvedValue(runRow({ status: 'VOIDED', payslips: [payslip()] }));
+      await expect(service.exportRun(3)).rejects.toThrow(ConflictException);
+    });
+
+    it('404s a company with no payslip in the run, and a missing run', async () => {
+      await expect(service.exportRun(3, 'Someone Else Corp')).rejects.toThrow(NotFoundException);
+      prisma.payrollRun.findUnique.mockResolvedValue(null);
+      await expect(service.exportRun(99)).rejects.toThrow(NotFoundException);
     });
   });
 });

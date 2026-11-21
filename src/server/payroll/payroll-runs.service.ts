@@ -8,6 +8,11 @@ import { toUtcDay } from '../common/utils/date-range.util';
 import { recordChanges } from '../common/utils/audit.util';
 import { PayrollDraftService } from './payroll-draft.service';
 import { day, lockCutoff, lockEmployeeInputs } from './payroll-lock.util';
+import * as XLSX from 'xlsx';
+import { buildPayrollWorkbook, slug, type CompanyDetails, type WorkbookSlip } from './payroll-workbook';
+
+/** The `company` query value meaning payslips with no company. */
+export const NO_COMPANY_PARAM = '__none__';
 
 const RUN_INCLUDE = {
   payslips: {
@@ -124,6 +129,8 @@ export class PayrollRunsService {
             employeeName: p.employeeName,
             jobRoleName: p.jobRoleName,
             branchName: p.branchName,
+            companyId: p.companyId,
+            companyName: p.companyName,
             workingDays: p.workingDays,
             absenceDays: p.absenceDays,
             daysWorked: p.daysWorked,
@@ -206,6 +213,78 @@ export class PayrollRunsService {
   async getRun(runId: number) {
     const run = await this.prisma.payrollRun.findUniqueOrThrow({ where: { id: runId }, include: RUN_INCLUDE });
     return toRunView(run);
+  }
+
+  /**
+   * The run as an XLSX payroll register, one sheet per company. `company`
+   * limits it to one company's sheet (`__none__` = payslips with no company),
+   * so that business's file shows nobody else's pay. A voided run is not the
+   * payroll of record and is refused.
+   */
+  async exportRun(runId: number, company?: string) {
+    const run = await this.prisma.payrollRun.findUnique({ where: { id: runId }, include: RUN_INCLUDE });
+    if (!run) throw new NotFoundException('Payroll run not found');
+    if (run.status === 'VOIDED') throw new ConflictException('A voided run cannot be exported');
+
+    let only: { company: string | null } | undefined;
+    if (company !== undefined) {
+      only = { company: company === NO_COMPANY_PARAM ? null : company };
+      if (!run.payslips.some((p) => p.companyName === only!.company)) {
+        throw new NotFoundException('No payslip in this run belongs to that company');
+      }
+    }
+
+    // Adjustment categories pick the column (overtime, NSD…). A finalized
+    // cutoff's adjustments are locked, so reading them now gives what the
+    // run used. Names print "Last, First" as on the paper sheet.
+    const adjustmentIds = run.payslips.flatMap((p) =>
+      p.lines.filter((l) => l.sourceType === 'PayrollAdjustment' && l.sourceId !== null).map((l) => l.sourceId!),
+    );
+    const companyIds = [...new Set(run.payslips.map((p) => p.companyId).filter((id): id is number => id !== null))];
+    const [adjustments, employees, companies] = await Promise.all([
+      this.prisma.payrollAdjustment.findMany({ where: { id: { in: adjustmentIds } }, select: { id: true, category: true } }),
+      this.prisma.employee.findMany({
+        where: { id: { in: run.payslips.map((p) => p.employeeId) } },
+        select: { id: true, firstName: true, lastName: true },
+      }),
+      this.prisma.company.findMany({
+        where: { id: { in: companyIds } },
+        select: { id: true, address: true, paymasterName: true, approverName: true },
+      }),
+    ]);
+    const categoryById = new Map(adjustments.map((a) => [a.id, a.category as string]));
+    const nameById = new Map(employees.map((e) => [e.id, `${e.lastName}, ${e.firstName}`]));
+    const companyById = new Map(companies.map((c) => [c.id, c]));
+
+    const slips: WorkbookSlip[] = run.payslips.map((p) => ({
+      employeeName: nameById.get(p.employeeId) ?? p.employeeName,
+      companyName: p.companyName,
+      daysWorked: p.daysWorked,
+      netPay: num(p.netPay),
+      lines: p.lines.map((l) => ({
+        type: l.type,
+        label: l.label,
+        rate: l.rate === null ? null : num(l.rate),
+        amount: num(l.amount),
+        sourceType: l.sourceType,
+        category: l.sourceType === 'PayrollAdjustment' && l.sourceId !== null ? categoryById.get(l.sourceId) ?? null : null,
+      })),
+    }));
+    // The address and signatories are the company's current ones; the name
+    // on each sheet is the payslips' snapshot.
+    const details = new Map<string, CompanyDetails>();
+    for (const p of run.payslips) {
+      const c = p.companyId !== null ? companyById.get(p.companyId) : undefined;
+      if (p.companyName !== null && c && !details.has(p.companyName)) details.set(p.companyName, c);
+    }
+
+    const periodStart = day(run.periodStart);
+    const wb = buildPayrollWorkbook({ id: run.id, periodStart, periodEnd: day(run.periodEnd) }, slips, details, only);
+    const suffix = only === undefined ? 'all' : only.company === null ? 'no-company' : slug(only.company);
+    return {
+      buffer: XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer,
+      fileName: `payroll-${periodStart}-${suffix}.xlsx`,
+    };
   }
 
   async getPayslip(id: number) {

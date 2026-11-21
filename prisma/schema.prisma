@@ -798,6 +798,7 @@ enum PayrollAdjustmentKind {
 
 enum PayrollAdjustmentCategory {
   OVERTIME
+  NIGHT_DIFF
   BONUS
   HOLIDAY
   ALLOWANCE
@@ -833,13 +834,19 @@ model JobRole {
 /// The business an employee is paid by. Each branch trades under its own
 /// business name; payroll exports one sheet per company. Retired, never deleted.
 model Company {
-  id        Int      @id @default(autoincrement())
-  name      String   @unique
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            Int      @id @default(autoincrement())
+  name          String   @unique
+  /// Printed on the payroll sheet: "received from <name>, <address>".
+  address       String?
+  /// Signatories printed at the foot of the payroll sheet.
+  paymasterName String?
+  approverName  String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   employees Employee[]
+  payslips  Payslip[]
 }
 
 /// A person on payroll. The login, if any, is the optional `user`.
@@ -994,6 +1001,7 @@ model Payslip {
   employeeName       String
   jobRoleName        String
   branchName         String?
+  companyId          Int? // the company at finalize; its address/signatories head the export
   companyName        String? // snapshot at finalize; null = no company
   workingDays        Int
   absenceDays        Int
@@ -1007,6 +1015,7 @@ model Payslip {
 
   run      PayrollRun    @relation(fields: [runId], references: [id])
   employee Employee      @relation(fields: [employeeId], references: [id])
+  company  Company?      @relation(fields: [companyId], references: [id])
   lines    PayslipLine[]
 
   @@unique([runId, employeeId])

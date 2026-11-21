@@ -908,7 +908,7 @@ export interface Absence {
 }
 
 export type PayrollAdjustmentKind = 'ADDITION' | 'DEDUCTION';
-export type PayrollAdjustmentCategory = 'OVERTIME' | 'BONUS' | 'HOLIDAY' | 'ALLOWANCE' | 'OFFENSE' | 'OTHER';
+export type PayrollAdjustmentCategory = 'OVERTIME' | 'NIGHT_DIFF' | 'BONUS' | 'HOLIDAY' | 'ALLOWANCE' | 'OFFENSE' | 'OTHER';
 
 export interface PayrollAdjustment {
   id: number;

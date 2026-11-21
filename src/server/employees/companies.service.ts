@@ -2,9 +2,19 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { recordChanges } from '../common/utils/audit.util';
-import { UpdateCompanyDto } from './dto/company.dto';
+import { CreateCompanyDto, UpdateCompanyDto } from './dto/company.dto';
 
-const COMPANY_SELECT = { id: true, name: true, isActive: true } as const;
+const COMPANY_SELECT = {
+  id: true,
+  name: true,
+  address: true,
+  paymasterName: true,
+  approverName: true,
+  isActive: true,
+} as const;
+
+/** Undefined leaves a field alone; blank clears it. */
+const optionalText = (v: string | null | undefined) => (v === undefined ? undefined : v?.trim() || null);
 
 const isUniqueViolation = (e: unknown) =>
   e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002';
@@ -26,10 +36,18 @@ export class CompaniesService {
     });
   }
 
-  async create(name: string, userId: number) {
+  async create(dto: CreateCompanyDto, userId: number) {
     try {
       return await this.prisma.$transaction(async (tx) => {
-        const created = await tx.company.create({ data: { name: name.trim() }, select: COMPANY_SELECT });
+        const created = await tx.company.create({
+          data: {
+            name: dto.name.trim(),
+            address: optionalText(dto.address) ?? null,
+            paymasterName: optionalText(dto.paymasterName) ?? null,
+            approverName: optionalText(dto.approverName) ?? null,
+          },
+          select: COMPANY_SELECT,
+        });
         await recordChanges(tx, [{ entity: 'Company', entityId: created.id, before: null, after: created }], userId);
         return created;
       });
@@ -46,7 +64,13 @@ export class CompaniesService {
         if (!before) throw new NotFoundException('Company not found');
         const after = await tx.company.update({
           where: { id },
-          data: { name: dto.name?.trim(), isActive: dto.isActive },
+          data: {
+            name: dto.name?.trim(),
+            address: optionalText(dto.address),
+            paymasterName: optionalText(dto.paymasterName),
+            approverName: optionalText(dto.approverName),
+            isActive: dto.isActive,
+          },
           select: COMPANY_SELECT,
         });
         await recordChanges(tx, [{ entity: 'Company', entityId: id, before, after }], userId);

@@ -14,6 +14,7 @@ const MONEY = /^\d+(\.\d{1,2})?$/;
 const CATEGORIES: Record<PayrollAdjustmentKind, { value: PayrollAdjustmentCategory; label: string }[]> = {
   ADDITION: [
     { value: 'OVERTIME', label: 'Overtime' },
+    { value: 'NIGHT_DIFF', label: 'Night differential' },
     { value: 'BONUS', label: 'Bonus' },
     { value: 'HOLIDAY', label: 'Holiday pay (one-off, not automatic)' },
     { value: 'ALLOWANCE', label: 'Allowance' },

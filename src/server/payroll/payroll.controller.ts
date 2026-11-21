@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, Param, ParseIntPipe, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Post, Query, Res, StreamableFile } from '@nestjs/common';
+import type { Response } from 'express';
 import { UserRole } from '@prisma/client';
 import { currentCutoff } from '@/lib/payroll/cutoff';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -87,6 +88,19 @@ export class PayrollController {
   @Get('runs/:id')
   getRun(@Param('id', ParseIntPipe) id: number) {
     return this.runs.getRun(id);
+  }
+
+  /** The run as XLSX, one sheet per company; `company` limits it to one. */
+  @Get('runs/:id/export')
+  async exportRun(
+    @Param('id', ParseIntPipe) id: number,
+    @Res({ passthrough: true }) res: Response,
+    @Query('company') company?: string,
+  ) {
+    const { buffer, fileName } = await this.runs.exportRun(id, company);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    return new StreamableFile(buffer);
   }
 
   @Get('payslips/:id')

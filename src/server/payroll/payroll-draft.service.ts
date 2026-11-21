@@ -12,6 +12,9 @@ export interface DraftPayslip extends ComputedPayslip {
   employeeName: string;
   jobRoleName: string;
   branchName: string | null;
+  /** The employee's company now; frozen onto the payslip at finalize. */
+  companyId: number | null;
+  companyName: string | null;
   /** 1–15 cutoff only: each active recurring deduction and its skip, if any. */
   recurring: { id: number; name: string; employeeShare: number; skipId: number | null }[];
 }
@@ -67,6 +70,7 @@ export class PayrollDraftService {
       include: {
         jobRole: { select: { name: true } },
         branch: { select: { name: true } },
+        company: { select: { id: true, name: true } },
         rates: { where: { deletedAt: null, effectiveOn: { lte: end } }, orderBy: { effectiveOn: 'asc' } },
         absences: { where: { deletedAt: null, date: { gte: start, lte: end } } },
         adjustments: { where: { deletedAt: null, periodStart: start }, orderBy: { id: 'asc' } },
@@ -129,6 +133,8 @@ export class PayrollDraftService {
         employeeName: `${e.firstName} ${e.lastName}`,
         jobRoleName: e.jobRole.name,
         branchName: e.branch?.name ?? null,
+        companyId: e.company?.id ?? null,
+        companyName: e.company?.name ?? null,
         recurring:
           cutoff.half === 1
             ? recurring.map((r) => ({
