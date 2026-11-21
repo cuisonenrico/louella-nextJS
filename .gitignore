@@ -54,3 +54,6 @@ next-env.d.ts
 
 # Brainstorming mockups (superpowers visual companion)
 .superpowers/
+
+# Modernization scratch output (build logs, analyzer exports)
+/.modernization/
