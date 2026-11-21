@@ -32,8 +32,19 @@ export default function Header({ onOpenNav }: { onOpenNav?: () => void }) {
   const router = useRouter();
   const title = usePageHeaderStore((s) => s.title);
   // The browser tab and history name the page, not just "Louella Bakery".
+  // Next re-applies the root layout's <title> when a navigation's metadata
+  // arrives, which can be after this effect ran, so the title is put back
+  // whenever the head changes. Setting it to the same value is a no-op, so the
+  // observer cannot loop.
   useEffect(() => {
-    document.title = title ? `${title} · Louella Bakery` : 'Louella Bakery';
+    const wanted = title ? `${title} · Louella Bakery` : 'Louella Bakery';
+    const apply = () => {
+      if (document.title !== wanted) document.title = wanted;
+    };
+    apply();
+    const observer = new MutationObserver(apply);
+    observer.observe(document.head, { subtree: true, childList: true, characterData: true });
+    return () => observer.disconnect();
   }, [title]);
   const headerContent = usePageHeaderStore((s) => s.content);
   const headerActions = usePageHeaderStore((s) => s.actions);
