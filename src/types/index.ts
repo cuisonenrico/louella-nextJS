@@ -843,6 +843,16 @@ export interface JobRole {
   isActive: boolean;
 }
 
+/** The business an employee is paid by; heads its own payroll sheet. */
+export interface Company {
+  id: number;
+  name: string;
+  address: string | null;
+  paymasterName: string | null;
+  approverName: string | null;
+  isActive: boolean;
+}
+
 export interface EmployeeAccount {
   userId: number;
   email: string;
@@ -857,6 +867,7 @@ export interface Employee {
   fullName: string;
   jobRole: { id: number; name: string };
   branch: { id: number; name: string } | null;
+  company: { id: number; name: string } | null;
   restDays: number[];
   hiredOn: string;
   separatedOn: string | null;
@@ -875,6 +886,7 @@ export interface EmployeeInput {
   lastName: string;
   jobRoleId: number;
   branchId: number | null;
+  companyId: number | null;
   hiredOn: string;
   restDays: number[];
   phone: string | null;
@@ -943,6 +955,8 @@ export interface DraftPayslip {
   employeeName: string;
   jobRoleName: string;
   branchName: string | null;
+  companyId: number | null;
+  companyName: string | null;
   workingDays: number;
   absenceDays: number;
   daysWorked: number;
@@ -974,6 +988,9 @@ export interface PayslipRecord {
   employeeName: string;
   jobRoleName: string;
   branchName: string | null;
+  /** Snapshot at finalize; null for runs finalized before companies existed. */
+  companyId: number | null;
+  companyName: string | null;
   workingDays: number;
   absenceDays: number;
   daysWorked: number;

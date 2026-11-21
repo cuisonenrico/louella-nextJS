@@ -37,6 +37,7 @@ const API_FEATURE: Record<string, string | string[] | null> = {
   jobsApi: 'jobs',
   employeesApi: 'employees',
   jobRolesApi: 'employees',
+  companiesApi: 'employees',
   absencesApi: 'employees',
   payrollApi: 'payroll',
   branchCashApi: 'branch-cash',

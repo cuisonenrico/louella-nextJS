@@ -35,6 +35,7 @@ export function ProfileTab({ employee }: { employee: Employee }) {
     ['Name', employee.fullName],
     ['Job role', employee.jobRole.name],
     ['Branch', employee.branch?.name ?? 'Central kitchen / unassigned'],
+    ['Company', employee.company?.name ?? 'Not assigned'],
     ['Hired', employee.hiredOn],
     ['Separated', employee.separatedOn ?? '—'],
     ['Rest days', restDaysLabel(employee.restDays)],

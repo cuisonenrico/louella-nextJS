@@ -10,6 +10,8 @@ const slip: PayslipRecord = {
   employeeName: 'Ana Cruz',
   jobRoleName: 'Baker',
   branchName: 'Main',
+  companyId: null,
+  companyName: null,
   workingDays: 13,
   absenceDays: 1,
   daysWorked: 12,
@@ -75,5 +77,10 @@ describe('PayslipView', () => {
   it('leaves the holiday section out when there were no holidays', () => {
     render(<PayslipView slip={slip} run={run} />);
     expect(screen.queryByText('Total holiday pay')).toBeNull();
+  });
+
+  it('heads the payslip with the company it was finalized under', () => {
+    render(<PayslipView slip={{ ...slip, companyId: 4, companyName: "LOUELLA'S BAKESHOP (main)" }} run={run} />);
+    expect(screen.getByRole('heading', { name: "LOUELLA'S BAKESHOP (main)" })).toBeInTheDocument();
   });
 });

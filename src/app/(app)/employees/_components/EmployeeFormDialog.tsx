@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { branchesApi, employeesApi, jobRolesApi } from '@/lib/apiServices';
+import { branchesApi, companiesApi, employeesApi, jobRolesApi } from '@/lib/apiServices';
 import type { Employee } from '@/types';
 import { extractError } from '@/lib/errors';
 import { manilaToday } from '@/lib/manilaDate';
@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { RestDaysPicker } from './RestDaysPicker';
 
 const NO_BRANCH = 'none';
+const NO_COMPANY = 'none';
 const MONEY = /^\d+(\.\d{1,2})?$/;
 
 interface Form {
@@ -24,6 +25,7 @@ interface Form {
   lastName: string;
   jobRoleId: string;
   branchId: string;
+  companyId: string;
   hiredOn: string;
   restDays: number[];
   dailyRate: string;
@@ -36,13 +38,14 @@ interface Form {
 
 function formFor(employee?: Employee): Form {
   if (!employee) {
-    return { firstName: '', lastName: '', jobRoleId: '', branchId: NO_BRANCH, hiredOn: manilaToday(), restDays: [0], dailyRate: '', phone: '', address: '', sssNumber: '', philhealthNumber: '', pagibigNumber: '' };
+    return { firstName: '', lastName: '', jobRoleId: '', branchId: NO_BRANCH, companyId: NO_COMPANY, hiredOn: manilaToday(), restDays: [0], dailyRate: '', phone: '', address: '', sssNumber: '', philhealthNumber: '', pagibigNumber: '' };
   }
   return {
     firstName: employee.firstName,
     lastName: employee.lastName,
     jobRoleId: String(employee.jobRole.id),
     branchId: employee.branch ? String(employee.branch.id) : NO_BRANCH,
+    companyId: employee.company ? String(employee.company.id) : NO_COMPANY,
     hiredOn: employee.hiredOn,
     restDays: employee.restDays,
     dailyRate: '',
@@ -70,6 +73,12 @@ export function EmployeeFormDialog({
 
   const { data: roles = [] } = useQuery({ queryKey: ['job-roles'], queryFn: () => jobRolesApi.list().then((r) => r.data) });
   const { data: branches = [] } = useQuery({ queryKey: ['branches'], queryFn: () => branchesApi.list().then((r) => r.data) });
+  const { data: companies = [] } = useQuery({ queryKey: ['companies'], queryFn: () => companiesApi.list().then((r) => r.data) });
+  // A retired company stays selectable for someone already in it.
+  const companyOptions =
+    employee?.company && !companies.some((c) => c.id === employee.company!.id)
+      ? [...companies, { id: employee.company.id, name: employee.company.name }]
+      : companies;
 
   const save = useMutation({
     mutationFn: () => {
@@ -78,6 +87,7 @@ export function EmployeeFormDialog({
         lastName: form.lastName.trim(),
         jobRoleId: Number(form.jobRoleId),
         branchId: form.branchId === NO_BRANCH ? null : Number(form.branchId),
+        companyId: form.companyId === NO_COMPANY ? null : Number(form.companyId),
         hiredOn: form.hiredOn,
         restDays: form.restDays,
         phone: form.phone.trim() || null,
@@ -144,6 +154,16 @@ export function EmployeeFormDialog({
                 <SelectContent>
                   <SelectItem value={NO_BRANCH}>Central kitchen / unassigned</SelectItem>
                   {branches.map((b) => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label>Company</Label>
+              <Select value={form.companyId} onValueChange={(v) => set('companyId', v)}>
+                <SelectTrigger aria-label="Company"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_COMPANY}>Not assigned</SelectItem>
+                  {companyOptions.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>

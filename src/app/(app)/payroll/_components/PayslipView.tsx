@@ -60,7 +60,7 @@ export function PayslipView({
       )}
       <header className="mb-4 flex justify-between gap-4 border-b pb-3">
         <div>
-          <h2 className="text-lg font-bold">Louella Bakery</h2>
+          <h2 className="text-lg font-bold">{slip.companyName ?? 'Louella Bakery'}</h2>
           <p>Payslip · {formatCutoff(run)}</p>
         </div>
         <div className="text-right">

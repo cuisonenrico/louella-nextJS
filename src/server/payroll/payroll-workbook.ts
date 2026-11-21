@@ -206,10 +206,6 @@ const HEADER_BOTTOM: [number, string][] = [
   [COL.cashAdvance, 'C.A.'], [COL.otherDeductions, 'OTHER DED.'], [COL.net, 'SALARY'],
 ];
 
-/** Money columns between BASIC and GROSS that add up to gross. */
-const PAY_COLS = [COL.basic, COL.overtime, COL.holiday, COL.special, COL.restDay, COL.nsd, COL.otherPay];
-const DEDUCTION_COLS = [COL.sss, COL.philhealth, COL.pagibig, COL.sssLoan, COL.cashAdvance, COL.otherDeductions];
-
 const MONEY = '#,##0.00;-#,##0.00;"-"';
 const WIDTHS = [4, 26, 8, 9, 11, 7, 10, 10, 10, 10, 10, 10, 12, 9, 10, 9, 9, 10, 10, 12, 20];
 

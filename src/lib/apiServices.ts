@@ -3,7 +3,7 @@ import { idempotencyHeader } from './useIdempotencyKey';
 import type { LandingContent } from './landing/schema';
 import type {
   CashDayView, CashSummary, ExpenseCategory, ValeEmployeeOption,
-  Absence, CutoffSummary, CutoffView, Employee, EmployeeAccount, EmployeeInput, EmployeeRate, JobRole, PayrollAdjustment, PayrollAdjustmentCategory, PayrollAdjustmentKind, PayrollHoliday, PayrollHolidayInput, PayrollRun, PayrollSettings, PayslipWithRun, RecurringDeduction,
+  Absence, Company, CutoffSummary, CutoffView, Employee, EmployeeAccount, EmployeeInput, EmployeeRate, JobRole, PayrollAdjustment, PayrollAdjustmentCategory, PayrollAdjustmentKind, PayrollHoliday, PayrollHolidayInput, PayrollRun, PayrollSettings, PayslipWithRun, RecurringDeduction,
   AuthResponse,
   Branch,
   PermissionsMatrixResponse,
@@ -508,6 +508,19 @@ export const jobRolesApi = {
     api.patch<JobRole>(`/job-roles/${id}`, data),
 };
 
+export type CompanyInput = { name: string; address: string | null; paymasterName: string | null; approverName: string | null };
+
+export const companiesApi = {
+  list: (includeInactive = false) =>
+    api.get<Company[]>('/companies', { params: { includeInactive } }),
+  create: (data: CompanyInput) => api.post<Company>('/companies', data),
+  update: (id: number, data: Partial<CompanyInput & { isActive: boolean }>) =>
+    api.patch<Company>(`/companies/${id}`, data),
+};
+
+/** The `company` export value meaning payslips with no company. */
+export const NO_COMPANY_PARAM = '__none__';
+
 export const employeesApi = {
   list: (params?: { branchId?: number; jobRoleId?: number; status?: 'active' | 'separated' | 'all' }) =>
     api.get<Employee[]>('/employees', { params }),
@@ -515,6 +528,9 @@ export const employeesApi = {
   create: (data: EmployeeInput) => api.post<Employee>('/employees', data),
   update: (id: number, data: Partial<Omit<EmployeeInput, 'dailyRate'>>) =>
     api.patch<Employee>(`/employees/${id}`, data),
+  /** Set (or clear, with null) several employees' company at once. */
+  assignCompany: (employeeIds: number[], companyId: number | null) =>
+    api.post<{ updated: number }>('/employees/company', { employeeIds, companyId }),
   setSeparation: (id: number, separatedOn: string | null) =>
     api.patch<Employee>(`/employees/${id}/status`, { separatedOn }),
   rates: (id: number) => api.get<EmployeeRate[]>(`/employees/${id}/rates`),
@@ -566,6 +582,12 @@ export const payrollApi = {
   markPaid: (runId: number) => api.post<PayrollRun>(`/payroll/runs/${runId}/paid`),
   voidRun: (runId: number, reason: string) => api.post<PayrollRun>(`/payroll/runs/${runId}/void`, { reason }),
   run: (runId: number) => api.get<PayrollRun>(`/payroll/runs/${runId}`),
+  /** The run as the payroll sheet XLSX; `company` limits it to one company (NO_COMPANY_PARAM = none). */
+  exportRun: (runId: number, company?: string) =>
+    api.get<Blob>(`/payroll/runs/${runId}/export`, {
+      params: company === undefined ? {} : { company },
+      responseType: 'blob',
+    }),
   payslip: (id: number) => api.get<PayslipWithRun>(`/payroll/payslips/${id}`),
   settings: () => api.get<PayrollSettings>('/payroll/settings'),
   updateSettings: (data: Partial<PayrollSettings>) => api.patch<PayrollSettings>('/payroll/settings', data),
